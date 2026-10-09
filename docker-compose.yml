@@ -1,0 +1,31 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: vbs
+      POSTGRES_PASSWORD: vbs
+      POSTGRES_DB: vbs
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vbs -d vbs"]
+      interval: 2s
+      timeout: 5s
+      retries: 20
+
+  s3:
+    image: adobe/s3mock:latest
+    environment:
+      initialBuckets: vbs
+      retainFilesOnExit: "true"
+      root: /data
+    ports:
+      - "9000:9090"
+    volumes:
+      - s3data:/data
+
+volumes:
+  pgdata:
+  s3data:

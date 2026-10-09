@@ -1,0 +1,40 @@
+import { Navigate, Route, Routes } from "react-router-dom";
+import Layout from "./Layout";
+import AboutPage from "./pages/About";
+import CreateOrgPage from "./pages/CreateOrg";
+import HomePage from "./pages/Home";
+import InvitePage from "./pages/Invite";
+import LoginPage from "./pages/Login";
+import ManageTeamsPage from "./pages/ManageTeams";
+import MessagesPage from "./pages/Messages";
+import OrgHomePage from "./pages/OrgHome";
+import ReviewsPage from "./pages/Reviews";
+import RoomIdeasPage from "./pages/RoomIdeas";
+import SharePage from "./pages/Share";
+import SetupPage from "./pages/Setup";
+
+export default function App() {
+  return (
+    <Routes>
+      <Route path="/login" element={<LoginPage />} />
+      <Route path="/invite/:token" element={<InvitePage />} />
+      <Route element={<Layout />}>
+        <Route path="/" element={<HomePage />} />
+        <Route path="/reviews" element={<ReviewsPage />} />
+        <Route path="/share" element={<SharePage />} />
+        <Route path="/setup" element={<SetupPage />} />
+        <Route path="/about" element={<AboutPage />} />
+        <Route path="/messages" element={<MessagesPage />} />
+        <Route path="/org/new" element={<CreateOrgPage />} />
+        <Route path="/org/:orgId" element={<Navigate to="room-ideas" replace />} />
+        <Route path="/org/:orgId/manage" element={<OrgHomePage />} />
+        <Route path="/org/:orgId/teams" element={<ManageTeamsPage />} />
+        <Route path="/org/:orgId/room-ideas" element={<RoomIdeasPage />} />
+        <Route path="/org/:orgId/reviews" element={<ReviewsPage />} />
+        <Route path="/org/:orgId/share" element={<SharePage />} />
+        <Route path="/org/:orgId/setup" element={<SetupPage />} />
+        <Route path="/org/:orgId/messages" element={<MessagesPage />} />
+      </Route>
+    </Routes>
+  );
+}
