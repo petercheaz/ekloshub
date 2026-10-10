@@ -251,7 +251,7 @@ export async function getRoomIdea(organizationId: string, ideaId: string, userna
   );
   const row = result.rows[0];
   if (!row) {
-    return { error: "Room idea not found" as const };
+    return { error: "Room design not found" as const };
   }
   return { idea: present(row, await imagesFor(row.id)) };
 }
@@ -264,10 +264,10 @@ export async function shareRoomIdea(
 ) {
   const loaded = await getRoomIdea(organizationId, ideaId, username);
   if (!("idea" in loaded) || !loaded.idea) {
-    return { error: "error" in loaded && loaded.error ? loaded.error : "Room idea not found" };
+    return { error: "error" in loaded && loaded.error ? loaded.error : "Room design not found" };
   }
   const idea = loaded.idea;
-  const heading = `Room idea: ${idea.publisherName} ${idea.year} — ${idea.title}`;
+  const heading = `Room design: ${idea.publisherName} ${idea.year} — ${idea.title}`;
   const body = [heading, idea.notes, ...idea.images.map((image) => image.url)].filter(Boolean).join("\n\n");
   const teamIds = input.teamIds ?? [];
   const people = input.usernames ?? "";

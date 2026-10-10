@@ -1,7 +1,12 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
+import { useOrgVbs } from "../org-vbs";
 import { OrgBanner, useOrgs } from "../orgs";
+import { VbsFilterPanel } from "../VbsFilterPanel";
+import { vbsProgramsMatching } from "../vbs-cascade";
+import { applyVbsFilterDefault } from "../vbs-filters";
 import type { Publisher, ShareAttachment, ShareListing, ShareProgram } from "../types";
+import { attachmentTooLargeMessage, MAX_ATTACHMENT_BYTES } from "@media-limits";
 
 const PREVIEW_CHARS = 180;
 const emptyDraft = {
@@ -44,8 +49,8 @@ async function readAttachments(files: FileList | null): Promise<ShareAttachment[
     selected.map(
       (file) =>
         new Promise<ShareAttachment>((resolve, reject) => {
-          if (file.size > 1_000_000) {
-            reject(new Error(`${file.name} is over 1 MB`));
+          if (file.size > MAX_ATTACHMENT_BYTES) {
+            reject(new Error(attachmentTooLargeMessage(file.name)));
             return;
           }
           const reader = new FileReader();
@@ -65,6 +70,8 @@ async function readAttachments(files: FileList | null): Promise<ShareAttachment[
 
 export default function SharePage() {
   const { tenantId, canWrite } = useOrgs();
+  const { filterDefault, prefsReady, defaultYear: prefsDefaultYear } = useOrgVbs();
+  const filtersBootstrapped = useRef(false);
   const [listings, setListings] = useState<ShareListing[]>([]);
   const [publishers, setPublishers] = useState<Publisher[]>([]);
   const [programs, setPrograms] = useState<ShareProgram[]>([]);
@@ -77,6 +84,11 @@ export default function SharePage() {
   const [yearFilter, setYearFilter] = useState("all");
   const [publisherFilter, setPublisherFilter] = useState("all");
   const [titleFilter, setTitleFilter] = useState("all");
+  const [siteDefaultYear, setSiteDefaultYear] = useState<number | null>(null);
+
+  useEffect(() => {
+    filtersBootstrapped.current = false;
+  }, [tenantId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -89,7 +101,7 @@ export default function SharePage() {
         setListings(payload.listings);
         setPublishers(payload.publishers);
         setPrograms(payload.programs);
-        setYearFilter(String(payload.defaultYear));
+        setSiteDefaultYear(payload.defaultYear);
         setDraft((current) => ({
           ...current,
           publisherId: current.publisherId || payload.publishers[0]?.id || "",
@@ -108,17 +120,29 @@ export default function SharePage() {
     };
   }, [tenantId]);
 
-  const years = useMemo(
-    () => [...new Set([...listings.map((listing) => listing.year), ...programs.map((program) => program.year)])].sort((a, b) => b - a),
-    [listings, programs],
-  );
-  const titles = useMemo(
-    () => [...new Set(programs.map((program) => program.theme))].sort((a, b) => a.localeCompare(b)),
-    [programs],
-  );
+  useEffect(() => {
+    if (!loaded || !prefsReady || filtersBootstrapped.current || siteDefaultYear === null) {
+      return;
+    }
+    filtersBootstrapped.current = true;
+    const next = applyVbsFilterDefault(filterDefault, siteDefaultYear ?? prefsDefaultYear);
+    setYearFilter(next.yearFilter);
+    setPublisherFilter(next.publisherFilter);
+    setTitleFilter(next.titleFilter);
+    if (next.titleFilter !== "all") {
+      setDraft((current) => ({
+        ...current,
+        publisherId: next.publisherFilter,
+        title: next.titleFilter,
+      }));
+    }
+  }, [loaded, prefsReady, filterDefault, siteDefaultYear, prefsDefaultYear]);
+
+  const listingYears = useMemo(() => listings.map((listing) => listing.year), [listings]);
+  const formYear = yearFilter !== "all" ? yearFilter : "";
   const formPrograms = useMemo(
-    () => programs.filter((program) => !draft.publisherId || program.publisherId === draft.publisherId),
-    [programs, draft.publisherId],
+    () => vbsProgramsMatching(programs, draft.publisherId, formYear),
+    [programs, draft.publisherId, formYear],
   );
 
   const filtered = useMemo(
@@ -343,47 +367,18 @@ export default function SharePage() {
         </form>
       ) : null}
 
-      <section className="filters" aria-label="Share filters">
-        <fieldset>
-          <legend>Year</legend>
-          <label className="filter-select">
-            <select value={yearFilter} onChange={(event) => setYearFilter(event.target.value)}>
-              <option value="all">All years</option>
-              {years.map((year) => (
-                <option key={year} value={year}>
-                  {year}
-                </option>
-              ))}
-            </select>
-          </label>
-        </fieldset>
-        <fieldset>
-          <legend>Publisher</legend>
-          <label className="filter-select">
-            <select value={publisherFilter} onChange={(event) => setPublisherFilter(event.target.value)}>
-              <option value="all">All publishers</option>
-              {publishers.map((publisher) => (
-                <option key={publisher.id} value={publisher.id}>
-                  {publisher.name}
-                </option>
-              ))}
-            </select>
-          </label>
-        </fieldset>
-        <fieldset>
-          <legend>VBS curriculum name</legend>
-          <label className="filter-select">
-            <select value={titleFilter} onChange={(event) => setTitleFilter(event.target.value)}>
-              <option value="all">All VBS names</option>
-              {titles.map((title) => (
-                <option key={title} value={title}>
-                  {title}
-                </option>
-              ))}
-            </select>
-          </label>
-        </fieldset>
-      </section>
+      <VbsFilterPanel
+        programs={programs}
+        publishers={publishers}
+        extraYears={listingYears}
+        ariaLabel="Share filters"
+        value={{ yearFilter, publisherFilter, titleFilter }}
+        onChange={(next) => {
+          setYearFilter(next.yearFilter);
+          setPublisherFilter(next.publisherFilter);
+          setTitleFilter(next.titleFilter);
+        }}
+      />
 
       {error ? <p className="form-error">{error}</p> : null}
 

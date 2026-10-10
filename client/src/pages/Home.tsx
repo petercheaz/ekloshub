@@ -4,7 +4,7 @@ export default function HomePage() {
       <p className="eyebrow">VBS Resources</p>
       <h1>Select a page</h1>
       <p className="tagline">
-        Choose About, Curriculum Reviews, Share VBS Resources, Show Your Setup, or Direct Message from the left menu.
+        Public pages are in the left rail. Expand an organization when you need Room Design or admin tools.
       </p>
     </div>
   );

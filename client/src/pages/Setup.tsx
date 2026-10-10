@@ -1,11 +1,17 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
+import { useOrgVbs } from "../org-vbs";
 import { OrgBanner, useOrgs } from "../orgs";
+import { VbsFilterPanel } from "../VbsFilterPanel";
+import { isSpecificVbsFilter, vbsProgramsMatching, vbsPublisherOptions } from "../vbs-cascade";
+import { applyVbsFilterDefault } from "../vbs-filters";
 import { useAuth } from "../auth";
 import type { Publisher, ShareAttachment, ShareProgram, SetupPost } from "../types";
+import { attachmentTooLargeMessage, MAX_ATTACHMENT_BYTES } from "@media-limits";
 
 const PREVIEW_CHARS = 180;
 const emptyDraft = {
+  year: "",
   publisherId: "",
   title: "",
   body: "",
@@ -34,8 +40,8 @@ async function readFiles(files: FileList | null, limit: number): Promise<ShareAt
     selected.map(
       (file) =>
         new Promise<ShareAttachment>((resolve, reject) => {
-          if (file.size > 1_000_000) {
-            reject(new Error(`${file.name} is over 1 MB`));
+          if (file.size > MAX_ATTACHMENT_BYTES) {
+            reject(new Error(attachmentTooLargeMessage(file.name)));
             return;
           }
           const reader = new FileReader();
@@ -56,6 +62,8 @@ async function readFiles(files: FileList | null, limit: number): Promise<ShareAt
 export default function SetupPage() {
   const { user } = useAuth();
   const { tenantId, canWrite } = useOrgs();
+  const { filterDefault, prefsReady, defaultYear: prefsDefaultYear } = useOrgVbs();
+  const filtersBootstrapped = useRef(false);
   const [posts, setPosts] = useState<SetupPost[]>([]);
   const [publishers, setPublishers] = useState<Publisher[]>([]);
   const [programs, setPrograms] = useState<ShareProgram[]>([]);
@@ -69,6 +77,11 @@ export default function SetupPage() {
   const [yearFilter, setYearFilter] = useState("all");
   const [publisherFilter, setPublisherFilter] = useState("all");
   const [titleFilter, setTitleFilter] = useState("all");
+  const [siteDefaultYear, setSiteDefaultYear] = useState<number | null>(null);
+
+  useEffect(() => {
+    filtersBootstrapped.current = false;
+  }, [tenantId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -81,7 +94,7 @@ export default function SetupPage() {
         setPosts(payload.posts);
         setPublishers(payload.publishers);
         setPrograms(payload.programs);
-        setYearFilter(String(payload.defaultYear));
+        setSiteDefaultYear(payload.defaultYear);
         setDraft((current) => ({
           ...current,
           publisherId: current.publisherId || payload.publishers[0]?.id || "",
@@ -100,18 +113,30 @@ export default function SetupPage() {
     };
   }, [tenantId]);
 
-  const years = useMemo(
-    () => [...new Set([...posts.map((post) => post.year), ...programs.map((program) => program.year)])].sort((a, b) => b - a),
-    [posts, programs],
+  useEffect(() => {
+    if (!loaded || !prefsReady || filtersBootstrapped.current || siteDefaultYear === null) {
+      return;
+    }
+    filtersBootstrapped.current = true;
+    const next = applyVbsFilterDefault(filterDefault, siteDefaultYear ?? prefsDefaultYear);
+    setYearFilter(next.yearFilter);
+    setPublisherFilter(next.publisherFilter);
+    setTitleFilter(next.titleFilter);
+    if (next.titleFilter !== "all") {
+      setDraft((current) => ({
+        ...current,
+        publisherId: next.publisherFilter,
+        title: next.titleFilter,
+      }));
+    }
+  }, [loaded, prefsReady, filterDefault, siteDefaultYear, prefsDefaultYear]);
+
+  const postYears = useMemo(() => posts.map((post) => post.year), [posts]);
+  const draftPublishers = useMemo(
+    () => vbsPublisherOptions(publishers, programs, draft.year),
+    [publishers, programs, draft.year],
   );
-  const titles = useMemo(
-    () => [...new Set(programs.map((program) => program.theme))].sort((a, b) => a.localeCompare(b)),
-    [programs],
-  );
-  const formPrograms = useMemo(
-    () => programs.filter((program) => !draft.publisherId || program.publisherId === draft.publisherId),
-    [programs, draft.publisherId],
-  );
+  const draftTitlesReady = isSpecificVbsFilter(draft.year) && isSpecificVbsFilter(draft.publisherId);
   const filtered = useMemo(
     () =>
       posts.filter((post) => {
@@ -164,9 +189,14 @@ export default function SetupPage() {
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
-    const program = programs.find((item) => item.theme === draft.title && item.publisherId === draft.publisherId);
-    if (!draft.publisherId || !draft.title || !draft.body.trim() || !program) {
-      setError("Publisher, VBS name, and text are required");
+    const program = programs.find(
+      (item) =>
+        item.theme === draft.title &&
+        item.publisherId === draft.publisherId &&
+        String(item.year) === draft.year,
+    );
+    if (!draft.year || !draft.publisherId || !draft.title || !draft.body.trim() || !program) {
+      setError("Year, publisher, VBS name, and text are required");
       return;
     }
     setSubmitting(true);
@@ -250,7 +280,20 @@ export default function SetupPage() {
         <OrgBanner />
         <p className="tagline">Post photos, notes, and video of how you decorated. Comment on other churches’ setups.</p>
         {canWrite ? (
-          <button type="button" className="ghost" onClick={() => setShowForm(true)}>
+          <button
+            type="button"
+            className="ghost"
+            onClick={() => {
+              setDraft((current) => ({
+                ...current,
+                year: isSpecificVbsFilter(yearFilter) ? yearFilter : current.year,
+                publisherId: isSpecificVbsFilter(publisherFilter) ? publisherFilter : current.publisherId,
+                title:
+                  isSpecificVbsFilter(titleFilter) && titleFilter !== "all" ? titleFilter : current.title,
+              }));
+              setShowForm(true);
+            }}
+          >
             Add an entry
           </button>
         ) : null}
@@ -259,6 +302,20 @@ export default function SetupPage() {
       {showForm ? (
         <form className="review-form share-form" onSubmit={(event) => void onSubmit(event)}>
           <h3>New setup</h3>
+          <label htmlFor="setup-year">Year</label>
+          <select
+            id="setup-year"
+            value={draft.year}
+            onChange={(event) => setDraft({ ...draft, year: event.target.value, title: "" })}
+            required
+          >
+            <option value="">Select year</option>
+            {[...new Set(programs.map((program) => program.year))].sort((a, b) => b - a).map((y) => (
+              <option key={y} value={String(y)}>
+                {y}
+              </option>
+            ))}
+          </select>
           <label htmlFor="setup-publisher">Publisher</label>
           <select
             id="setup-publisher"
@@ -267,7 +324,7 @@ export default function SetupPage() {
             required
           >
             <option value="">Select publisher</option>
-            {publishers.map((publisher) => (
+            {draftPublishers.map((publisher) => (
               <option key={publisher.id} value={publisher.id}>
                 {publisher.name}
               </option>
@@ -276,16 +333,22 @@ export default function SetupPage() {
           <label htmlFor="setup-title">VBS name</label>
           <select
             id="setup-title"
+            key={`${draft.year}:${draft.publisherId}`}
             value={draft.title}
             onChange={(event) => setDraft({ ...draft, title: event.target.value })}
             required
+            disabled={!draftTitlesReady}
           >
-            <option value="">Select VBS name</option>
-            {formPrograms.map((program) => (
-              <option key={program.id} value={program.theme}>
-                {program.theme} ({program.year})
-              </option>
-            ))}
+            <option value="">
+              {draftTitlesReady ? "Select VBS name" : "Choose year and publisher first"}
+            </option>
+            {draftTitlesReady
+              ? vbsProgramsMatching(programs, draft.publisherId, draft.year).map((program) => (
+                  <option key={program.id} value={program.theme}>
+                    {program.theme}
+                  </option>
+                ))
+              : null}
           </select>
           <label htmlFor="setup-body">Text</label>
           <textarea
@@ -357,52 +420,27 @@ export default function SetupPage() {
         </form>
       ) : null}
 
-      <section className="filters" aria-label="Setup filters">
-        <fieldset>
-          <legend>Year</legend>
-          <label className="filter-select">
-            <select value={yearFilter} onChange={(event) => setYearFilter(event.target.value)}>
-              <option value="all">All years</option>
-              {years.map((year) => (
-                <option key={year} value={year}>
-                  {year}
-                </option>
-              ))}
-            </select>
-          </label>
-        </fieldset>
-        <fieldset>
-          <legend>Publisher</legend>
-          <label className="filter-select">
-            <select value={publisherFilter} onChange={(event) => setPublisherFilter(event.target.value)}>
-              <option value="all">All publishers</option>
-              {publishers.map((publisher) => (
-                <option key={publisher.id} value={publisher.id}>
-                  {publisher.name}
-                </option>
-              ))}
-            </select>
-          </label>
-        </fieldset>
-        <fieldset>
-          <legend>VBS curriculum name</legend>
-          <label className="filter-select">
-            <select value={titleFilter} onChange={(event) => setTitleFilter(event.target.value)}>
-              <option value="all">All VBS names</option>
-              {titles.map((title) => (
-                <option key={title} value={title}>
-                  {title}
-                </option>
-              ))}
-            </select>
-          </label>
-        </fieldset>
-      </section>
+      <VbsFilterPanel
+        programs={programs}
+        publishers={publishers}
+        extraYears={postYears}
+        ariaLabel="Setup filters"
+        value={{ yearFilter, publisherFilter, titleFilter }}
+        onChange={(next) => {
+          setYearFilter(next.yearFilter);
+          setPublisherFilter(next.publisherFilter);
+          setTitleFilter(next.titleFilter);
+        }}
+      />
 
       {error ? <p className="form-error">{error}</p> : null}
 
       {filtered.length === 0 ? (
-        <p className="status">No setups match those filters.</p>
+        <p className="status">
+          {posts.length === 0
+            ? "No setup posts yet. Sample community posts load on server startup—try refreshing after a moment, or share your own setup."
+            : "No setups match those filters. Set year to “All” or broaden publisher / VBS name."}
+        </p>
       ) : (
         <div className="program-list">
           {groups.map((group) => (

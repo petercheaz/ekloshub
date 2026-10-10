@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { api } from "../api";
+import { OrgUserListInput } from "../OrgUserListInput";
 import { OrgBanner } from "../orgs";
 import type { OrgDetail } from "../types";
 
@@ -97,12 +98,11 @@ export default function ManageTeamsPage() {
           <label htmlFor="team-name">Team name</label>
           <input id="team-name" value={teamName} onChange={(event) => setTeamName(event.target.value)} required />
           <label htmlFor="team-members">Users (comma or semicolon separated)</label>
-          <textarea
+          <OrgUserListInput
             id="team-members"
-            rows={3}
             value={teamMembers}
-            onChange={(event) => setTeamMembers(event.target.value)}
-            placeholder="pcheaz@gmail.com; maria.santos"
+            onChange={setTeamMembers}
+            placeholder="Search org members by name or email…"
             required
           />
           <button type="submit">{editingTeamId ? "Save team" : "Create team"}</button>

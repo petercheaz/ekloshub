@@ -56,12 +56,17 @@ function sortPosts(posts: SetupPost[]) {
   });
 }
 
+/** Public Show Your Setup posts (tenant_id NULL) are visible everywhere; org posts add on top. */
+function setupVisibilitySql(column = "p.tenant_id") {
+  return `(${column} IS NULL OR ${column} IS NOT DISTINCT FROM $1)`;
+}
+
 async function loadPosts(tenantId: string | null) {
   const posts = await db().query<PostRow>(
     `SELECT p.*, u.verified
      FROM setup_posts p
      JOIN users u ON u.username = p.username
-     WHERE ($1::text IS NULL AND p.tenant_id IS NULL OR p.tenant_id = $1)`,
+     WHERE ${setupVisibilitySql()}`,
     [tenantId],
   );
   const media = await db().query<MediaRow>(
@@ -204,7 +209,7 @@ export async function addSetup(
 export async function deleteSetup(username: string, postId: string, tenantId: string | null) {
   const result = await db().query<{ username: string }>(
     `SELECT username FROM setup_posts
-     WHERE id = $1 AND ($2::text IS NULL AND tenant_id IS NULL OR tenant_id = $2)`,
+     WHERE id = $1 AND ${setupVisibilitySql("tenant_id")}`,
     [postId, tenantId],
   );
   const post = result.rows[0];
@@ -221,7 +226,7 @@ export async function deleteSetup(username: string, postId: string, tenantId: st
 export async function addSetupComment(username: string, postId: string, body: string, tenantId: string | null) {
   const exists = await db().query(
     `SELECT 1 FROM setup_posts
-     WHERE id = $1 AND ($2::text IS NULL AND tenant_id IS NULL OR tenant_id = $2)`,
+     WHERE id = $1 AND ${setupVisibilitySql("tenant_id")}`,
     [postId, tenantId],
   );
   if ((exists.rowCount ?? 0) === 0) {

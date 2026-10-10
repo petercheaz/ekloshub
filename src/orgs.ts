@@ -115,8 +115,13 @@ export async function getOrganization(organizationId: string, username: string, 
           acceptedAt: row.accepted_at ? row.accepted_at.toISOString() : null,
         }))
       : [];
-  const { listTeams } = await import("./teams.js");
-  return { organization: present(org), members: members.rows, invitations, teams: await listTeams(organizationId) };
+  const { listTeamsForViewer } = await import("./teams.js");
+  return {
+    organization: present(org),
+    members: members.rows,
+    invitations,
+    teams: await listTeamsForViewer(organizationId, username, platformAdmin),
+  };
 }
 
 export async function createOrganization(
@@ -192,6 +197,18 @@ export async function addOrganizationMember(
     resolved.push(found);
   }
   for (const name of [...new Set(resolved)]) {
+    if (role !== "org_admin") {
+      const existing = await getMembership(organizationId, name);
+      if (existing?.role === "org_admin") {
+        const admins = await db().query(
+          "SELECT COUNT(*)::int AS count FROM organization_members WHERE organization_id = $1 AND role = 'org_admin'",
+          [organizationId],
+        );
+        if ((admins.rows[0]?.count as number) <= 1) {
+          return { error: "Add another org admin before changing the last admin's role" as const };
+        }
+      }
+    }
     await db().query(
       `INSERT INTO organization_members (organization_id, username, role)
        VALUES ($1,$2,$3)
@@ -207,13 +224,17 @@ export async function removeOrganizationMember(organizationId: string, actor: st
   if (membership?.role !== "org_admin") {
     return { error: "Only org admins can remove members" as const };
   }
-  if (username === actor) {
+  const target = await getMembership(organizationId, username);
+  if (!target) {
+    return { error: "User not found" as const };
+  }
+  if (target.role === "org_admin") {
     const admins = await db().query(
       "SELECT COUNT(*)::int AS count FROM organization_members WHERE organization_id = $1 AND role = 'org_admin'",
       [organizationId],
     );
     if ((admins.rows[0]?.count as number) <= 1) {
-      return { error: "Add another org admin before removing yourself" as const };
+      return { error: "Add another org admin before removing the last admin" as const };
     }
   }
   await db().query("DELETE FROM organization_members WHERE organization_id = $1 AND username = $2", [

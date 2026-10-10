@@ -1,6 +1,6 @@
 import { db } from "./db/pool.js";
 import { getMembership } from "./orgs.js";
-import { findUser } from "./users.js";
+import { findUser, isPlatformAdmin } from "./users.js";
 
 export type OrgTeam = {
   id: string;
@@ -67,10 +67,117 @@ export async function listTeams(organizationId: string) {
     `SELECT id, organization_id, name, members, created_at
      FROM org_teams
      WHERE organization_id = $1
-     ORDER BY name`,
+     ORDER BY name, created_at`,
     [organizationId],
   );
   return result.rows.map((row) => present(row, parseMemberList(row.members)));
+}
+
+async function reassignTeamId(organizationId: string, fromTeamId: string, toTeamId: string) {
+  if (fromTeamId === toTeamId) {
+    return;
+  }
+  const plan = await db().query<{ id: string }>(
+    "SELECT id FROM vbs_plans WHERE organization_id = $1 LIMIT 1",
+    [organizationId],
+  );
+  const planId = plan.rows[0]?.id;
+  if (planId) {
+    await db().query(
+      "UPDATE vbs_tasks SET assigned_team_id = $1 WHERE plan_id = $2 AND assigned_team_id = $3",
+      [toTeamId, planId, fromTeamId],
+    );
+    await db().query(
+      "UPDATE vbs_schedule_slots SET team_id = $1 WHERE plan_id = $2 AND team_id = $3",
+      [toTeamId, planId, fromTeamId],
+    );
+    await db().query(
+      "UPDATE vbs_stations SET default_team_id = $1 WHERE plan_id = $2 AND default_team_id = $3",
+      [toTeamId, planId, fromTeamId],
+    );
+    await db().query(
+      "UPDATE vbs_checklist_items SET assigned_team_id = $1 WHERE plan_id = $2 AND assigned_team_id = $3",
+      [toTeamId, planId, fromTeamId],
+    );
+    await db().query("UPDATE vbs_board_posts SET team_id = $1 WHERE plan_id = $2 AND team_id = $3", [
+      toTeamId,
+      planId,
+      fromTeamId,
+    ]);
+  }
+  await db().query(
+    "UPDATE vbs_board_team_subscriptions SET team_id = $1 WHERE organization_id = $2 AND team_id = $3",
+    [toTeamId, organizationId, fromTeamId],
+  );
+  await db().query("UPDATE messages SET team_id = $1 WHERE tenant_id = $2 AND team_id = $3", [
+    toTeamId,
+    organizationId,
+    fromTeamId,
+  ]);
+}
+
+/** One team name per org — merges duplicate rows left from older seeds or manual creates. */
+export async function dedupeOrgTeamsByName(organizationId: string) {
+  const teams = await listTeams(organizationId);
+  const groups = new Map<string, OrgTeam[]>();
+  for (const team of teams) {
+    const key = team.name.trim().toLowerCase();
+    const bucket = groups.get(key) ?? [];
+    bucket.push(team);
+    groups.set(key, bucket);
+  }
+
+  for (const group of groups.values()) {
+    if (group.length <= 1) {
+      continue;
+    }
+    const sorted = [...group].sort((a, b) => {
+      const aSeed = a.id.startsWith("team-cornerstone-") ? 0 : 1;
+      const bSeed = b.id.startsWith("team-cornerstone-") ? 0 : 1;
+      if (aSeed !== bSeed) {
+        return aSeed - bSeed;
+      }
+      return a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id);
+    });
+    const keep = sorted[0]!;
+    for (const dupe of sorted.slice(1)) {
+      await reassignTeamId(organizationId, dupe.id, keep.id);
+      await db().query("DELETE FROM org_teams WHERE id = $1 AND organization_id = $2", [
+        dupe.id,
+        organizationId,
+      ]);
+    }
+  }
+}
+
+async function teamNameTaken(organizationId: string, name: string, exceptTeamId?: string) {
+  const normalized = name.trim().toLowerCase();
+  const teams = await listTeams(organizationId);
+  return teams.some(
+    (team) => team.name.trim().toLowerCase() === normalized && team.id !== exceptTeamId,
+  );
+}
+
+/** Org admins and platform admins are treated as members of every team (calendar, tasks, messages). */
+export async function listTeamsForViewer(
+  organizationId: string,
+  viewerUsername: string | null,
+  platformAdminHint = false,
+) {
+  const teams = await listTeams(organizationId);
+  if (!viewerUsername) {
+    return teams;
+  }
+  const membership = await getMembership(organizationId, viewerUsername);
+  const platformAdmin = platformAdminHint || (await isPlatformAdmin(viewerUsername));
+  const allTeamsAccess = platformAdmin || membership?.role === "org_admin";
+  if (!allTeamsAccess) {
+    return teams;
+  }
+  return teams.map((team) => ({
+    ...team,
+    memberUsernames: [...new Set([...team.memberUsernames, viewerUsername])],
+  }));
 }
 
 export async function getTeam(organizationId: string, teamId: string) {
@@ -91,6 +198,9 @@ export async function createTeam(organizationId: string, actor: string, input: {
   const name = input.name.trim();
   if (!name) {
     return { error: "Team name is required" as const };
+  }
+  if (await teamNameTaken(organizationId, name)) {
+    return { error: "A team with this name already exists in the organization" as const };
   }
   const resolved = await resolveMembers(organizationId, input.members);
   if ("error" in resolved) {
@@ -132,6 +242,9 @@ export async function updateTeam(
   const name = input.name.trim();
   if (!name) {
     return { error: "Team name is required" as const };
+  }
+  if (await teamNameTaken(organizationId, name, teamId)) {
+    return { error: "A team with this name already exists in the organization" as const };
   }
   const resolved = await resolveMembers(organizationId, input.members);
   if ("error" in resolved) {

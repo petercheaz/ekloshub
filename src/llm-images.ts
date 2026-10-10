@@ -123,7 +123,7 @@ function quotaMessage(message: string) {
 async function decorateWithGemini(bytes: Buffer, contentType: string, prompt: string) {
   const key = geminiKey();
   if (!key) {
-    throw new Error("Set GEMINI_API_KEY to generate room ideas");
+    throw new Error("Set GEMINI_API_KEY to generate room designs");
   }
   const models = workingGeminiImageModel
     ? [workingGeminiImageModel, ...(await listGeminiImageModels(key)).filter((name) => name !== workingGeminiImageModel)]
@@ -200,7 +200,7 @@ async function imageFromOpenAi(payload: OpenAiImageResponse) {
 async function decorateWithOpenAi(bytes: Buffer, contentType: string, prompt: string) {
   const key = openaiKey();
   if (!key) {
-    throw new Error("Set OPENAI_API_KEY to generate room ideas");
+    throw new Error("Set OPENAI_API_KEY to generate room designs");
   }
   const form = new FormData();
   form.set("model", process.env.OPENAI_IMAGE_MODEL?.trim() || "gpt-image-1");
@@ -227,5 +227,5 @@ export async function decorateRoomPhoto(bytes: Buffer, contentType: string, prom
   if (openaiKey()) {
     return decorateWithOpenAi(bytes, contentType, prompt);
   }
-  throw new Error("Set GEMINI_API_KEY to generate room ideas");
+  throw new Error("Set GEMINI_API_KEY to generate room designs");
 }

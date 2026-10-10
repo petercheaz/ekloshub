@@ -2,9 +2,9 @@ import { FormEvent, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
-import { completeListToken, currentListToken, splitListTokens } from "../listInput";
+import { OrgUserListInput } from "../OrgUserListInput";
 import { orgPath, useOrgs } from "../orgs";
-import type { OrgDetail, OrgRole, UserSuggestion } from "../types";
+import type { OrgDetail, OrgRole } from "../types";
 
 const roles: { id: OrgRole; label: string }[] = [
   { id: "org_admin", label: "org_admin" },
@@ -21,8 +21,6 @@ export default function OrgHomePage() {
   const [error, setError] = useState("");
   const [username, setUsername] = useState("");
   const [role, setRole] = useState<OrgRole>("org_read");
-  const [suggestions, setSuggestions] = useState<UserSuggestion[]>([]);
-  const [emailSuggestions, setEmailSuggestions] = useState<UserSuggestion[]>([]);
   const [emails, setEmails] = useState("");
   const [inviteStatus, setInviteStatus] = useState("");
 
@@ -46,53 +44,6 @@ export default function OrgHomePage() {
     };
   }, [orgId]);
 
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      const query = currentListToken(username);
-      if (!query) {
-        setSuggestions([]);
-        return;
-      }
-      const taken = new Set(splitListTokens(username).map((item) => item.toLowerCase()));
-      void api
-        .searchUsers(query, { all: true })
-        .then((hits) =>
-          setSuggestions(
-            hits.filter(
-              (hit) =>
-                !taken.has(hit.username.toLowerCase()) &&
-                !(hit.email && taken.has(hit.email.toLowerCase())),
-            ),
-          ),
-        )
-        .catch(() => setSuggestions([]));
-    }, 150);
-    return () => window.clearTimeout(timer);
-  }, [username]);
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      const query = currentListToken(emails);
-      if (!query) {
-        setEmailSuggestions([]);
-        return;
-      }
-      const taken = new Set(splitListTokens(emails).map((item) => item.toLowerCase()));
-      void api
-        .searchUsers(query, { all: true })
-        .then((hits) =>
-          setEmailSuggestions(
-            hits.filter((hit) => {
-              const value = (hit.email || hit.username).toLowerCase();
-              return value.includes("@") && !taken.has(value);
-            }),
-          ),
-        )
-        .catch(() => setEmailSuggestions([]));
-    }, 150);
-    return () => window.clearTimeout(timer);
-  }, [emails]);
-
   async function sendInvites(event: FormEvent) {
     event.preventDefault();
     try {
@@ -107,6 +58,15 @@ export default function OrgHomePage() {
       setError("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not send invites");
+    }
+  }
+
+  async function changeRole(name: string, nextRole: OrgRole) {
+    try {
+      setDetail(await api.addOrganizationMember(orgId, name, nextRole));
+      setError("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not change role");
     }
   }
 
@@ -178,6 +138,17 @@ export default function OrgHomePage() {
               <div className="entry-meta">
                 <span className="author">{member.username}</span>
                 <span className="badge">{member.role}</span>
+                <select
+                  aria-label={`Role for ${member.username}`}
+                  value={member.role}
+                  onChange={(event) => void changeRole(member.username, event.target.value as OrgRole)}
+                >
+                  {roles.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.label}
+                    </option>
+                  ))}
+                </select>
                 {canAdmin && member.username !== user?.username ? (
                   <button type="button" className="ghost" onClick={() => void removeMember(member.username)}>
                     Remove
@@ -192,30 +163,17 @@ export default function OrgHomePage() {
         {canAdmin ? (
           <form className="review-form share-form" onSubmit={(event) => void sendInvites(event)}>
             <h3>Invite by email</h3>
+            <p className="tagline">Invites join as org_write (can post; cannot manage members or teams).</p>
             <label htmlFor="invite-emails">Emails (comma or semicolon separated)</label>
-            <textarea
+            <OrgUserListInput
               id="invite-emails"
-              rows={3}
               value={emails}
-              onChange={(event) => setEmails(event.target.value)}
-              placeholder="one@church.org; two@church.org, three@church.org"
-              autoComplete="off"
+              onChange={setEmails}
+              preferEmail
+              scopeAll
+              placeholder="Type an email — suggestions from org and existing users…"
               required
             />
-            {emailSuggestions.length > 0 ? (
-              <ul className="autocomplete">
-                {emailSuggestions.slice(0, 8).map((hit) => {
-                  const value = hit.email || hit.username;
-                  return (
-                    <li key={hit.username}>
-                      <button type="button" onClick={() => setEmails(completeListToken(emails, value))}>
-                        {value}
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            ) : null}
             <button type="submit">Send invite</button>
             {inviteStatus ? <p className="tagline">{inviteStatus}</p> : null}
             {(detail.invitations ?? []).length > 0 ? (
@@ -241,26 +199,13 @@ export default function OrgHomePage() {
           <form className="review-form share-form" onSubmit={(event) => void addMember(event)}>
             <h3>Add existing user</h3>
             <label htmlFor="member-username">Users (comma or semicolon separated)</label>
-            <textarea
+            <OrgUserListInput
               id="member-username"
-              rows={3}
               value={username}
-              onChange={(event) => setUsername(event.target.value)}
-              placeholder="maria.santos; lily.chen, pastor.reed"
-              autoComplete="off"
+              onChange={setUsername}
+              placeholder="Search org members by name or email…"
               required
             />
-            {suggestions.length > 0 ? (
-              <ul className="autocomplete">
-                {suggestions.slice(0, 8).map((hit) => (
-                  <li key={hit.username}>
-                    <button type="button" onClick={() => setUsername(completeListToken(username, hit.username))}>
-                      {hit.username}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            ) : null}
             <label htmlFor="member-role">Access</label>
             <select id="member-role" value={role} onChange={(event) => setRole(event.target.value as OrgRole)}>
               {roles.map((item) => (

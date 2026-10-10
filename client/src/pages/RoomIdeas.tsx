@@ -1,9 +1,11 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { api } from "../api";
-import { completeListToken, currentListToken, splitListTokens } from "../listInput";
+import { OrgUserListInput } from "../OrgUserListInput";
+import { vbsProgramsMatching, vbsYearOptions } from "../vbs-cascade";
+import { useOrgVbs } from "../org-vbs";
 import { OrgBanner } from "../orgs";
-import type { OrgTeam, Publisher, RoomIdea, RoomIdeaImage, ShareProgram, UserSuggestion } from "../types";
+import type { OrgTeam, Publisher, RoomIdea, RoomIdeaImage, ShareProgram } from "../types";
 
 const emptySlots: Array<RoomIdeaImage | null> = [null, null, null];
 
@@ -21,6 +23,7 @@ async function readImage(file: File) {
 
 export default function RoomIdeasPage() {
   const { orgId = "" } = useParams();
+  const { filterDefault, working, prefsReady } = useOrgVbs();
   const [publishers, setPublishers] = useState<Publisher[]>([]);
   const [programs, setPrograms] = useState<ShareProgram[]>([]);
   const [ideas, setIdeas] = useState<RoomIdea[]>([]);
@@ -34,7 +37,6 @@ export default function RoomIdeasPage() {
   const [saved, setSaved] = useState<RoomIdea | null>(null);
   const [shareTeams, setShareTeams] = useState<string[]>([]);
   const [shareUsers, setShareUsers] = useState("");
-  const [userHits, setUserHits] = useState<UserSuggestion[]>([]);
   const [publicSetup, setPublicSetup] = useState(false);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
@@ -69,30 +71,18 @@ export default function RoomIdeasPage() {
   }, [orgId]);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      const query = currentListToken(shareUsers);
-      if (!query) {
-        setUserHits([]);
-        return;
-      }
-      const taken = new Set(splitListTokens(shareUsers).map((item) => item.toLowerCase()));
-      void api
-        .searchUsers(query)
-        .then((hits) =>
-          setUserHits(hits.filter((hit) => !taken.has(hit.username.toLowerCase())).slice(0, 8)),
-        )
-        .catch(() => setUserHits([]));
-    }, 150);
-    return () => window.clearTimeout(timer);
-  }, [shareUsers]);
+    const pick = working?.programTitle && working.programTitle !== "all" ? working : filterDefault;
+    if (!prefsReady || !pick?.programTitle || pick.programTitle === "all" || pick.allFilters) {
+      return;
+    }
+    setPublisherId(pick.publisherId);
+    setYear(String(pick.year));
+    setTitle(pick.programTitle);
+  }, [prefsReady, filterDefault, working]);
 
-  const years = useMemo(() => [...new Set(programs.map((program) => program.year))].sort((a, b) => b - a), [programs]);
+  const years = useMemo(() => vbsYearOptions(programs), [programs]);
   const titles = useMemo(
-    () =>
-      programs.filter(
-        (program) =>
-          (!publisherId || program.publisherId === publisherId) && (!year || program.year === Number(year)),
-      ),
+    () => vbsProgramsMatching(programs, publisherId, year),
     [programs, publisherId, year],
   );
   function resetForm() {
@@ -171,7 +161,7 @@ export default function RoomIdeasPage() {
   async function onShare(event: FormEvent) {
     event.preventDefault();
     if (!saved) {
-      setError("Save the room idea before sharing");
+      setError("Save the room design before sharing");
       return;
     }
     setBusy("Sharing…");
@@ -191,7 +181,7 @@ export default function RoomIdeasPage() {
   }
 
   if (!loaded) {
-    return <p className="status">Loading room ideas…</p>;
+    return <p className="status">Loading room design…</p>;
   }
 
   const kept = slots.filter((slot): slot is RoomIdeaImage => Boolean(slot));
@@ -200,12 +190,12 @@ export default function RoomIdeasPage() {
   return (
     <div className="reviews">
       <header className="page-head">
-        <p className="eyebrow">Organization</p>
-        <h1>Room Ideas</h1>
+        <p className="eyebrow">Room design</p>
+        <h1>Room Design</h1>
         <OrgBanner />
         <p className="tagline">
-          Upload a room or wall. The model reads room_ideas.txt plus your notes and dresses the space for that VBS
-          theme.
+          Upload a photo of your room or wall. We combine your org&apos;s design prompt and your notes to visualize
+          decorations for that VBS theme.
         </p>
       </header>
 
@@ -300,12 +290,12 @@ export default function RoomIdeasPage() {
       </form>
 
       {kept.length > 0 ? (
-        <section className="room-compose" aria-label="Generated room ideas">
+        <section className="room-compose" aria-label="Generated room designs">
           <div className="room-pictures">
             {slots.slice(0, 2).map((slot, index) =>
               slot ? (
                 <figure key={slot.key} className="room-card">
-                  <img src={slot.url} alt={`Room idea ${index + 1}`} />
+                  <img src={slot.url} alt={`Room design ${index + 1}`} />
                   <button type="button" className="room-discard" aria-label="Discard picture" onClick={() => setSlots((current) => current.map((item, i) => (i === index ? null : item)))}>
                     ×
                   </button>
@@ -331,7 +321,7 @@ export default function RoomIdeasPage() {
           <div className="room-pictures">
             {slots[2] ? (
               <figure className="room-card">
-                <img src={slots[2].url} alt="Room idea 3" />
+                <img src={slots[2].url} alt="Room design 3" />
                 <button type="button" className="room-discard" aria-label="Discard picture" onClick={() => setSlots((current) => [current[0], current[1], null])}>
                   ×
                 </button>
@@ -380,24 +370,13 @@ export default function RoomIdeasPage() {
             ))}
           </fieldset>
           <label htmlFor="room-share-users">Individuals (comma or semicolon)</label>
-          <input
+          <OrgUserListInput
             id="room-share-users"
+            rows={1}
             value={shareUsers}
-            onChange={(event) => setShareUsers(event.target.value)}
-            placeholder="maria.santos; lily.chen"
-            autoComplete="off"
+            onChange={setShareUsers}
+            placeholder="Search org members by name or email…"
           />
-          {userHits.length > 0 ? (
-            <ul className="autocomplete">
-              {userHits.map((hit) => (
-                <li key={hit.username}>
-                  <button type="button" onClick={() => setShareUsers(completeListToken(shareUsers, hit.username))}>
-                    {hit.username}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          ) : null}
           <label className="check-row">
             <input type="checkbox" checked={publicSetup} onChange={(event) => setPublicSetup(event.target.checked)} />
             Also post on public Show Your Setup
@@ -413,7 +392,7 @@ export default function RoomIdeasPage() {
 
       {ideas.length > 0 ? (
         <section className="org-members">
-          <h2>Saved ideas</h2>
+          <h2>Saved designs</h2>
           <ul className="entry-list">
             {ideas.map((idea) => (
               <li key={idea.id} className="entry">

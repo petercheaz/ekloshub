@@ -9,7 +9,10 @@
     "skipLibCheck": true,
     "noEmit": true,
     "isolatedModules": true,
-    "types": ["vite/client"]
+    "types": ["vite/client"],
+    "paths": {
+      "@media-limits": ["../src/media-limits.ts"]
+    }
   },
   "include": ["src"]
 }

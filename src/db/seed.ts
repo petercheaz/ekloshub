@@ -8,6 +8,7 @@ import { seedListings } from "../share.js";
 import { seedSetupComments, seedSetupPosts } from "../setup.js";
 import { seedUsers, seedVerifiedUsers } from "../users.js";
 import { db } from "./pool.js";
+import { ensureCornerstoneSamplePlan } from "./seed-cornerstone-plan.js";
 import { putObject } from "./s3.js";
 
 const photoDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "seed-photos");
@@ -22,7 +23,7 @@ export async function seedIfEmpty() {
 
   for (const username of seedUsers) {
     await db().query(
-      "INSERT INTO users (username, password_hash, verified, platform_admin) VALUES ($1, $2, $3, $4)",
+      "INSERT INTO users (username, password_hash, verified, platform_admin, vbs_default_all_filters) VALUES ($1, $2, $3, $4, TRUE)",
       [username, passwordHash, seedVerifiedUsers.has(username), username === "admin"],
     );
   }
@@ -83,43 +84,7 @@ export async function seedIfEmpty() {
     }
   }
 
-  for (const post of seedSetupPosts) {
-    await db().query(
-      `INSERT INTO setup_posts (id, year, publisher_id, title, body, video_url, username, created_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
-       ON CONFLICT (id) DO NOTHING`,
-      [post.id, post.year, post.publisherId, post.title, post.body, post.videoUrl, post.username, post.createdAt],
-    );
-    let order = 0;
-    for (const file of post.pictures) {
-      const objectKey = await uploadSeedPhoto(file.name);
-      await db().query(
-        `INSERT INTO setup_media (id, post_id, kind, name, type, size, object_key, sort_order)
-         VALUES ($1,$2,'picture',$3,$4,$5,$6,$7)
-         ON CONFLICT (id) DO NOTHING`,
-        [`${post.id}-pic-${file.name}`, post.id, file.name, file.type, file.size, objectKey, order],
-      );
-      order += 1;
-    }
-    for (const file of post.attachments) {
-      await db().query(
-        `INSERT INTO setup_media (id, post_id, kind, name, type, size, object_key, sort_order)
-         VALUES ($1,$2,'attachment',$3,$4,$5,'',$6)
-         ON CONFLICT (id) DO NOTHING`,
-        [`${post.id}-att-${file.name}`, post.id, file.name, file.type, file.size, order],
-      );
-      order += 1;
-    }
-  }
-
-  for (const comment of seedSetupComments) {
-    await db().query(
-      `INSERT INTO setup_comments (id, post_id, username, body, created_at)
-       VALUES ($1,$2,$3,$4,$5)
-       ON CONFLICT (id) DO NOTHING`,
-      [comment.id, comment.postId, comment.username, comment.body, comment.createdAt],
-    );
-  }
+  await ensureSetupSeed(passwordHash);
 
   for (const message of seedMessages) {
     await db().query(
@@ -174,6 +139,69 @@ export async function ensureKnownAccounts() {
      ON CONFLICT (organization_id, username) DO UPDATE SET role = 'org_admin'`,
     [id, username],
   );
+
+  await db().query(
+    `UPDATE org_teams SET name = 'Building Team'
+     WHERE organization_id = $1 AND LOWER(TRIM(name)) = 'building team 2027'`,
+    [id],
+  );
+  await db().query(
+    `UPDATE messages SET team_name = 'Building Team'
+     WHERE tenant_id = $1 AND LOWER(TRIM(team_name)) = 'building team 2027'`,
+    [id],
+  );
+
+  const { dedupeOrgTeamsByName } = await import("../teams.js");
+  await dedupeOrgTeamsByName(id);
+  await ensureCornerstoneSamplePlan(id, username);
+  await ensureSetupSeed(passwordHash);
+}
+
+export async function ensureSetupSeed(passwordHash = bcrypt.hashSync(process.env.AUTH_PASSWORD ?? "vbs-dev", 10)) {
+  for (const username of seedUsers) {
+    await db().query(
+      "INSERT INTO users (username, password_hash, verified, platform_admin, vbs_default_all_filters) VALUES ($1, $2, $3, $4, TRUE) ON CONFLICT (username) DO NOTHING",
+      [username, passwordHash, seedVerifiedUsers.has(username), username === "admin"],
+    );
+  }
+
+  for (const post of seedSetupPosts) {
+    await db().query(
+      `INSERT INTO setup_posts (id, year, publisher_id, title, body, video_url, username, created_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+       ON CONFLICT (id) DO NOTHING`,
+      [post.id, post.year, post.publisherId, post.title, post.body, post.videoUrl, post.username, post.createdAt],
+    );
+    let order = 0;
+    for (const file of post.pictures) {
+      const objectKey = await uploadSeedPhoto(file.name);
+      await db().query(
+        `INSERT INTO setup_media (id, post_id, kind, name, type, size, object_key, sort_order)
+         VALUES ($1,$2,'picture',$3,$4,$5,$6,$7)
+         ON CONFLICT (id) DO NOTHING`,
+        [`${post.id}-pic-${file.name}`, post.id, file.name, file.type, file.size, objectKey, order],
+      );
+      order += 1;
+    }
+    for (const file of post.attachments) {
+      await db().query(
+        `INSERT INTO setup_media (id, post_id, kind, name, type, size, object_key, sort_order)
+         VALUES ($1,$2,'attachment',$3,$4,$5,'',$6)
+         ON CONFLICT (id) DO NOTHING`,
+        [`${post.id}-att-${file.name}`, post.id, file.name, file.type, file.size, order],
+      );
+      order += 1;
+    }
+  }
+
+  for (const comment of seedSetupComments) {
+    await db().query(
+      `INSERT INTO setup_comments (id, post_id, username, body, created_at)
+       VALUES ($1,$2,$3,$4,$5)
+       ON CONFLICT (id) DO NOTHING`,
+      [comment.id, comment.postId, comment.username, comment.body, comment.createdAt],
+    );
+  }
 }
 
 async function uploadSeedPhoto(name: string) {

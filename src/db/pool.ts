@@ -3,6 +3,10 @@ import { databaseUrl } from "./config.js";
 
 const pool = new pg.Pool({ connectionString: databaseUrl });
 
+pool.on("error", (error) => {
+  console.error("[postgres] idle client error (pool will reconnect):", error.message);
+});
+
 export function db() {
   return pool;
 }

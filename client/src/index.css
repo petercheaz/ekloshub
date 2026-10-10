@@ -29,77 +29,180 @@ body {
 
 .shell {
   display: grid;
-  grid-template-columns: 260px minmax(0, 1fr);
+  grid-template-columns: 220px minmax(0, 1fr);
+  transition: grid-template-columns 0.16s ease;
+}
+
+.shell.rail-collapsed {
+  grid-template-columns: 56px minmax(0, 1fr);
 }
 
 .sidenav {
   position: sticky;
   top: 0;
   height: 100vh;
+  min-width: 0;
+  width: 100%;
   border-right: 1px solid var(--line);
   background: #121a22;
-  padding: 1.25rem 0.9rem 1rem;
+  padding: 0.65rem 0.5rem 0.7rem;
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: 0.45rem;
+  overflow: hidden;
+}
+
+.sidenav-top {
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+  flex-shrink: 0;
+}
+
+.rail-toggle {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  margin-left: auto;
+  border: 0;
+  border-radius: 0.4rem;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.rail-toggle:hover {
+  background: var(--panel-2);
+  color: var(--text);
+}
+
+.sidenav.collapsed .sidenav-top {
+  flex-direction: column;
+}
+
+.sidenav.collapsed .rail-toggle {
+  margin: 0;
+}
+
+.nav-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  padding-right: 0.1rem;
+}
+
+.nav-section {
+  display: grid;
+  gap: 0.1rem;
 }
 
 .menu-label {
-  margin: 0.75rem 0.7rem 0.15rem;
-  font-size: 0.7rem;
-  letter-spacing: 0.14em;
+  margin: 0.35rem 0.45rem 0.1rem;
+  font-size: 0.62rem;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--muted);
 }
 
 .sidenav nav {
   display: grid;
-  gap: 0.25rem;
+  gap: 0.1rem;
 }
 
+.sidenav .nav-item,
 .sidenav nav a {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
   color: var(--muted);
   text-decoration: none;
-  padding: 0.7rem 0.8rem;
-  border-radius: 0.55rem;
-  font-weight: 600;
+  padding: 0.38rem 0.5rem;
+  border-radius: 0.4rem;
+  font-weight: 550;
+  font-size: 0.82rem;
+  min-height: 1.9rem;
 }
 
+.sidenav .nav-item.active,
+.sidenav .nav-item:hover,
 .sidenav nav a.active,
 .sidenav nav a:hover {
   background: var(--panel-2);
   color: var(--text);
 }
 
+.nav-ico {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.nav-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidenav.collapsed .nav-item,
+.sidenav.collapsed .org-heading,
+.sidenav.collapsed .create-org,
+.sidenav.collapsed .sign-out {
+  justify-content: center;
+  padding: 0.4rem 0;
+  width: 36px;
+  margin-inline: auto;
+}
+
 .empty-main {
-  max-width: 36rem;
+  width: 100%;
+  max-width: none;
   padding-top: 4rem;
 }
 
 .brand-lockup {
-  display: grid;
-  justify-items: center;
+  display: flex;
+  align-items: center;
   gap: 0.45rem;
+  min-width: 0;
   color: #fff;
   text-decoration: none;
-  padding: 0.35rem 0.2rem 0.15rem;
+  padding: 0.2rem 0.25rem;
+  border-radius: 0.4rem;
+}
+
+.brand-lockup:hover {
+  background: var(--panel-2);
 }
 
 .brand-logo {
   display: block;
-  width: 118px;
+  width: 28px;
   height: auto;
+  flex-shrink: 0;
   color: inherit;
 }
 
 .brand-wordmark {
   margin: 0;
-  font-size: 0.82rem;
+  font-size: 0.78rem;
   font-weight: 700;
-  letter-spacing: 0.04em;
-  text-align: center;
+  letter-spacing: 0.02em;
   color: inherit;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sidenav.collapsed .brand-lockup {
+  justify-content: center;
+  padding: 0.25rem;
 }
 
 .login-brand {
@@ -113,10 +216,6 @@ body {
   width: 150px;
 }
 
-.about {
-  max-width: 40rem;
-}
-
 .about p {
   color: var(--muted);
   line-height: 1.6;
@@ -126,7 +225,6 @@ body {
   margin: 0.45rem 0 0;
   color: var(--muted);
   line-height: 1.45;
-  max-width: 42rem;
 }
 
 .share-form select {
@@ -152,14 +250,74 @@ body {
 
 .session {
   margin-top: auto;
+  flex-shrink: 0;
   display: grid;
-  gap: 0.6rem;
+  gap: 0.35rem;
   color: var(--muted);
-  font-size: 0.9rem;
+  font-size: 0.78rem;
+  padding-top: 0.4rem;
+  border-top: 1px solid var(--line);
+}
+
+.session-user {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+  padding: 0.15rem 0.25rem;
+}
+
+.user-avatar,
+.org-avatar {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  border-radius: 0.35rem;
+  background: #1e3a4c;
+  color: var(--accent);
+  font-size: 0.62rem;
+  font-weight: 750;
+  letter-spacing: 0;
+}
+
+.user-avatar.verified {
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.session-email {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sign-out {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  justify-content: flex-start;
+  padding: 0.3rem 0.45rem;
+}
+
+.sidenav.collapsed .session-user,
+.sidenav.collapsed .sign-out {
+  justify-content: center;
+  padding: 0.25rem;
 }
 
 .content {
   padding: 1.5rem 1.75rem 4rem;
+  min-width: 0;
+  width: 100%;
+}
+
+.reviews,
+.messages-page,
+.about {
+  width: 100%;
+  max-width: none;
+  min-width: 0;
 }
 
 .content-top {
@@ -241,8 +399,141 @@ body {
   place-items: center;
 }
 
+.messages-embedded .inbox {
+  max-height: min(52vh, 32rem);
+}
+
+.vbs-messages-panel .messages {
+  margin: 0;
+}
+
+.vbs-messages-full-link {
+  margin: 0.75rem 0 0;
+  font-size: 0.82rem;
+}
+
+.vbs-board-list {
+  list-style: none;
+  margin: 1rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.vbs-board-post:not(.vbs-task-card) {
+  border: 1px solid var(--line);
+  border-radius: 0.65rem;
+  padding: 0.85rem 1rem;
+  background: var(--panel-2);
+}
+
+.vbs-board-post-preview {
+  margin: 0;
+  padding: 0 1rem 0.75rem;
+  font-size: 0.92rem;
+  white-space: pre-wrap;
+  line-height: 1.4;
+}
+
+.vbs-task-card.checklist-done .vbs-task-summary-title {
+  text-decoration: line-through;
+  opacity: 0.88;
+}
+
+.vbs-board-post-head {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  margin-bottom: 0.45rem;
+}
+
+.vbs-board-post-body {
+  margin: 0 0 0.65rem;
+  white-space: pre-wrap;
+  line-height: 1.45;
+}
+
+.vbs-board-replies {
+  list-style: none;
+  margin: 0 0 0.65rem;
+  padding: 0 0 0 0.65rem;
+  border-left: 2px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.vbs-board-replies p {
+  margin: 0.15rem 0 0;
+}
+
+.vbs-board-reply-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-top: 0.35rem;
+}
+
+.vbs-board-reply-form textarea {
+  width: 100%;
+  font: inherit;
+}
+
+.profile-org-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.profile-org-toggle {
+  display: flex;
+  width: 100%;
+  justify-content: space-between;
+  align-items: center;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  padding: 0;
+  text-align: left;
+}
+
+.profile-notify-form h2 {
+  font-size: 0.95rem;
+  margin: 1rem 0 0.45rem;
+}
+
+.profile-notify-form h2:first-of-type {
+  margin-top: 0.75rem;
+}
+
+.profile-team-subs {
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  padding: 0.65rem 0.85rem;
+  margin: 0.65rem 0;
+}
+
+.profile-team-subs legend {
+  font-size: 0.82rem;
+  padding: 0 0.25rem;
+}
+
+.session-user {
+  text-decoration: none;
+  color: inherit;
+}
+
+.messages-page .messages {
+  margin-top: 0;
+}
+
 .messages {
-  max-width: 72rem;
+  width: 100%;
+  max-width: none;
+  min-width: 0;
 }
 
 .compose,
@@ -316,6 +607,72 @@ body {
 
 .autocomplete button:hover {
   background: #243445;
+}
+
+.org-user-typeahead,
+.org-user-list-input {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+}
+
+.org-user-list-input textarea {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  min-height: 2.5rem;
+}
+
+.org-user-typeahead-input-row {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  width: 100%;
+  min-width: 0;
+}
+
+.org-user-typeahead input {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.org-user-typeahead-me,
+.org-user-typeahead-clear {
+  flex-shrink: 0;
+  padding: 0.35rem 0.55rem;
+  font-size: 0.78rem;
+  line-height: 1.2;
+}
+
+.org-user-typeahead-clear {
+  min-width: 2rem;
+  padding-inline: 0.4rem;
+}
+
+.org-user-typeahead-list {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + 0.25rem);
+  z-index: 30;
+  max-height: 14rem;
+  overflow-y: auto;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.org-user-typeahead-email {
+  font-size: 0.85em;
+}
+
+.org-user-typeahead.compact .org-user-typeahead-me,
+.org-user-typeahead.compact .org-user-typeahead-clear {
+  display: none;
+}
+
+.vbs-spreadsheet-row .org-user-typeahead-list {
+  min-width: 12rem;
 }
 
 .inbox {
@@ -473,6 +830,86 @@ body {
   margin: 1.5rem 0 2rem;
 }
 
+.vbs-filter-panel {
+  margin: 1.25rem 0 1.75rem;
+  padding: 1rem 1.15rem 1.1rem;
+  border: 1px solid var(--line);
+  border-radius: 0.85rem;
+  background: color-mix(in srgb, var(--panel) 92%, var(--accent) 8%);
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--text) 6%, transparent);
+}
+
+.vbs-filter-panel-compact {
+  margin: 0 0 1.1rem;
+  padding: 0.75rem 0.85rem;
+}
+
+.vbs-filter-fields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem 1rem;
+}
+
+@media (max-width: 720px) {
+  .vbs-filter-fields {
+    grid-template-columns: 1fr;
+  }
+}
+
+.vbs-filter-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.vbs-filter-field label {
+  font-size: 0.72rem;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.vbs-filter-control {
+  width: 100%;
+  border: 1px solid var(--line);
+  background: var(--panel-2, var(--panel));
+  color: var(--text);
+  border-radius: 0.55rem;
+  padding: 0.55rem 0.65rem;
+  font: inherit;
+  font-size: 0.92rem;
+}
+
+.vbs-filter-control:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.vbs-filter-hint {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.vbs-filter-panel-footer {
+  margin-top: 0.85rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 0.45rem;
+}
+
+.vbs-context-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.45rem 0.75rem;
+  margin-bottom: 0.65rem;
+}
+
 .filter-select,
 .review-form select {
   display: block;
@@ -624,6 +1061,7 @@ legend {
   flex-wrap: wrap;
   align-items: center;
   gap: 0.4rem 0.75rem;
+  width: 100%;
 }
 
 .entry-preview {
@@ -730,6 +1168,31 @@ legend {
   overflow: hidden;
   color: #fbbf24;
   white-space: nowrap;
+}
+
+.stars.compact {
+  font-size: 0.82rem;
+}
+
+.review-rating {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-left: auto;
+}
+
+.entry-meta .review-rating {
+  margin-left: auto;
+}
+
+.review-rating-score {
+  font-size: 0.82rem;
+  font-weight: 650;
+  color: var(--muted);
+}
+
+.review header .review-rating {
+  margin-left: auto;
 }
 
 .program-body {
@@ -906,14 +1369,16 @@ legend {
 }
 
 .create-org {
-  display: block;
-  margin: 0.35rem 0 0;
-  padding: 0.7rem 0.8rem;
-  border-radius: 0.55rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.38rem 0.5rem;
+  border-radius: 0.4rem;
   border: 1px dashed var(--line);
   color: var(--accent);
   text-decoration: none;
-  font-weight: 650;
+  font-weight: 600;
+  font-size: 0.82rem;
 }
 
 .create-org:hover {
@@ -921,31 +1386,2778 @@ legend {
   color: var(--text);
 }
 
+.sidenav.collapsed .create-org {
+  justify-content: center;
+  padding: 0.45rem 0.3rem;
+}
+
+.nav-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  margin: 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 0.25rem 0.45rem;
+  border-radius: 0.4rem;
+  cursor: pointer;
+}
+
+.nav-toggle:hover {
+  background: var(--panel-2);
+  color: var(--text);
+}
+
+.nav-toggle .nav-ico {
+  width: 14px;
+  height: 14px;
+}
+
 .org-nav {
   display: grid;
-  gap: 0.85rem;
-  overflow-y: auto;
-  max-height: min(50vh, 22rem);
-  padding-right: 0.15rem;
+  align-content: start;
+  gap: 0.15rem;
 }
 
 .org-group {
   display: grid;
-  gap: 0.2rem;
+  gap: 0.08rem;
 }
 
 .org-heading {
-  margin: 0 0.35rem 0.2rem;
-  padding: 0.15rem 0.45rem;
-  font-size: 1rem;
-  font-weight: 750;
-  line-height: 1.25;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  width: 100%;
+  margin: 0;
+  padding: 0.32rem 0.4rem;
+  border: 0;
+  border-radius: 0.4rem;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 650;
+  text-align: left;
+  cursor: pointer;
+}
+
+.org-heading:hover,
+.org-heading.active {
+  background: var(--panel-2);
+}
+
+.org-heading-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.org-heading .nav-ico {
+  width: 14px;
+  height: 14px;
+  color: var(--muted);
+}
+
+.sidenav.collapsed .org-heading {
+  justify-content: center;
+  padding: 0.4rem 0.3rem;
+}
+
+.org-links {
+  display: grid;
+  gap: 0.06rem;
+  margin-left: 0.35rem;
+  padding-left: 0.55rem;
+  border-left: 1px solid var(--line);
+}
+
+.org-links .nav-item {
+  font-weight: 500;
+}
+
+.vbs-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0 0 1rem;
+}
+
+.vbs-tabs button {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  padding: 0.35rem 0.65rem;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.vbs-tabs button.active,
+.vbs-tabs button:hover {
+  background: var(--panel-2);
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+.vbs-plan-masthead {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 1.25rem 1.5rem;
+  align-items: start;
+  margin: 0 0 1.35rem;
+  padding: 1.15rem 1.25rem;
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+  background: var(--panel);
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--text) 5%, transparent);
+}
+
+@media (max-width: 720px) {
+  .vbs-plan-masthead {
+    grid-template-columns: 1fr;
+  }
+}
+
+.vbs-plan-masthead-org {
+  margin: 0 0 0.35rem;
+  font-size: 0.72rem;
+  font-weight: 650;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
   color: var(--accent);
 }
 
-.org-group a {
-  margin-left: 0.75rem;
-  padding-left: 0.85rem;
+.vbs-plan-masthead-title {
+  margin: 0;
+  font-size: clamp(1.45rem, 3.5vw, 1.95rem);
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+
+.vbs-plan-masthead-meta {
+  margin: 0.85rem 0 0;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.vbs-plan-masthead-meta-row {
+  display: grid;
+  grid-template-columns: 5.25rem 1fr;
+  gap: 0.65rem;
+  align-items: baseline;
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+.vbs-plan-masthead-meta-row dt {
+  margin: 0;
+  font-size: 0.68rem;
+  font-weight: 650;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.vbs-plan-masthead-meta-row dd {
+  margin: 0;
+  color: var(--text);
+}
+
+.vbs-plan-masthead-empty {
+  margin: 0.65rem 0 0;
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.vbs-plan-masthead-aside {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  min-width: min(100%, 15rem);
+}
+
+.vbs-plan-snapshot {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(6.5rem, 1fr));
+  gap: 0.45rem;
+  min-width: min(100%, 15rem);
+}
+
+.vbs-plan-financial strong {
+  font-size: 1.05rem;
+}
+
+.vbs-plan-budget-hint {
+  margin: -0.35rem 0 0.5rem;
+  font-size: 0.86rem;
+}
+
+.vbs-plan-snapshot li {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid var(--line);
+  border-radius: 0.6rem;
+  background: var(--panel-2);
+}
+
+.vbs-plan-snapshot strong {
+  font-size: 1.2rem;
+  font-weight: 750;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  color: var(--text);
+}
+
+.vbs-plan-snapshot span {
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.vbs-plan-sections {
+  margin: 0 0 1.15rem;
+}
+
+.vbs-plan-sections-title {
+  margin: 0 0 0.35rem;
+  font-size: 0.72rem;
+  font-weight: 650;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.vbs-plan-sections-lead {
+  margin: 0 0 0.65rem;
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+
+.vbs-plan-tabs {
+  margin-bottom: 0.55rem;
+}
+
+.vbs-plan-tabs button {
+  font-size: 0.86rem;
+  padding: 0.42rem 0.85rem;
+}
+
+.vbs-plan-tabs button.active {
+  background: color-mix(in srgb, var(--accent) 14%, var(--panel-2));
+  color: var(--text);
+  border-color: var(--accent);
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+.vbs-plan-tab-hint {
+  margin: 0;
+  padding: 0.5rem 0 0;
+  font-size: 0.88rem;
+  line-height: 1.4;
+  border-top: 1px solid var(--line);
+}
+
+.vbs-plan-tab-hint strong {
+  font-weight: 650;
+}
+
+.vbs-plan-calendar {
+  margin: 0 0 1.25rem;
+  padding: 0.85rem 1rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 0.85rem;
+  background: var(--panel);
+}
+
+.vbs-plan-calendar.compact {
+  padding: 0.55rem 0.75rem 0.65rem;
+}
+
+.vbs-plan-calendar.expanded {
+  min-height: min(70vh, 42rem);
+}
+
+.vbs-plan-calendar-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.vbs-plan-calendar.expanded .vbs-plan-calendar-strip {
+  margin-bottom: 0.65rem;
+  padding-bottom: 0.55rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.vbs-plan-calendar.compact .vbs-plan-calendar-strip {
+  margin-bottom: 0.35rem;
+}
+
+.vbs-plan-calendar-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-width: 0;
+}
+
+.vbs-plan-cal-glyph {
+  width: 1.45rem;
+  height: 1.45rem;
+  flex-shrink: 0;
+  color: var(--accent);
+}
+
+.vbs-plan-calendar-brand-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.vbs-plan-calendar-brand-text strong {
+  font-size: 0.88rem;
+  line-height: 1.2;
+}
+
+.vbs-plan-calendar-brand-text .muted {
+  font-size: 0.72rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vbs-plan-calendar-toggle {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border: 1px solid var(--line);
+  border-radius: 0.45rem;
+  background: var(--panel-2);
+  color: var(--text);
+  cursor: pointer;
+  padding: 0;
+}
+
+.vbs-plan-calendar-toggle:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.vbs-plan-cal-chevron {
+  width: 1.35rem;
+  height: 1.35rem;
+}
+
+.vbs-plan-calendar-mini {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 0.35rem 0.4rem 0.45rem;
+  border: 1px solid color-mix(in srgb, var(--line) 85%, var(--accent));
+  border-radius: 0.55rem;
+  background: var(--panel-2);
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+}
+
+.vbs-plan-calendar-mini:hover {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 6%, var(--panel-2));
+}
+
+.vbs-plan-calendar-mini-hint {
+  display: block;
+  font-size: 0.65rem;
+  text-align: center;
+  margin-top: 0.25rem;
+}
+
+.vbs-cal-mini-month {
+  display: block;
+  font-size: 0.62rem;
+  font-weight: 650;
+  text-align: center;
+  margin-bottom: 0.2rem;
+  color: var(--muted);
+}
+
+.vbs-cal-mini-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 1px;
+  font-size: 0.52rem;
+  font-weight: 650;
+  color: var(--muted);
+  text-align: center;
+  margin-bottom: 0.15rem;
+}
+
+.vbs-cal-mini-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 1px;
+}
+
+.vbs-cal-mini-cell {
+  min-height: 1.15rem;
+  padding: 0.05rem 0.1rem 0.1rem;
+  border-radius: 0.15rem;
+  background: color-mix(in srgb, var(--panel) 70%, transparent);
+}
+
+.vbs-cal-mini-cell.muted-month {
+  opacity: 0.45;
+}
+
+.vbs-cal-mini-date {
+  display: block;
+  font-size: 0.5rem;
+  line-height: 1;
+  color: var(--muted);
+}
+
+.vbs-cal-mini-marks {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin-top: 0.08rem;
+}
+
+.vbs-cal-mini-mark {
+  display: block;
+  height: 2px;
+  border-radius: 1px;
+  background: color-mix(in srgb, #6b9cff 75%, var(--panel));
+}
+
+.vbs-cal-mini-mark.kind-schedule {
+  background: color-mix(in srgb, var(--accent) 70%, var(--panel));
+}
+
+.vbs-cal-mini-mark.kind-milestone {
+  background: color-mix(in srgb, #ffb347 85%, var(--panel));
+}
+
+.vbs-plan-calendar-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.vbs-plan-calendar-nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.5rem;
+}
+
+.vbs-plan-calendar-range {
+  font-size: 0.95rem;
+  margin-left: 0.25rem;
+}
+
+.vbs-plan-calendar-year select {
+  margin-left: 0.35rem;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--text);
+  border-radius: 0.4rem;
+  padding: 0.25rem 0.4rem;
+  font: inherit;
+}
+
+.vbs-plan-calendar-views {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.vbs-plan-calendar-views button {
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 650;
+  padding: 0.3rem 0.55rem;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.vbs-plan-calendar-views button.active {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+.vbs-cal-grid.week {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 0.45rem;
+  min-height: 10rem;
+}
+
+.vbs-plan-calendar.expanded .vbs-cal-grid.week {
+  min-height: 22rem;
+}
+
+.vbs-cal-day-col {
+  border: 1px solid var(--line);
+  border-radius: 0.55rem;
+  background: var(--panel-2);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+}
+
+.vbs-cal-day-col header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 0.35rem 0.45rem;
+  border-bottom: 1px solid var(--line);
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.vbs-cal-day-body {
+  flex: 1;
+  padding: 0.35rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  overflow: auto;
+}
+
+.vbs-cal-event-wrap {
+  position: relative;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.vbs-cal-event-wrap:hover .vbs-cal-tooltip,
+.vbs-cal-event-wrap:focus-within .vbs-cal-tooltip {
+  opacity: 1;
+  visibility: visible;
+}
+
+.vbs-cal-tooltip {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 0.35rem);
+  z-index: 30;
+  min-width: 12rem;
+  max-width: min(22rem, 90vw);
+  padding: 0.45rem 0.55rem;
+  border-radius: 0.45rem;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  box-shadow: 0 6px 20px rgb(0 0 0 / 35%);
+  font-size: 0.72rem;
+  line-height: 1.35;
+  white-space: pre-wrap;
+  word-break: break-word;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.vbs-cal-tooltip-title {
+  font-weight: 650;
+  color: var(--text);
+}
+
+.vbs-cal-event {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 1.5rem;
+  align-items: center;
+  gap: 0;
+  border-radius: 0.4rem;
+  font-size: 0.72rem;
+  line-height: 1.25;
+  background: color-mix(in srgb, var(--accent) 18%, var(--panel));
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line));
+  min-width: 0;
+  max-width: 100%;
+}
+
+.vbs-cal-event-open {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  border: none;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  padding: 0.28rem 0.2rem 0.28rem 0.4rem;
+  cursor: pointer;
+  font: inherit;
+}
+
+.vbs-cal-event.kind-task {
+  background: color-mix(in srgb, #6b9cff 20%, var(--panel));
+}
+
+.vbs-cal-event.kind-schedule {
+  background: color-mix(in srgb, #7dd3a8 18%, var(--panel));
+}
+
+.vbs-cal-event.kind-checklist {
+  background: color-mix(in srgb, #c9a0ff 18%, var(--panel));
+}
+
+.vbs-cal-mini-mark.kind-checklist {
+  background: #c9a0ff;
+}
+
+.vbs-cal-event.kind-milestone {
+  background: color-mix(in srgb, #ffb347 22%, var(--panel));
+}
+
+.vbs-cal-event-text {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vbs-cal-event-bell {
+  flex-shrink: 0;
+  width: 1.5rem;
+  height: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-left: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+  background: color-mix(in srgb, var(--panel) 40%, transparent);
+  color: var(--muted);
+  padding: 0;
+  cursor: pointer;
+  line-height: 0;
+  border-radius: 0 0.35rem 0.35rem 0;
+}
+
+.vbs-cal-event-bell .cal-bell {
+  width: 0.95rem;
+  height: 0.95rem;
+}
+
+.vbs-cal-event-bell .cal-bell.active {
+  color: var(--accent);
+}
+
+.vbs-cal-grid.day {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  max-height: min(65vh, 36rem);
+  overflow: auto;
+}
+
+.vbs-cal-allday {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.vbs-cal-hour-row {
+  display: grid;
+  grid-template-columns: 3.2rem 1fr;
+  gap: 0.45rem;
+  min-height: 2.2rem;
+  border-bottom: 1px dashed color-mix(in srgb, var(--line) 80%, transparent);
+}
+
+.vbs-cal-hour-label {
+  font-size: 0.72rem;
+  color: var(--muted);
+  padding-top: 0.15rem;
+}
+
+.vbs-cal-hour-slot {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.vbs-cal-day-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.35rem;
+  padding: 0.35rem 0.45rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.vbs-cal-day-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 0.35rem;
+}
+
+.vbs-cal-month-cell-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.25rem;
+  min-height: 1.35rem;
+}
+
+.vbs-cal-day-add {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.vbs-cal-day-add-btn {
+  width: 1.35rem;
+  height: 1.35rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--text);
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s ease, border-color 0.12s ease, background 0.12s ease;
+}
+
+.vbs-cal-day-col:hover .vbs-cal-day-add-btn,
+.vbs-cal-month-cell:hover .vbs-cal-day-add-btn,
+.vbs-cal-day-toolbar .vbs-cal-day-add-btn,
+.vbs-cal-day-add:focus-within .vbs-cal-day-add-btn,
+.vbs-cal-day-add-btn[aria-expanded="true"] {
+  opacity: 1;
+}
+
+.vbs-cal-day-add-btn:hover {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, var(--panel));
+}
+
+.vbs-cal-day-add-menu {
+  z-index: 1200;
+  min-width: 10.5rem;
+  padding: 0.45rem;
+  border: 1px solid var(--line);
+  border-radius: 0.55rem;
+  background: var(--panel-2);
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--text) 12%, transparent);
+}
+
+.vbs-cal-day-add-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.2rem;
+}
+
+.vbs-cal-day-add-list button {
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: transparent;
+  font: inherit;
+  padding: 0.35rem 0.45rem;
+  border-radius: 0.35rem;
+  cursor: pointer;
+}
+
+.vbs-cal-day-add-list button:hover {
+  background: color-mix(in srgb, var(--accent) 8%, var(--panel));
+}
+
+.vbs-cal-day-add-form {
+  display: grid;
+  gap: 0.45rem;
+  min-width: 12rem;
+}
+
+.vbs-cal-day-add-form input {
+  width: 100%;
+  font: inherit;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: 0.4rem;
+  background: var(--panel);
+}
+
+.vbs-cal-day-add-form-actions {
+  display: flex;
+  gap: 0.35rem;
+}
+
+.vbs-spreadsheet-scroll {
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 0.65rem;
+  background: var(--panel-2);
+}
+
+.vbs-spreadsheet {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.86rem;
+}
+
+.vbs-spreadsheet th,
+.vbs-spreadsheet td {
+  padding: 0.45rem 0.55rem;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.vbs-spreadsheet th {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  background: var(--panel);
+  position: sticky;
+  top: 0;
+}
+
+.vbs-spreadsheet input[type="date"],
+.vbs-spreadsheet input[type="time"],
+.vbs-spreadsheet-title-input {
+  width: 100%;
+  min-width: 0;
+  font: inherit;
+  padding: 0.25rem 0.35rem;
+  border: 1px solid transparent;
+  border-radius: 0.35rem;
+  background: transparent;
+}
+
+.vbs-spreadsheet input:hover,
+.vbs-spreadsheet input:focus {
+  border-color: var(--line);
+  background: var(--panel);
+}
+
+.vbs-spreadsheet-type {
+  font-size: 0.72rem;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.vbs-spreadsheet-row.readonly {
+  opacity: 0.85;
+}
+
+.vbs-plan-worksheets {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  margin: 0 0 1.25rem;
+}
+
+.vbs-plan-worksheets-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+  padding: 0.65rem 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: 0.85rem;
+  background: color-mix(in srgb, var(--panel) 92%, var(--accent) 8%);
+}
+
+.vbs-plan-worksheets-head-text p {
+  margin: 0.25rem 0 0;
+  font-size: 0.86rem;
+}
+
+.vbs-worksheet-toolbar-global {
+  margin: 0;
+  padding: 0;
+  border: none;
+  flex: 1 1 18rem;
+  justify-content: flex-end;
+}
+
+.vbs-plan-worksheet-hint {
+  margin: 0.65rem 0 0.5rem;
+  font-size: 0.84rem;
+}
+
+.vbs-plan-worksheet {
+  margin: 0;
+  padding: 0.85rem 1rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 0.85rem;
+  background: var(--panel);
+}
+
+.vbs-plan-worksheet.compact {
+  padding: 0.55rem 0.75rem 0.65rem;
+}
+
+.vbs-plan-worksheet-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.vbs-worksheet-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.85rem;
+  margin: 0.85rem 0 0.65rem;
+  padding-bottom: 0.65rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.vbs-worksheet-toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.vbs-worksheet-tool {
+  min-width: 2rem;
+  height: 2rem;
+  border: 1px solid var(--line);
+  border-radius: 0.4rem;
+  background: var(--panel-2);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.vbs-worksheet-tool.italic {
+  font-style: italic;
+  font-weight: 600;
+}
+
+.vbs-worksheet-tool.underline {
+  text-decoration: underline;
+  font-weight: 600;
+}
+
+.vbs-worksheet-tool:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.vbs-worksheet-toolbar-hint {
+  margin: 0;
+  font-size: 0.78rem;
+  flex: 1 1 100%;
+}
+
+.vbs-worksheet-grid-wrap {
+  max-height: min(22rem, 55vh);
+}
+
+.vbs-worksheet-grid {
+  font-size: 0.84rem;
+}
+
+.vbs-worksheet-row-num {
+  width: 2.25rem;
+  text-align: right;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.vbs-worksheet-cell {
+  cursor: cell;
+  min-width: 4.5rem;
+}
+
+.vbs-worksheet-cell.selected {
+  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-offset: -2px;
+  background: color-mix(in srgb, var(--accent) 6%, var(--panel-2));
+}
+
+.vbs-worksheet-notes {
+  width: 100%;
+  min-width: 8rem;
+  min-height: 1.6rem;
+  resize: vertical;
+  font: inherit;
+  border: 1px solid transparent;
+  border-radius: 0.35rem;
+  background: transparent;
+  padding: 0.2rem 0.35rem;
+}
+
+.vbs-worksheet-notes:focus {
+  border-color: var(--line);
+  background: var(--panel);
+}
+
+.vbs-cal-grid.month {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 0.35rem;
+}
+
+.vbs-cal-month-cell {
+  min-height: 5.5rem;
+  border: 1px solid var(--line);
+  border-radius: 0.45rem;
+  padding: 0.25rem;
+  background: var(--panel-2);
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+  overflow: visible;
+}
+
+.vbs-cal-month-cell-events {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+.vbs-cal-month-cell .vbs-cal-event-wrap {
+  max-width: 100%;
+}
+
+.vbs-plan-calendar.expanded .vbs-cal-month-cell {
+  min-height: 7.5rem;
+}
+
+.vbs-cal-month-cell.muted-month {
+  opacity: 0.45;
+}
+
+.vbs-cal-month-date {
+  font-size: 0.72rem;
+  font-weight: 650;
+  color: var(--muted);
+}
+
+.vbs-cal-more {
+  font-size: 0.68rem;
+}
+
+.vbs-cal-reminder-panel {
+  margin-top: 0.85rem;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: 0.65rem;
+  background: var(--panel-2);
+}
+
+.vbs-cal-reminder-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.vbs-cal-reminder-channels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem 1rem;
+  margin: 0.25rem 0 0 1.5rem;
+  font-size: 0.82rem;
+}
+
+.vbs-cal-reminder-note {
+  font-size: 0.78rem;
+  margin: 0.5rem 0 0;
+}
+
+.vbs-cal-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgb(2 6 23 / 55%);
+  backdrop-filter: blur(2px);
+}
+
+.vbs-cal-modal-panel {
+  width: min(100%, 28rem);
+  max-height: min(90vh, 36rem);
+  overflow: auto;
+  border-radius: 0.75rem;
+  box-shadow: 0 18px 48px rgb(0 0 0 / 35%);
+}
+
+.vbs-cal-modal-panel .vbs-cal-detail-panel {
+  margin-top: 0;
+  border: 1px solid var(--line);
+}
+
+.vbs-cal-modal-panel .vbs-cal-reminder-panel {
+  margin: 0;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  background: var(--panel-2);
+}
+
+.vbs-cal-detail-panel {
+  margin-top: 0.85rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 0.65rem;
+  background: var(--panel-2);
+}
+
+.vbs-cal-detail-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.65rem;
+}
+
+.vbs-cal-detail-head h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.vbs-cal-detail-full {
+  white-space: pre-wrap;
+  line-height: 1.45;
+  margin: 0 0 0.75rem;
+}
+
+.vbs-cal-more {
+  border: none;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+}
+
+@media (max-width: 900px) {
+  .vbs-cal-grid.week {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 520px) {
+  .vbs-cal-grid.week {
+    grid-template-columns: 1fr;
+  }
+}
+
+.vbs-context-bar {
+  margin: -0.35rem 0 1.1rem;
+}
+
+.vbs-context-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.vbs-context-label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.vbs-context-bar select {
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--text);
+  border-radius: 0.4rem;
+  padding: 0.28rem 0.45rem;
+  font: inherit;
+  font-size: 0.82rem;
+  max-width: 100%;
+}
+
+.vbs-context-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.55rem;
+}
+
+.vbs-context-meta {
+  font-size: 0.78rem;
+}
+
+.vbs-context-note {
+  margin: 0;
+  font-size: 0.78rem;
+}
+
+.vbs-filter-note {
+  margin: 0.35rem 0 0;
+  font-size: 0.82rem;
+}
+
+.vbs-filter-save {
+  margin: 0.5rem 0 0.75rem;
+}
+
+.vbs-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 1rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.vbs-panel {
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+}
+
+.vbs-plan-overview-block {
+  margin-bottom: 1.35rem;
+  padding-bottom: 1.35rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.vbs-plan-overview-block:last-child {
+  margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.vbs-plan-section-title {
+  margin: 0 0 0.35rem;
+  font-size: 1.05rem;
+  letter-spacing: -0.01em;
+}
+
+.vbs-plan-section-lead {
+  margin: 0 0 0.75rem;
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+.vbs-plan-callout {
+  margin: 0 0 0.85rem;
+  padding: 0.7rem 0.85rem;
+  border-radius: 0.65rem;
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--line));
+  background: color-mix(in srgb, var(--accent) 6%, var(--panel-2));
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+
+.vbs-plan-callout p {
+  margin: 0;
+  color: color-mix(in srgb, var(--text) 80%, var(--muted));
+}
+
+.vbs-plan-callout-readonly {
+  margin-bottom: 1rem;
+  border-color: var(--line);
+  background: var(--panel-2);
+}
+
+.vbs-plan-overview-block .vbs-filter-panel {
+  margin: 0;
+}
+
+.vbs-plan-overview-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  margin-top: 0.35rem;
+}
+
+.vbs-plan-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  width: 100%;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.vbs-plan-field input,
+.vbs-plan-field textarea {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--text);
+  border-radius: 0.65rem;
+  padding: 0.65rem 0.75rem;
+  font: inherit;
+}
+
+.vbs-plan-field textarea {
+  min-height: 8.5rem;
+  line-height: 1.45;
+  resize: vertical;
+}
+
+.vbs-plan-field-narrow {
+  max-width: 10rem;
+}
+
+.vbs-plan-field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+  width: 100%;
+}
+
+.vbs-plan-field-readonly {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  border: 1px solid var(--line);
+  border-radius: 0.65rem;
+  padding: 0.65rem 0.75rem;
+  background: color-mix(in srgb, var(--panel-2) 70%, var(--panel));
+}
+
+.vbs-plan-field-readonly-label {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.vbs-plan-field-readonly-value {
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.vbs-plan-field-readonly-hint {
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+@media (max-width: 520px) {
+  .vbs-plan-field-row {
+    grid-template-columns: 1fr;
+  }
+
+  .vbs-plan-field-narrow {
+    max-width: none;
+  }
+}
+
+.vbs-plan-form-actions {
+  margin-top: 0.35rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid var(--line);
+}
+
+.vbs-plan-save {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 11rem;
+  padding: 0.72rem 1.35rem;
+  border: 1px solid color-mix(in srgb, var(--accent) 55%, var(--line));
+  border-radius: 0.65rem;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--accent-2) 92%, white),
+    var(--accent-2)
+  );
+  color: #062033;
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+  box-shadow: 0 1px 0 rgb(255 255 255 / 12%) inset;
+}
+
+.vbs-plan-save:hover:not(:disabled) {
+  filter: brightness(1.06);
+}
+
+.vbs-plan-save:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.vbs-task-add-wrap {
+  margin-bottom: 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  background: var(--panel-2);
+  overflow: hidden;
+}
+
+.vbs-task-add-heading {
+  margin: 0;
+  padding: 0.75rem 1rem 0;
+  font-size: 0.95rem;
+  color: var(--accent);
+}
+
+.vbs-task-add-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem 1rem;
+}
+
+.vbs-task-add-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  padding-top: 0.25rem;
+}
+
+.vbs-task-team-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  margin-top: 0.5rem;
+}
+
+.vbs-task-team-section {
+  border: 1px solid var(--line);
+  border-radius: 0.85rem;
+  background: var(--panel-2);
+  padding: 0;
+  overflow: hidden;
+  box-shadow: 0 1px 0 rgb(255 255 255 / 4%) inset;
+}
+
+.vbs-task-team-section-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--panel) 72%, var(--panel-2));
+}
+
+.vbs-task-team-section-title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.vbs-task-team-section-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.4rem;
+  padding: 0.12rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--muted) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--line) 85%, transparent);
+}
+
+.vbs-task-team-section-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.55rem 0.75rem;
+  margin-left: auto;
+}
+
+.vbs-task-team-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.vbs-task-team-control-label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.vbs-task-team-select {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--text);
+  border-radius: 0.55rem;
+  padding: 0.38rem 1.75rem 0.38rem 0.6rem;
+  font: inherit;
+  font-size: 0.84rem;
+  font-weight: 550;
+  min-width: 9.25rem;
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2394a3b8' d='M3 4.5 6 7.5 9 4.5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.55rem center;
+}
+
+.vbs-task-team-select:hover {
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--line));
+}
+
+.vbs-task-team-select:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-offset: 1px;
+}
+
+.vbs-task-team-section-actions .vbs-task-sort-btn {
+  padding: 0.38rem 0.7rem;
+  font-size: 0.84rem;
+}
+
+.vbs-task-team-add-btn {
+  border: 1px solid color-mix(in srgb, var(--accent) 50%, var(--line));
+  border-radius: 0.55rem;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--accent-2) 92%, white),
+    var(--accent-2)
+  );
+  color: #062033;
+  padding: 0.4rem 0.85rem;
+  font: inherit;
+  font-size: 0.84rem;
+  font-weight: 650;
+  cursor: pointer;
+  white-space: nowrap;
+  box-shadow: 0 1px 0 rgb(255 255 255 / 12%) inset;
+}
+
+.vbs-task-team-add-btn:hover {
+  filter: brightness(1.06);
+}
+
+.vbs-task-team-add-btn.secondary {
+  background: var(--panel);
+  color: var(--text);
+  border-color: var(--line);
+  box-shadow: none;
+}
+
+.vbs-task-team-add-btn.secondary:hover {
+  filter: none;
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
+}
+
+.vbs-task-team-section > .vbs-task-list,
+.vbs-task-team-section > .vbs-task-empty,
+.vbs-task-team-section > .vbs-task-team-add-form {
+  margin-left: 1rem;
+  margin-right: 1rem;
+}
+
+.vbs-task-team-section > .vbs-task-list {
+  margin-top: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.vbs-task-team-section > .vbs-task-empty {
+  margin-top: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.vbs-task-team-add-form {
+  margin-top: 0;
+  margin-bottom: 1rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 0.65rem;
+  background: var(--panel);
+}
+
+.vbs-task-team-section-empty {
+  margin-bottom: 0;
+}
+
+.vbs-task-team-picks-wrap {
+  grid-column: 1 / -1;
+}
+
+.vbs-task-team-picks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.vbs-task-team-pick {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 0.28rem 0.6rem;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.vbs-task-team-pick.active {
+  color: var(--text);
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--panel));
+}
+
+.vbs-task-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+  margin-top: 1rem;
+}
+
+.vbs-task-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem 1rem;
+  flex: 1;
+  min-width: min(100%, 16rem);
+}
+
+.vbs-task-filter {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-width: 9.5rem;
+}
+
+.vbs-task-filter select {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--text);
+  border-radius: 0.55rem;
+  padding: 0.45rem 0.55rem;
+  font: inherit;
+}
+
+.vbs-task-empty {
+  margin: 0.75rem 0 0;
+}
+
+.vbs-task-sort {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.vbs-task-sort-label {
+  font-size: 0.78rem;
+  font-weight: 650;
+  margin-right: 0.15rem;
+}
+
+.vbs-task-sort-btn {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 0.3rem 0.65rem;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.vbs-task-sort-btn.active {
+  color: var(--text);
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, var(--panel));
+}
+
+.vbs-task-list {
+  list-style: none;
+  margin: 0.65rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.vbs-task-card {
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  background: var(--panel-2);
+  overflow: hidden;
+}
+
+.vbs-task-card.open {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
+}
+
+.vbs-task-summary {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-rows: auto auto auto;
+  gap: 0.25rem 0.65rem;
+  width: 100%;
+  margin: 0;
+  padding: 0.7rem 0.85rem;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.vbs-task-summary:hover {
+  background: color-mix(in srgb, var(--accent) 5%, transparent);
+}
+
+.vbs-task-summary-main {
+  grid-column: 1;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.45rem 0.55rem;
+  min-width: 0;
+}
+
+.vbs-task-summary-title {
+  font-weight: 650;
+  font-size: 0.95rem;
+  line-height: 1.3;
+}
+
+.vbs-task-assignee-pill {
+  font-size: 0.72rem;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  padding: 0.12rem 0.45rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line));
+  background: color-mix(in srgb, var(--accent) 10%, var(--panel));
+  color: var(--accent);
+  max-width: 12rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vbs-task-field-hint {
+  font-size: 0.76rem;
+  line-height: 1.35;
+}
+
+.vbs-cal-day-add-assign {
+  display: grid;
+  gap: 0.25rem;
+  margin-top: 0.35rem;
+  font-size: 0.78rem;
+}
+
+.vbs-task-summary-meta {
+  grid-column: 1;
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.vbs-task-notes-preview {
+  grid-column: 1;
+  font-size: 0.76rem;
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.vbs-task-chevron {
+  grid-column: 2;
+  grid-row: 1 / span 3;
+  align-self: center;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.vbs-task-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0 1rem 1rem;
+  border-top: 1px solid var(--line);
+}
+
+.vbs-task-card-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.vbs-task-title-input,
+.vbs-task-title-read {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 650;
+  line-height: 1.3;
+}
+
+.vbs-task-title-input {
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text);
+  border-radius: 0.45rem;
+  padding: 0.2rem 0.35rem;
+  font: inherit;
+}
+
+.vbs-task-title-input:hover {
+  border-color: var(--line);
+  background: var(--panel);
+}
+
+.vbs-task-title-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  background: var(--panel);
+}
+
+.vbs-task-remove {
+  flex-shrink: 0;
+  width: 2rem;
+  height: 2rem;
+  border: 1px solid var(--line);
+  border-radius: 0.45rem;
+  background: transparent;
+  color: var(--muted);
+  font-size: 1.35rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+}
+
+.vbs-task-remove:hover:not(:disabled) {
+  border-color: #f87171;
+  color: #fca5a5;
+  background: rgb(248 113 113 / 8%);
+}
+
+.vbs-task-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.vbs-task-field-label {
+  font-size: 0.72rem;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.vbs-task-field input,
+.vbs-task-field select,
+.vbs-task-details {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--text);
+  border-radius: 0.55rem;
+  padding: 0.45rem 0.55rem;
+  font: inherit;
+}
+
+.vbs-task-details {
+  line-height: 1.45;
+  resize: vertical;
+  min-height: 3.25rem;
+}
+
+.vbs-task-details-read {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+.vbs-task-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem 0.85rem;
+}
+
+@media (max-width: 560px) {
+  .vbs-task-meta-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.vbs-task-expenses {
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--line);
+}
+
+.vbs-task-expenses-title {
+  margin: 0 0 0.5rem;
+  font-size: 0.88rem;
+  font-weight: 650;
+  color: var(--accent);
+}
+
+.vbs-task-receipts {
+  margin-top: 0.75rem;
+  margin-bottom: 0.35rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.vbs-task-receipt-strip {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: flex-start;
+  gap: 0.75rem;
+  overflow-x: auto;
+  padding: 0.2rem 0.15rem 0.45rem;
+  scrollbar-width: thin;
+}
+
+.vbs-task-receipt-thumb {
+  position: relative;
+  flex: 0 0 auto;
+  width: 6.75rem;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.vbs-task-receipt-thumb-link {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 0.6rem;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 12%);
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+
+.vbs-task-receipt-thumb-link:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+  transform: translateY(-1px);
+}
+
+.vbs-task-receipt-thumb-link img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.vbs-task-receipt-file-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  font-size: 0.78rem;
+  font-weight: 750;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--muted) 8%, var(--panel));
+}
+
+.vbs-task-receipt-thumb-caption {
+  margin: 0;
+  font-size: 0.68rem;
+  line-height: 1.25;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: center;
+  padding: 0 0.1rem;
+}
+
+.vbs-task-receipt-remove {
+  position: absolute;
+  top: 0.3rem;
+  right: 0.3rem;
+  width: 1.4rem;
+  height: 1.4rem;
+  border: none;
+  border-radius: 999px;
+  background: rgb(15 23 42 / 72%);
+  color: #f8fafc;
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 25%);
+}
+
+.vbs-task-receipt-remove:hover:not(:disabled) {
+  background: rgb(15 23 42 / 88%);
+}
+
+.vbs-task-receipt-remove:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.vbs-task-receipt-add {
+  flex: 0 0 auto;
+  width: 6.75rem;
+  aspect-ratio: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.2rem;
+  border: 1px dashed color-mix(in srgb, var(--line) 90%, var(--muted));
+  border-radius: 0.6rem;
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
+  cursor: pointer;
+  text-align: center;
+  padding: 0.35rem 0.45rem;
+  box-sizing: border-box;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.vbs-task-receipt-add:hover {
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--line));
+  background: color-mix(in srgb, var(--accent) 6%, var(--panel));
+}
+
+.vbs-task-receipt-add-plus {
+  font-size: 2.35rem;
+  font-weight: 300;
+  line-height: 1;
+  color: color-mix(in srgb, var(--accent) 75%, var(--muted));
+  user-select: none;
+}
+
+.vbs-task-receipt-add:hover .vbs-task-receipt-add-plus {
+  color: var(--accent);
+}
+
+.vbs-task-receipt-add-label {
+  font-size: 0.72rem;
+  font-weight: 650;
+  line-height: 1.25;
+  color: var(--muted);
+}
+
+.vbs-task-receipt-empty {
+  margin: 0;
+  font-size: 0.84rem;
+}
+
+.vbs-task-receipt-hint {
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+.vbs-milestones-panel {
+  padding-top: 0.25rem;
+}
+
+.vbs-milestones-lead {
+  margin: 0 0 0.85rem;
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+
+.vbs-milestone-timeline-wrap {
+  position: relative;
+  margin: 0.75rem 0 0;
+  padding: 1.75rem 0 0.25rem;
+  min-height: 4rem;
+  width: 100%;
+}
+
+.vbs-milestone-today-vertical {
+  position: absolute;
+  top: 0.35rem;
+  bottom: 0.35rem;
+  width: 0;
+  border-left: 2px dotted #22c55e;
+  pointer-events: none;
+  z-index: 3;
+  transform: translateX(-1px);
+}
+
+.vbs-milestone-today-tag {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  z-index: 4;
+  font-size: 0.68rem;
+  font-weight: 750;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #4ade80;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.vbs-milestone-timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  position: relative;
+  z-index: 1;
+}
+
+.vbs-milestone-node {
+  position: relative;
+  margin: 0 0 0.55rem;
+  margin-left: calc(var(--milestone-date-pct, 0) * var(--milestone-date-shift, 14%));
+  padding-left: 1.5rem;
+  width: fit-content;
+  max-width: calc(100% - var(--milestone-date-pct, 0) * var(--milestone-date-shift, 14%));
+  box-sizing: border-box;
+}
+
+/* Timeline rail: spine + dot (separate from card text) */
+.vbs-milestone-node::after {
+  content: "";
+  position: absolute;
+  left: 0.4375rem;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: color-mix(in srgb, var(--line) 88%, var(--accent));
+  border-radius: 1px;
+  pointer-events: none;
+}
+
+.vbs-milestone-node:first-child::after {
+  top: 0.95rem;
+}
+
+.vbs-milestone-node:last-child::after {
+  bottom: auto;
+  height: 0.95rem;
+}
+
+.vbs-milestone-node::before {
+  content: "";
+  position: absolute;
+  left: 0.4375rem;
+  top: 0.95rem;
+  width: 0.5625rem;
+  height: 0.5625rem;
+  margin-left: -0.28125rem;
+  border-radius: 50%;
+  background: var(--panel-2);
+  border: 2px solid var(--accent);
+  box-sizing: border-box;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.vbs-milestone-node.tone-done::before {
+  background: color-mix(in srgb, #22c55e 55%, var(--panel-2));
+  border-color: #4ade80;
+}
+
+.vbs-milestone-node.tone-overdue::before {
+  border-color: #f87171;
+  background: color-mix(in srgb, #f87171 30%, var(--panel-2));
+}
+
+.vbs-milestone-node-body {
+  position: relative;
+  width: fit-content;
+  max-width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 0.65rem;
+  background: var(--panel-2);
+  overflow: hidden;
+}
+
+.vbs-milestone-node-body::before {
+  content: "";
+  position: absolute;
+  left: -1.05rem;
+  top: 1.15rem;
+  width: 0.85rem;
+  height: 2px;
+  background: color-mix(in srgb, var(--line) 82%, var(--accent));
+  pointer-events: none;
+  z-index: 1;
+}
+
+.vbs-milestone-node.tone-done .vbs-milestone-node-body {
+  border-color: color-mix(in srgb, #22c55e 45%, var(--line));
+  background: color-mix(in srgb, #22c55e 7%, var(--panel-2));
+}
+
+.vbs-milestone-node.tone-overdue .vbs-milestone-node-body {
+  border-color: color-mix(in srgb, #f87171 55%, var(--line));
+  background: color-mix(in srgb, #f87171 8%, var(--panel-2));
+}
+
+.vbs-milestone-summary {
+  display: grid;
+  grid-template-columns: auto auto auto;
+  grid-template-areas:
+    "due main chevron"
+    "due meta chevron"
+    "due notes notes";
+  gap: 0.25rem 0.65rem;
+  align-items: start;
+  width: max-content;
+  max-width: min(100%, 52rem);
+  padding: 0.55rem 0.65rem;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.vbs-milestone-due-badge {
+  grid-area: due;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 6.75rem;
+  padding: 0.4rem 0.5rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.vbs-milestone-due-badge.tone-done {
+  border-color: color-mix(in srgb, #22c55e 45%, var(--line));
+  background: color-mix(in srgb, #22c55e 10%, var(--panel));
+}
+
+.vbs-milestone-due-badge.tone-overdue {
+  border-color: color-mix(in srgb, #f87171 50%, var(--line));
+  background: color-mix(in srgb, #f87171 12%, var(--panel));
+}
+
+.vbs-milestone-due-label {
+  font-size: 0.62rem;
+  font-weight: 750;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.vbs-milestone-due-date {
+  font-size: 0.82rem;
+  font-weight: 700;
+  line-height: 1.25;
+  color: var(--text);
+}
+
+.vbs-milestone-due-iso {
+  font-size: 0.68rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+.vbs-milestone-due-badge.tone-done .vbs-milestone-due-date {
+  color: #4ade80;
+}
+
+.vbs-milestone-due-badge.tone-overdue .vbs-milestone-due-date {
+  color: #fca5a5;
+}
+
+.vbs-milestone-due-missing {
+  font-size: 0.78rem;
+  font-weight: 650;
+  color: var(--muted);
+  font-style: italic;
+}
+
+.vbs-milestone-summary-main {
+  grid-area: main;
+  display: block;
+  padding-top: 0.15rem;
+}
+
+.vbs-milestone-title {
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.vbs-milestone-node.tone-done .vbs-milestone-title {
+  color: #4ade80;
+}
+
+.vbs-milestone-node.tone-overdue .vbs-milestone-title {
+  color: #fca5a5;
+}
+
+.vbs-milestone-meta {
+  grid-area: meta;
+  font-size: 0.76rem;
+}
+
+.vbs-milestone-notes-preview {
+  grid-area: notes;
+  font-size: 0.76rem;
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  max-width: 36rem;
+}
+
+.vbs-milestone-notes-field {
+  margin: 0 0.65rem 0.65rem;
+}
+
+.vbs-milestone-notes-read {
+  white-space: pre-wrap;
+  line-height: 1.45;
+  font-size: 0.86rem;
+}
+
+.vbs-milestone-expand {
+  grid-area: chevron;
+  align-self: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.35rem;
+  height: 1.35rem;
+  margin-left: 0.15rem;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+.vbs-milestone-expand-icon {
+  display: block;
+  transition: transform 0.14s ease;
+}
+
+.vbs-milestone-expand-icon.open {
+  transform: rotate(90deg);
+}
+
+.vbs-milestone-summary:hover .vbs-milestone-expand,
+.vbs-milestone-node.open .vbs-milestone-expand {
+  color: var(--accent);
+}
+
+@media (max-width: 520px) {
+  .vbs-milestone-summary {
+    grid-template-columns: 1fr auto;
+    grid-template-areas:
+      "due chevron"
+      "main main"
+      "meta meta"
+      "notes notes";
+  }
+
+  .vbs-milestone-due-badge {
+    min-width: 0;
+    flex: 1;
+  }
+}
+
+.vbs-milestone-quick-done {
+  padding: 0 0.65rem 0.55rem;
+}
+
+.vbs-milestone-done-btn {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 0.22rem 0.55rem;
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.vbs-milestone-done-btn.active {
+  border-color: color-mix(in srgb, #22c55e 50%, var(--line));
+  color: #4ade80;
+  background: color-mix(in srgb, #22c55e 12%, var(--panel));
+}
+
+.vbs-milestone-node.open .vbs-milestone-node-body {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
+  width: 100%;
+  min-width: min(100%, 22rem);
+}
+
+.vbs-milestone-node.open .vbs-milestone-summary {
+  width: 100%;
+  max-width: none;
+}
+
+.vbs-milestone-node .vbs-task-body {
+  padding: 0 0.65rem 0.65rem;
+  border-top: 1px solid var(--line);
+}
+
+/* VBS daily schedule — day boxes (milestone-style indent) */
+.vbs-daily-schedule-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.vbs-daily-schedule-lead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem 1.25rem;
+}
+
+.vbs-daily-schedule-lead p {
+  margin: 0;
+  max-width: 42rem;
+  line-height: 1.45;
+}
+
+.vbs-daily-schedule-generate {
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line));
+  background: color-mix(in srgb, var(--accent) 12%, var(--panel-2));
+  color: var(--text);
+  border-radius: 0.5rem;
+  padding: 0.45rem 0.85rem;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 650;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.vbs-daily-schedule-generate:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 18%, var(--panel-2));
+}
+
+.vbs-daily-schedule-generate:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.vbs-daily-schedule-labels {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem 0.65rem;
+}
+
+.vbs-daily-schedule-labels-heading {
+  font-size: 0.76rem;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.vbs-daily-schedule-label-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.vbs-daily-schedule-label-chips li {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel);
+  padding: 0.12rem 0.15rem 0.12rem 0.55rem;
+  font-size: 0.78rem;
+}
+
+.vbs-daily-schedule-label-chip {
+  line-height: 1.3;
+}
+
+.vbs-daily-schedule-label-remove {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 1.05rem;
+  line-height: 1;
+  padding: 0.1rem 0.35rem;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.vbs-daily-schedule-label-remove:hover:not(:disabled) {
+  color: #f87171;
+  background: color-mix(in srgb, #f87171 12%, transparent);
+}
+
+.vbs-daily-schedule-timeline-wrap {
+  position: relative;
+  margin-top: 0.25rem;
+}
+
+.vbs-daily-schedule-days {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.vbs-daily-schedule-day {
+  margin-bottom: 0.85rem;
+}
+
+.vbs-daily-schedule-day-body {
+  width: fit-content;
+  min-width: min(100%, 20rem);
+  max-width: min(100%, 36rem);
+  padding: 0.65rem 0.75rem 0.55rem;
+}
+
+.vbs-daily-schedule-day-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.25rem 0.75rem;
+  margin-bottom: 0.45rem;
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 80%, transparent);
+}
+
+.vbs-daily-schedule-day-title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.vbs-daily-schedule-day-iso {
+  font-size: 0.74rem;
+}
+
+.vbs-daily-schedule-day-empty {
+  margin: 0.25rem 0 0.15rem;
+  font-size: 0.82rem;
+}
+
+.vbs-daily-schedule-slots {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.vbs-daily-schedule-slot {
+  border-top: 1px solid color-mix(in srgb, var(--line) 65%, transparent);
+}
+
+.vbs-daily-schedule-slot:first-child {
+  border-top: none;
+}
+
+.vbs-daily-schedule-slot-summary {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  grid-template-areas:
+    "time label chevron"
+    "meta meta chevron";
+  gap: 0.15rem 0.65rem;
+  align-items: center;
+  width: 100%;
+  border: none;
+  background: transparent;
+  text-align: left;
+  padding: 0.45rem 0.15rem;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.vbs-daily-schedule-slot-time {
+  grid-area: time;
+  font-size: 0.78rem;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  color: color-mix(in srgb, var(--accent) 55%, var(--text));
+  white-space: nowrap;
+}
+
+.vbs-daily-schedule-slot-label {
+  grid-area: label;
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.vbs-daily-schedule-slot-meta {
+  grid-area: meta;
+  font-size: 0.74rem;
+}
+
+.vbs-daily-schedule-slot .vbs-task-chevron {
+  grid-area: chevron;
+}
+
+.vbs-daily-schedule-slot.open .vbs-daily-schedule-slot-summary {
+  padding-bottom: 0.25rem;
+}
+
+.vbs-daily-schedule-slot .vbs-task-body {
+  padding: 0 0.15rem 0.55rem;
+  border-top: 1px dashed color-mix(in srgb, var(--line) 70%, transparent);
+}
+
+.vbs-task-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  padding-top: 0.65rem;
+  margin-top: 0.15rem;
+  border-top: 1px solid color-mix(in srgb, var(--line) 75%, transparent);
+}
+
+.vbs-task-status-pill.mini {
+  padding: 0.15rem 0.5rem;
+  font-size: 0.68rem;
+  cursor: default;
+  pointer-events: none;
+}
+
+.vbs-task-status-pill {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 0.35rem 0.75rem;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 650;
+  cursor: pointer;
+  transition:
+    border-color 0.12s ease,
+    background 0.12s ease,
+    color 0.12s ease;
+}
+
+.vbs-task-status-pill:disabled:not(.active) {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.vbs-task-status-pill.status-todo.active {
+  border-color: #64748b;
+  background: rgb(100 116 139 / 22%);
+  color: var(--text);
+}
+
+.vbs-task-status-pill.status-in_progress.active {
+  border-color: #6b9cff;
+  background: rgb(107 156 255 / 18%);
+  color: #c7dcff;
+}
+
+.vbs-task-status-pill.status-done.active {
+  border-color: #4ade80;
+  background: rgb(74 222 128 / 15%);
+  color: #bbf7d0;
+}
+
+.vbs-task-status-pill.status-blocked.active {
+  border-color: #fb923c;
+  background: rgb(251 146 60 / 15%);
+  color: #fed7aa;
+}
+
+.vbs-task-status-pill:not(.active):hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.vbs-day h2 {
+  margin: 1.25rem 0 0.35rem;
+  font-size: 1rem;
+  color: var(--accent);
+}
+
+.checkbox-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.45rem;
+  color: var(--muted);
+  font-size: 0.9rem;
 }
 
 .org-banner {
@@ -1061,7 +4273,11 @@ legend {
 
 @media (max-width: 800px) {
   .shell {
-    grid-template-columns: 200px minmax(0, 1fr);
+    grid-template-columns: 220px minmax(0, 1fr);
+  }
+
+  .shell.rail-collapsed {
+    grid-template-columns: 56px minmax(0, 1fr);
   }
 
   .inbox {

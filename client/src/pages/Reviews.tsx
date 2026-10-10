@@ -1,6 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
+import { useOrgVbs } from "../org-vbs";
 import { OrgBanner, useOrgs } from "../orgs";
+import { VbsFilterPanel } from "../VbsFilterPanel";
+import { vbsPublisherOptions } from "../vbs-cascade";
+import { applyVbsFilterDefault } from "../vbs-filters";
 import type { CurriculumPayload, Program, Review } from "../types";
 import AddReviewForm from "./AddReviewForm";
 
@@ -14,6 +18,11 @@ function previewText(text: string) {
 
 function reviewTotal(review: Review) {
   return review.biblicalTeaching + review.merchHelp + review.fun;
+}
+
+function reviewRating(review: Review) {
+  const outOf15 = reviewTotal(review);
+  return { outOf15, ratio: outOf15 / 15 };
 }
 
 function verifiedRank(reviews: Review[]) {
@@ -30,14 +39,24 @@ function verifiedRank(reviews: Review[]) {
   };
 }
 
-function Stars({ ratio }: { ratio: number }) {
+function Stars({ ratio, compact }: { ratio: number; compact?: boolean }) {
   const percent = Math.max(0, Math.min(1, ratio)) * 100;
   return (
-    <span className="stars" aria-hidden="true">
+    <span className={compact ? "stars compact" : "stars"} aria-hidden="true">
       <span className="stars-bg">★★★★★</span>
       <span className="stars-fill" style={{ width: `${percent}%` }}>
         ★★★★★
       </span>
+    </span>
+  );
+}
+
+function ReviewRating({ review, compact }: { review: Review; compact?: boolean }) {
+  const { outOf15, ratio } = reviewRating(review);
+  return (
+    <span className="review-rating" aria-label={`Overall rating ${outOf15.toFixed(1)} out of 15`}>
+      <strong className="review-rating-score">{outOf15.toFixed(1)}/15</strong>
+      <Stars ratio={ratio} compact={compact} />
     </span>
   );
 }
@@ -60,6 +79,7 @@ function ReviewCard({ review }: { review: Review }) {
       <header>
         <span className="author">{review.username}</span>
         {review.verified ? <span className="badge">Verified</span> : null}
+        <ReviewRating review={review} />
       </header>
       <p className="lead">{review.whatPeopleSay}</p>
       <Score label="Biblical teaching" value={review.biblicalTeaching} notes={review.biblicalTeachingNotes} />
@@ -87,23 +107,61 @@ function ReviewCard({ review }: { review: Review }) {
 
 export default function ReviewsPage() {
   const { tenantId, canWrite } = useOrgs();
-  const [year, setYear] = useState<number | null>(null);
-  const [selectedPublishers, setSelectedPublishers] = useState<string[] | null>(null);
+  const {
+    filterDefault,
+    prefsReady,
+    programs: catalogPrograms,
+    publishers: catalogPublishers,
+    defaultYear: prefsDefaultYear,
+  } = useOrgVbs();
+  const filtersBootstrapped = useRef(false);
+  const [yearFilter, setYearFilter] = useState("all");
+  const [publisherFilter, setPublisherFilter] = useState("all");
+  const [titleFilter, setTitleFilter] = useState("all");
+  const [siteDefaultYear, setSiteDefaultYear] = useState<number | null>(null);
   const [data, setData] = useState<CurriculumPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [openReviewId, setOpenReviewId] = useState<string | null>(null);
 
   useEffect(() => {
+    filtersBootstrapped.current = false;
+  }, [tenantId]);
+
+  useEffect(() => {
+    if (!prefsReady || filtersBootstrapped.current) {
+      return;
+    }
+    filtersBootstrapped.current = true;
+    const next = applyVbsFilterDefault(filterDefault, siteDefaultYear ?? prefsDefaultYear);
+    setYearFilter(next.yearFilter);
+    setPublisherFilter(next.publisherFilter);
+    setTitleFilter(next.titleFilter);
+  }, [prefsReady, filterDefault, siteDefaultYear, prefsDefaultYear]);
+
+  const apiYear = useMemo(() => {
+    if (yearFilter !== "all" && yearFilter !== "") {
+      return Number(yearFilter);
+    }
+    return siteDefaultYear ?? prefsDefaultYear;
+  }, [yearFilter, siteDefaultYear, prefsDefaultYear]);
+
+  const publisherIds = useMemo(() => {
+    if (publisherFilter !== "all" && publisherFilter !== "") {
+      return [publisherFilter];
+    }
+    return vbsPublisherOptions(catalogPublishers, catalogPrograms, String(apiYear)).map((p) => p.id);
+  }, [publisherFilter, catalogPublishers, catalogPrograms, apiYear]);
+
+  useEffect(() => {
     let cancelled = false;
     api
-      .curriculum(year, selectedPublishers)
+      .curriculum(apiYear, publisherIds)
       .then((payload) => {
         if (cancelled) {
           return;
         }
         setData(payload);
-        setYear((current) => current ?? payload.defaultYear);
-        setSelectedPublishers((current) => current ?? payload.publishers.map((publisher) => publisher.id));
+        setSiteDefaultYear((current) => current ?? payload.defaultYear);
         setError(null);
       })
       .catch((err: Error) => {
@@ -114,37 +172,21 @@ export default function ReviewsPage() {
     return () => {
       cancelled = true;
     };
-  }, [year, selectedPublishers, tenantId]);
+  }, [apiYear, publisherIds, tenantId]);
 
   useEffect(() => {
     setOpenReviewId(null);
-  }, [year, selectedPublishers, tenantId]);
+  }, [yearFilter, publisherFilter, titleFilter, tenantId]);
 
-  const allSelected = useMemo(() => {
-    if (!data || !selectedPublishers) {
-      return true;
-    }
-    return data.publishers.every((publisher) => selectedPublishers.includes(publisher.id));
-  }, [data, selectedPublishers]);
-
-  function toggleAll(checked: boolean) {
+  const displayedPrograms = useMemo(() => {
     if (!data) {
-      return;
+      return [];
     }
-    setSelectedPublishers(checked ? data.publishers.map((publisher) => publisher.id) : []);
-  }
-
-  function togglePublisher(id: string, checked: boolean) {
-    setSelectedPublishers((current) => {
-      const next = new Set(current ?? []);
-      if (checked) {
-        next.add(id);
-      } else {
-        next.delete(id);
-      }
-      return [...next];
-    });
-  }
+    if (titleFilter === "all" || titleFilter === "") {
+      return data.programs;
+    }
+    return data.programs.filter((program) => program.theme === titleFilter);
+  }, [data, titleFilter]);
 
   function addReviewToProgram(programId: string, review: Review) {
     setData((current) => {
@@ -170,7 +212,7 @@ export default function ReviewsPage() {
     return <p className="status">{error}</p>;
   }
 
-  if (!data || year === null || selectedPublishers === null) {
+  if (!data || !prefsReady) {
     return <p className="status">Loading curriculum reviews…</p>;
   }
 
@@ -185,53 +227,23 @@ export default function ReviewsPage() {
         </p>
       </header>
 
-      <section className="filters" aria-label="Review filters">
-        <fieldset>
-          <legend>Year</legend>
-          <div className="chips">
-            {data.years.map((option) => (
-              <label key={option} className={option === year ? "chip selected" : "chip"}>
-                <input
-                  type="radio"
-                  name="year"
-                  checked={option === year}
-                  onChange={() => setYear(option)}
-                />
-                {option}
-              </label>
-            ))}
-          </div>
-        </fieldset>
-        <fieldset>
-          <legend>Publisher</legend>
-          <div className="checks">
-            <label>
-              <input
-                type="checkbox"
-                checked={allSelected}
-                onChange={(event) => toggleAll(event.target.checked)}
-              />
-              All
-            </label>
-            {data.publishers.map((publisher) => (
-              <label key={publisher.id}>
-                <input
-                  type="checkbox"
-                  checked={selectedPublishers.includes(publisher.id)}
-                  onChange={(event) => togglePublisher(publisher.id, event.target.checked)}
-                />
-                {publisher.name}
-              </label>
-            ))}
-          </div>
-        </fieldset>
-      </section>
+      <VbsFilterPanel
+        programs={catalogPrograms}
+        publishers={catalogPublishers}
+        ariaLabel="Review filters"
+        value={{ yearFilter, publisherFilter, titleFilter }}
+        onChange={(next) => {
+          setYearFilter(next.yearFilter);
+          setPublisherFilter(next.publisherFilter);
+          setTitleFilter(next.titleFilter);
+        }}
+      />
 
-      {data.programs.length === 0 ? (
+      {displayedPrograms.length === 0 ? (
         <p className="status">No curriculum matches those filters.</p>
       ) : (
         <div className="program-list">
-          {data.programs.map((program: Program) => {
+          {displayedPrograms.map((program: Program) => {
             const rank = verifiedRank(program.reviews);
             return (
               <section key={program.id} className="program open">
@@ -265,6 +277,7 @@ export default function ReviewsPage() {
                           <div className="entry-meta">
                             <span className="author">{review.username}</span>
                             {review.verified ? <span className="badge">Verified</span> : null}
+                            <ReviewRating review={review} compact />
                           </div>
                           <p className="entry-preview">{previewText(review.whatPeopleSay)}</p>
                         </button>

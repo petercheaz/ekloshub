@@ -16,6 +16,7 @@ import {
   listSetups,
 } from "./setup-store.js";
 import { applySchema } from "./db/schema.js";
+import { isAcceptableAttachment } from "./media-limits.js";
 import { waitForDb } from "./db/pool.js";
 import { getObject, waitForS3 } from "./db/s3.js";
 import { ensureKnownAccounts, seedIfEmpty } from "./db/seed.js";
@@ -29,7 +30,7 @@ import {
   removeOrganizationMember,
 } from "./orgs.js";
 import { acceptInvite, createInvites, getInvite } from "./invites.js";
-import { createTeam, listTeams, updateTeam } from "./teams.js";
+import { createTeam, listTeamsForViewer, updateTeam } from "./teams.js";
 import {
   generateRoomIdeaImages,
   listRoomIdeas,
@@ -43,6 +44,33 @@ import {
   unreadNotificationCount,
 } from "./notifications.js";
 import { attachTenant, requireWrite } from "./tenant.js";
+import { clearUserVbsDefault, getUserVbsDefault, setUserVbsDefault } from "./user-vbs.js";
+import {
+  deleteVbsChecklistItem,
+  addScheduleActivityLabel,
+  deleteVbsScheduleSlot,
+  deleteVbsStation,
+  deleteVbsTask,
+  generateVbsDailySchedule,
+  getOrgVbsDefault,
+  getVbsWorkspace,
+  removeScheduleActivityLabel,
+  setOrgVbsCurriculumDefault,
+  saveVbsChecklistItem,
+  saveVbsScheduleSlot,
+  saveVbsStation,
+  saveVbsTask,
+  saveVbsWorksheet,
+  updateVbsNotificationPrefs,
+  upsertVbsPlan,
+} from "./vbs-plan.js";
+import { createBoardPost, createBoardReply } from "./vbs-board.js";
+import { getNotificationProfile, updateOrgNotificationProfile } from "./user-profile.js";
+import {
+  processCalendarReminders,
+  saveCalendarReminders,
+  updateCalendarViewPref,
+} from "./vbs-calendar.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const clientDist = path.join(__dirname, "..", "dist", "client");
@@ -69,6 +97,31 @@ app.use(
 app.post("/api/login", login);
 app.post("/api/logout", logout);
 app.get("/api/me", me);
+
+app.get("/api/me/vbs-default", requireAuth, async (req, res) => {
+  res.json(await getUserVbsDefault(req.session.user!.username));
+});
+
+app.put("/api/me/vbs-default", requireAuth, async (req, res) => {
+  const body = req.body as Record<string, unknown>;
+  const num = (value: unknown) => (typeof value === "number" && Number.isFinite(value) ? value : Number(value));
+  const text = (value: unknown) => (typeof value === "string" ? value : "");
+  const result = await setUserVbsDefault(req.session.user!.username, {
+    year: num(body.year),
+    publisherId: text(body.publisherId),
+    programTitle: text(body.programTitle),
+    allFilters: body.allFilters === true,
+  });
+  if ("error" in result) {
+    res.status(400).json(result);
+    return;
+  }
+  res.json(result);
+});
+
+app.delete("/api/me/vbs-default", requireAuth, async (req, res) => {
+  res.json(await clearUserVbsDefault(req.session.user!.username));
+});
 
 app.get("/api/orgs", requireAuth, async (req, res) => {
   const username = req.session.user!.username;
@@ -207,6 +260,371 @@ app.post("/api/orgs/:id/room-ideas", requireAuth, async (req, res) => {
     return;
   }
   res.status(201).json(result.idea);
+});
+
+app.get("/api/orgs/:id/vbs-default", requireAuth, async (req, res) => {
+  const result = await getOrgVbsDefault(String(req.params.id), req.session.user!.username);
+  if ("error" in result) {
+    res.status(403).json(result);
+    return;
+  }
+  res.json(result);
+});
+
+app.put("/api/orgs/:id/vbs-default", requireAuth, async (req, res) => {
+  const body = req.body as Record<string, unknown>;
+  const num = (value: unknown) => (typeof value === "number" && Number.isFinite(value) ? value : Number(value));
+  const text = (value: unknown) => (typeof value === "string" ? value : "");
+  const result = await setOrgVbsCurriculumDefault(String(req.params.id), req.session.user!.username, {
+    year: num(body.year),
+    publisherId: text(body.publisherId),
+    programTitle: text(body.programTitle),
+  });
+  if ("error" in result) {
+    const message = result.error ?? "Could not save default";
+    res.status(message.includes("write") ? 403 : 400).json(result);
+    return;
+  }
+  res.json(result);
+});
+
+app.get("/api/orgs/:id/vbs-plan", requireAuth, async (req, res) => {
+  const result = await getVbsWorkspace(String(req.params.id), req.session.user!.username);
+  if ("error" in result) {
+    res.status(403).json(result);
+    return;
+  }
+  res.json(result);
+});
+
+app.put("/api/orgs/:id/vbs-plan", requireAuth, async (req, res) => {
+  const body = req.body as Record<string, unknown>;
+  const num = (value: unknown) => (typeof value === "number" && Number.isFinite(value) ? value : Number(value));
+  const text = (value: unknown) => (typeof value === "string" ? value : "");
+  const result = await upsertVbsPlan(String(req.params.id), req.session.user!.username, {
+    year: num(body.year),
+    title: text(body.title),
+    publisherId: text(body.publisherId),
+    programTitle: text(body.programTitle),
+    location: text(body.location),
+    startDate: text(body.startDate),
+    endDate: text(body.endDate),
+    dailyStart: text(body.dailyStart),
+    dailyEnd: text(body.dailyEnd),
+    expectedKids: num(body.expectedKids),
+    coordinatorNotes: text(body.coordinatorNotes),
+    budgetAmount: num(body.budgetAmount),
+    expensesAmount: num(body.expensesAmount),
+    seedTemplate: body.seedTemplate !== false,
+    seedSchedule: body.seedSchedule === true,
+  });
+  if ("error" in result) {
+    const message = result.error ?? "Could not save plan";
+    res.status(message.includes("write") ? 403 : 400).json(result);
+    return;
+  }
+  res.json(result);
+});
+
+app.patch("/api/orgs/:id/vbs-plan/worksheet", requireAuth, async (req, res) => {
+  const body = req.body as Record<string, unknown>;
+  const worksheetData =
+    body.worksheetData && typeof body.worksheetData === "object" ? (body.worksheetData as Record<string, unknown>) : {};
+  const result = await saveVbsWorksheet(String(req.params.id), req.session.user!.username, worksheetData);
+  if ("error" in result) {
+    res.status(403).json(result);
+    return;
+  }
+  res.json(result);
+});
+
+app.post("/api/orgs/:id/vbs-plan/tasks", requireAuth, async (req, res) => {
+  const body = req.body as Record<string, unknown>;
+  const num = (value: unknown) => (typeof value === "number" && Number.isFinite(value) ? value : Number(value));
+  const text = (value: unknown) => (typeof value === "string" ? value : "");
+  const result = await saveVbsTask(String(req.params.id), req.session.user!.username, {
+    id: text(body.id) || undefined,
+    title: text(body.title),
+    description: text(body.description),
+    notes: text(body.notes),
+    category: text(body.category),
+    status: text(body.status),
+    dueDate: text(body.dueDate),
+    assignedUsername: text(body.assignedUsername),
+    assignedTeamId: text(body.assignedTeamId),
+    expenseAmount: num(body.expenseAmount),
+    reimbursementStatus: text(body.reimbursementStatus),
+    attachments: parseMedia(body.attachments, 10),
+    notify: body.notify === true,
+  });
+  if ("error" in result) {
+    const message = result.error ?? "Could not save task";
+    res.status(message.includes("cannot") || message.includes("write") ? 403 : 400).json(result);
+    return;
+  }
+  res.json(result);
+});
+
+app.delete("/api/orgs/:id/vbs-plan/tasks/:taskId", requireAuth, async (req, res) => {
+  const result = await deleteVbsTask(String(req.params.id), req.session.user!.username, String(req.params.taskId));
+  if ("error" in result) {
+    res.status(403).json(result);
+    return;
+  }
+  res.json(result);
+});
+
+app.post("/api/orgs/:id/vbs-plan/stations", requireAuth, async (req, res) => {
+  const body = req.body as Record<string, unknown>;
+  const text = (value: unknown) => (typeof value === "string" ? value : "");
+  const result = await saveVbsStation(String(req.params.id), req.session.user!.username, {
+    id: text(body.id) || undefined,
+    name: text(body.name),
+    description: text(body.description),
+    defaultTeamId: text(body.defaultTeamId),
+  });
+  if ("error" in result) {
+    res.status(403).json(result);
+    return;
+  }
+  res.json(result);
+});
+
+app.delete("/api/orgs/:id/vbs-plan/stations/:stationId", requireAuth, async (req, res) => {
+  const result = await deleteVbsStation(
+    String(req.params.id),
+    req.session.user!.username,
+    String(req.params.stationId),
+  );
+  if ("error" in result) {
+    res.status(403).json(result);
+    return;
+  }
+  res.json(result);
+});
+
+app.post("/api/orgs/:id/vbs-plan/schedule", requireAuth, async (req, res) => {
+  const body = req.body as Record<string, unknown>;
+  const text = (value: unknown) => (typeof value === "string" ? value : "");
+  const result = await saveVbsScheduleSlot(String(req.params.id), req.session.user!.username, {
+    id: text(body.id) || undefined,
+    dayDate: text(body.dayDate),
+    startsAt: text(body.startsAt),
+    endsAt: text(body.endsAt),
+    label: text(body.label),
+    stationId: text(body.stationId),
+    teamId: text(body.teamId),
+    notes: text(body.notes),
+  });
+  if ("error" in result) {
+    res.status(403).json(result);
+    return;
+  }
+  res.json(result);
+});
+
+app.delete("/api/orgs/:id/vbs-plan/schedule/:slotId", requireAuth, async (req, res) => {
+  const result = await deleteVbsScheduleSlot(
+    String(req.params.id),
+    req.session.user!.username,
+    String(req.params.slotId),
+  );
+  if ("error" in result) {
+    res.status(403).json(result);
+    return;
+  }
+  res.json(result);
+});
+
+app.post("/api/orgs/:id/vbs-plan/schedule/generate", requireAuth, async (req, res) => {
+  const body = req.body as Record<string, unknown>;
+  const replace = body.replace === true;
+  const result = await generateVbsDailySchedule(String(req.params.id), req.session.user!.username, replace);
+  if ("error" in result) {
+    res.status(400).json(result);
+    return;
+  }
+  res.json(result);
+});
+
+app.post("/api/orgs/:id/vbs-plan/schedule-activities", requireAuth, async (req, res) => {
+  const body = req.body as Record<string, unknown>;
+  const label = typeof body.label === "string" ? body.label : "";
+  const result = await addScheduleActivityLabel(String(req.params.id), req.session.user!.username, label);
+  if ("error" in result) {
+    res.status(403).json(result);
+    return;
+  }
+  res.json(result);
+});
+
+app.delete("/api/orgs/:id/vbs-plan/schedule-activities/:label", requireAuth, async (req, res) => {
+  const result = await removeScheduleActivityLabel(
+    String(req.params.id),
+    req.session.user!.username,
+    String(req.params.label),
+  );
+  if ("error" in result) {
+    res.status(403).json(result);
+    return;
+  }
+  res.json(result);
+});
+
+app.post("/api/orgs/:id/vbs-plan/checklist", requireAuth, async (req, res) => {
+  const body = req.body as Record<string, unknown>;
+  const text = (value: unknown) => (typeof value === "string" ? value : "");
+  const result = await saveVbsChecklistItem(String(req.params.id), req.session.user!.username, {
+    id: text(body.id) || undefined,
+    category: text(body.category),
+    label: text(body.label),
+    done: typeof body.done === "boolean" ? body.done : undefined,
+    assignedTeamId: text(body.assignedTeamId),
+    dueDate: text(body.dueDate),
+    notes: text(body.notes),
+  });
+  if ("error" in result) {
+    res.status(403).json(result);
+    return;
+  }
+  res.json(result);
+});
+
+app.delete("/api/orgs/:id/vbs-plan/checklist/:itemId", requireAuth, async (req, res) => {
+  const result = await deleteVbsChecklistItem(
+    String(req.params.id),
+    req.session.user!.username,
+    String(req.params.itemId),
+  );
+  if ("error" in result) {
+    res.status(403).json(result);
+    return;
+  }
+  res.json(result);
+});
+
+app.post("/api/orgs/:id/vbs-plan/board/posts", requireAuth, async (req, res) => {
+  const body = req.body as Record<string, unknown>;
+  const text = (value: unknown) => (typeof value === "string" ? value : "");
+  const result = await createBoardPost(String(req.params.id), req.session.user!.username, {
+    title: text(body.title),
+    body: text(body.body),
+    teamId: text(body.teamId),
+  });
+  if ("error" in result) {
+    res.status(403).json(result);
+    return;
+  }
+  res.status(201).json(result);
+});
+
+app.post("/api/orgs/:id/vbs-plan/board/posts/:postId/replies", requireAuth, async (req, res) => {
+  const body = req.body as Record<string, unknown>;
+  const text = typeof body.body === "string" ? body.body : "";
+  const result = await createBoardReply(
+    String(req.params.id),
+    req.session.user!.username,
+    String(req.params.postId),
+    text,
+  );
+  if ("error" in result) {
+    res.status(403).json(result);
+    return;
+  }
+  res.status(201).json(result);
+});
+
+app.get("/api/profile/notifications", requireAuth, async (req, res) => {
+  const result = await getNotificationProfile(req.session.user!.username);
+  res.json(result);
+});
+
+app.patch("/api/orgs/:id/profile/notifications", requireAuth, async (req, res) => {
+  const body = req.body as Record<string, unknown>;
+  const result = await updateOrgNotificationProfile(String(req.params.id), req.session.user!.username, {
+    notifyEmail: typeof body.notifyEmail === "boolean" ? body.notifyEmail : undefined,
+    notifySms: typeof body.notifySms === "boolean" ? body.notifySms : undefined,
+    notifyBoardInApp: typeof body.notifyBoardInApp === "boolean" ? body.notifyBoardInApp : undefined,
+    notifyBoardEmail: typeof body.notifyBoardEmail === "boolean" ? body.notifyBoardEmail : undefined,
+    notifyBoardSms: typeof body.notifyBoardSms === "boolean" ? body.notifyBoardSms : undefined,
+    boardSubscribeOrg: typeof body.boardSubscribeOrg === "boolean" ? body.boardSubscribeOrg : undefined,
+    subscribedTeamIds: Array.isArray(body.subscribedTeamIds)
+      ? body.subscribedTeamIds.filter((id): id is string => typeof id === "string")
+      : undefined,
+    mutedUsernames: Array.isArray(body.mutedUsernames)
+      ? body.mutedUsernames.filter((id): id is string => typeof id === "string")
+      : undefined,
+  });
+  if ("error" in result) {
+    res.status(403).json(result);
+    return;
+  }
+  res.json(result);
+});
+
+app.patch("/api/orgs/:id/vbs-plan/notification-prefs", requireAuth, async (req, res) => {
+  const body = req.body as Record<string, unknown>;
+  const result = await updateVbsNotificationPrefs(String(req.params.id), req.session.user!.username, {
+    notifyEmail: body.notifyEmail !== false,
+    notifySms: body.notifySms === true,
+  });
+  if ("error" in result) {
+    res.status(403).json(result);
+    return;
+  }
+  res.json(result);
+});
+
+app.patch("/api/orgs/:id/vbs-plan/calendar-view", requireAuth, async (req, res) => {
+  const body = req.body as { view?: unknown };
+  const view = body.view;
+  if (view !== "day" && view !== "week" && view !== "month") {
+    res.status(400).json({ error: "view must be day, week, or month" });
+    return;
+  }
+  const result = await updateCalendarViewPref(String(req.params.id), req.session.user!.username, view);
+  if ("error" in result) {
+    res.status(403).json(result);
+    return;
+  }
+  res.json(result);
+});
+
+app.put("/api/orgs/:id/vbs-plan/calendar-reminders", requireAuth, async (req, res) => {
+  const body = req.body as {
+    itemType?: unknown;
+    itemId?: unknown;
+    reminders?: unknown;
+  };
+  const itemType = body.itemType;
+  if (itemType !== "task" && itemType !== "schedule" && itemType !== "plan_start" && itemType !== "plan_end") {
+    res.status(400).json({ error: "Invalid itemType" });
+    return;
+  }
+  if (typeof body.itemId !== "string" || !body.itemId) {
+    res.status(400).json({ error: "itemId required" });
+    return;
+  }
+  const reminders = Array.isArray(body.reminders)
+    ? body.reminders
+        .filter((item): item is Record<string, unknown> => item && typeof item === "object")
+        .map((item) => ({
+          minutesBefore: Number(item.minutesBefore),
+          notifyEmail: item.notifyEmail !== false,
+          notifySms: item.notifySms === true,
+        }))
+        .filter((item) => Number.isFinite(item.minutesBefore))
+    : [];
+  const result = await saveCalendarReminders(String(req.params.id), req.session.user!.username, {
+    itemType,
+    itemId: body.itemId,
+    reminders,
+  });
+  if ("error" in result) {
+    res.status(403).json(result);
+    return;
+  }
+  res.json(result);
 });
 
 app.post("/api/orgs/:id/room-ideas/:ideaId/share", requireAuth, async (req, res) => {
@@ -384,7 +802,7 @@ app.post("/api/shares", requireAuth, attachTenant, requireWrite, async (req, res
           size: Number(file.size) || 0,
           dataUrl: typeof file.dataUrl === "string" ? file.dataUrl : "",
         }))
-        .filter((file) => file.name && file.size <= 1_000_000 && file.dataUrl.length <= 1_500_000)
+        .filter((file) => isAcceptableAttachment(file))
         .slice(0, 4)
     : [];
 
@@ -431,7 +849,7 @@ function parseMedia(value: unknown, limit: number) {
       size: Number(file.size) || 0,
       dataUrl: typeof file.dataUrl === "string" ? file.dataUrl : "",
     }))
-    .filter((file) => file.name && file.size <= 1_000_000 && file.dataUrl.length <= 1_500_000)
+    .filter((file) => isAcceptableAttachment(file))
     .slice(0, limit);
 }
 
@@ -509,13 +927,17 @@ app.get("/api/teams", requireAuth, attachTenant, async (req, res) => {
     res.json({ teams: [] });
     return;
   }
-  res.json({ teams: await listTeams(req.tenantId) });
+  const username = req.session.user!.username;
+  const platformAdmin = await isPlatformAdmin(username);
+  res.json({ teams: await listTeamsForViewer(req.tenantId, username, platformAdmin) });
 });
 
 app.get("/api/users", requireAuth, attachTenant, async (req, res) => {
   const query = typeof req.query.q === "string" ? req.query.q : "";
   const scope = req.query.scope === "all" ? null : req.tenantId;
-  res.json(await searchUsers(query, req.session.user!.username, scope));
+  const includeSelf = req.query.includeSelf === "1";
+  const exclude = includeSelf ? undefined : req.session.user!.username;
+  res.json(await searchUsers(query, exclude, scope));
 });
 
 app.get("/api/messages/unread-count", requireAuth, attachTenant, async (req, res) => {
@@ -631,6 +1053,10 @@ async function start() {
   app.listen(port, () => {
     console.log(`VBS API listening on http://localhost:${port}`);
   });
+  void processCalendarReminders().catch(() => undefined);
+  setInterval(() => {
+    void processCalendarReminders().catch(() => undefined);
+  }, 60_000);
 }
 
 start().catch((error) => {

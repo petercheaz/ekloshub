@@ -191,8 +191,8 @@ export async function acceptInvite(
     }
     username = email;
     await db().query(
-      `INSERT INTO users (username, password_hash, verified, platform_admin, email, first_name, last_name, phone)
-       VALUES ($1,$2,FALSE,FALSE,$3,$4,$5,$6)`,
+      `INSERT INTO users (username, password_hash, verified, platform_admin, email, first_name, last_name, phone, vbs_default_all_filters)
+       VALUES ($1,$2,FALSE,FALSE,$3,$4,$5,$6,TRUE)`,
       [username, bcrypt.hashSync(password, 10), email, firstName, lastName, phone],
     );
   } else {

@@ -1,4 +1,5 @@
 import { db } from "./db/pool.js";
+import { deliverOrgNotifications } from "./notify-delivery.js";
 import { getMembership } from "./orgs.js";
 import { getTeam } from "./teams.js";
 import { userExists } from "./users.js";
@@ -225,6 +226,17 @@ export async function sendMessage(
       teamName,
     ],
   );
+  if (tenantId) {
+    const preview = text.length > 140 ? `${text.slice(0, 137)}…` : text;
+    await deliverOrgNotifications(
+      tenantId,
+      recipients,
+      teamName ? `Team message: ${teamName}` : `Direct message from ${from}`,
+      preview,
+      `/org/${tenantId}/messages`,
+      { inApp: true, email: true, sms: false },
+    );
+  }
   return { message: summarize(message, from) };
 }
 
