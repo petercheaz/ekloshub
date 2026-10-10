@@ -5,12 +5,7 @@ import { fileURLToPath } from "node:url";
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 export function loadRoomIdeasPrompt() {
-  const candidates = [
-    path.join(root, "llm", "room_ideas.txt"),
-    path.join(root, "llm", "room_ideas.md"),
-    path.join(root, "room_ideas.txt"),
-    path.join(root, "room_ideas.md"),
-  ];
+  const candidates = [path.join(root, "llm", "room_ideas.txt"), path.join(root, "llm", "room_ideas.md")];
   for (const file of candidates) {
     try {
       return readFileSync(file, "utf8");

@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { useAuth } from "./auth";
+import { splitListTokens } from "./listInput";
 import { pickExactOrgUser, searchOrgUsers } from "./org-user-search";
 import type { UserSuggestion } from "./types";
 
@@ -13,7 +14,52 @@ type Props = {
   id?: string;
   showAssignMe?: boolean;
   compact?: boolean;
+  /** When set, only people listed in this roster (comma/semicolon list) can be chosen. */
+  memberListDraft?: string;
 };
+
+function hitMatchesMemberDraft(hit: UserSuggestion, tokens: string[]) {
+  for (const token of tokens) {
+    const lower = token.toLowerCase();
+    if (hit.username.toLowerCase() === lower) {
+      return true;
+    }
+    if (hit.email && hit.email.toLowerCase() === lower) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function filterToMemberDraft(hits: UserSuggestion[], memberListDraft?: string) {
+  if (memberListDraft === undefined) {
+    return hits;
+  }
+  const tokens = splitListTokens(memberListDraft);
+  if (tokens.length === 0) {
+    return [];
+  }
+  return hits.filter((hit) => hitMatchesMemberDraft(hit, tokens));
+}
+
+export function usernameAllowedInMemberDraft(
+  username: string,
+  email: string | undefined,
+  memberListDraft: string,
+) {
+  const tokens = splitListTokens(memberListDraft);
+  const lower = username.toLowerCase();
+  for (const token of tokens) {
+    const t = token.toLowerCase();
+    if (t === lower) {
+      return true;
+    }
+    if (email && t === email.toLowerCase()) {
+      return true;
+    }
+  }
+  return false;
+}
 
 function pickSingleHit(hits: UserSuggestion[]) {
   if (hits.length === 1) {
@@ -45,6 +91,7 @@ export function OrgUserTypeahead({
   id,
   showAssignMe = true,
   compact = false,
+  memberListDraft,
 }: Props) {
   const { user } = useAuth();
   const listId = useId();
@@ -70,13 +117,17 @@ export function OrgUserTypeahead({
     }
     const timer = window.setTimeout(() => {
       void searchOrgUsers(trimmed, { includeSelf: true })
-        .then(setSuggestions)
+        .then((hits) => setSuggestions(filterToMemberDraft(hits, memberListDraft).slice(0, 12)))
         .catch(() => setSuggestions([]));
     }, 120);
     return () => window.clearTimeout(timer);
-  }, [query, orgId, disabled]);
+  }, [query, orgId, disabled, memberListDraft]);
 
-  function commit(username: string) {
+  function commit(username: string, email?: string) {
+    if (memberListDraft !== undefined && username && !usernameAllowedInMemberDraft(username, email, memberListDraft)) {
+      setQuery(value);
+      return;
+    }
     setQuery(username);
     onChange(username);
     onCommit?.(username);
@@ -96,9 +147,14 @@ export function OrgUserTypeahead({
       return;
     }
     const exact = pickExactOrgUser(suggestions, needle);
-    const fromList = exact?.username ?? pickSingleHit(suggestions);
-    if (fromList) {
-      commit(fromList);
+    if (exact) {
+      commit(exact.username, exact.email);
+      return;
+    }
+    const singleUsername = pickSingleHit(suggestions);
+    if (singleUsername) {
+      const hit = suggestions.find((h) => h.username === singleUsername);
+      commit(singleUsername, hit?.email);
       return;
     }
     if (user) {
@@ -114,7 +170,10 @@ export function OrgUserTypeahead({
     resolving.current = true;
     try {
       const username = await resolveOrgAssignee(needle);
-      if (username) {
+      if (
+        username &&
+        (memberListDraft === undefined || usernameAllowedInMemberDraft(username, undefined, memberListDraft))
+      ) {
         commit(username);
         return;
       }
@@ -180,7 +239,11 @@ export function OrgUserTypeahead({
           onKeyDown={handleKeyDown}
         />
         {showAssignMe && user && !disabled ? (
-          <button type="button" className="ghost org-user-typeahead-me" onClick={() => commit(user.username)}>
+          <button
+            type="button"
+            className="ghost org-user-typeahead-me"
+            onClick={() => commit(user.username)}
+          >
             Me
           </button>
         ) : null}
@@ -203,7 +266,7 @@ export function OrgUserTypeahead({
               <button
                 type="button"
                 onMouseDown={(e) => e.preventDefault()}
-                onClick={() => commit(hit.username)}
+                onClick={() => commit(hit.username, hit.email)}
               >
                 {hit.username}
                 {hit.email && hit.email.toLowerCase() !== hit.username.toLowerCase() ? (

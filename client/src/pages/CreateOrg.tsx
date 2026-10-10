@@ -1,6 +1,7 @@
 import { FormEvent, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api";
+import { OrgWorkspacePage } from "../OrgWorkspacePage";
 import { useOrgs } from "../orgs";
 
 export default function CreateOrgPage() {
@@ -28,13 +29,12 @@ export default function CreateOrgPage() {
   }
 
   return (
-    <div className="reviews">
-      <header className="page-head">
-        <p className="eyebrow">New tenant</p>
-        <h1>Create Organization</h1>
-        <p className="tagline">You will be the org admin. Members only see this organization’s reviews, shares, setups, and messages.</p>
-      </header>
-      <form className="review-form share-form" onSubmit={(event) => void onSubmit(event)}>
+    <OrgWorkspacePage
+      eyebrow="New tenant"
+      title="Create Organization"
+      tagline="You will be the org admin. Members only see this organization's reviews, shares, setups, and messages."
+    >
+      <form className="review-form share-form vbs-form-panel" onSubmit={(event) => void onSubmit(event)}>
         <label htmlFor="org-name">Org/Church Name</label>
         <input id="org-name" value={name} onChange={(event) => setName(event.target.value)} required />
         <label htmlFor="org-address">Address</label>
@@ -42,10 +42,12 @@ export default function CreateOrgPage() {
         <label htmlFor="org-contact">Contact</label>
         <input id="org-contact" value={contact} onChange={(event) => setContact(event.target.value)} required />
         {error ? <p className="error">{error}</p> : null}
-        <button type="submit" disabled={submitting}>
-          {submitting ? "Creating…" : "Create organization"}
-        </button>
+        <div className="vbs-form-actions">
+          <button type="submit" className="vbs-plan-save" disabled={submitting}>
+            {submitting ? "Creating…" : "Create organization"}
+          </button>
+        </div>
       </form>
-    </div>
+    </OrgWorkspacePage>
   );
 }

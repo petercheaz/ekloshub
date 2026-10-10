@@ -1,7 +1,8 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
 import { useOrgVbs } from "../org-vbs";
-import { OrgBanner, useOrgs } from "../orgs";
+import { OrgWorkspacePage } from "../OrgWorkspacePage";
+import { useOrgs } from "../orgs";
 import { VbsFilterPanel } from "../VbsFilterPanel";
 import { vbsProgramsMatching } from "../vbs-cascade";
 import { applyVbsFilterDefault } from "../vbs-filters";
@@ -242,21 +243,20 @@ export default function SharePage() {
   }
 
   return (
-    <div className="reviews">
-      <header className="page-head">
-        <p className="eyebrow">Give leftover kits a second church</p>
-        <h1>Share VBS Resources</h1>
-        <OrgBanner />
-        <p className="tagline">List items you are willing to gift. Filter by year, publisher, or VBS name.</p>
-        {canWrite ? (
-          <button type="button" className="ghost" onClick={() => setShowForm(true)}>
+    <OrgWorkspacePage
+      eyebrow="Give leftover kits a second church"
+      title="Share VBS Resources"
+      tagline="List items you are willing to gift. Expand a listing for details. Filter by year, publisher, or VBS name."
+      actions={
+        canWrite ? (
+          <button type="button" className="vbs-plan-save" onClick={() => setShowForm(true)}>
             Add a share item
           </button>
-        ) : null}
-      </header>
-
+        ) : null
+      }
+    >
       {showForm ? (
-        <form className="review-form share-form" onSubmit={(event) => void onSubmit(event)}>
+        <form className="review-form share-form vbs-form-panel" onSubmit={(event) => void onSubmit(event)}>
           <h3>New share item</h3>
           <label htmlFor="share-date">Available (mm/dd/yyyy)</label>
           <div className="date-input">
@@ -357,10 +357,10 @@ export default function SharePage() {
             </ul>
           ) : null}
           <div className="form-actions">
-            <button type="submit" disabled={submitting}>
-              {submitting ? "Saving…" : "Save"}
+            <button type="submit" className="vbs-plan-save" disabled={submitting}>
+              {submitting ? "Saving…" : "Save listing"}
             </button>
-            <button type="button" className="ghost" onClick={closeForm}>
+            <button type="button" className="vbs-plan-save vbs-plan-save-danger" onClick={closeForm}>
               Cancel
             </button>
           </div>
@@ -473,6 +473,6 @@ export default function SharePage() {
           ))}
         </div>
       )}
-    </div>
+    </OrgWorkspacePage>
   );
 }

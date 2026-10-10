@@ -10,6 +10,8 @@ import MessagesPage from "./pages/Messages";
 import OrgHomePage from "./pages/OrgHome";
 import ReviewsPage from "./pages/Reviews";
 import RoomIdeasPage from "./pages/RoomIdeas";
+import PhotoshoppeLitePage from "./pages/PhotoshoppeLite";
+import OrgContactPage from "./pages/OrgContact";
 import ProfilePage from "./pages/Profile";
 import VbsPlanPage from "./pages/VbsPlan";
 import SharePage from "./pages/Share";
@@ -31,9 +33,11 @@ export default function App() {
         <Route path="/org/new" element={<CreateOrgPage />} />
         <Route path="/org/:orgId" element={<Navigate to="room-design" replace />} />
         <Route path="/org/:orgId/room-ideas" element={<Navigate to="room-design" replace />} />
+        <Route path="/org/:orgId/contact" element={<OrgContactPage />} />
         <Route path="/org/:orgId/manage" element={<OrgHomePage />} />
         <Route path="/org/:orgId/teams" element={<ManageTeamsPage />} />
         <Route path="/org/:orgId/room-design" element={<RoomIdeasPage />} />
+        <Route path="/org/:orgId/photoshoppe-lite" element={<PhotoshoppeLitePage />} />
         <Route path="/org/:orgId/vbs-plan" element={<VbsPlanPage />} />
         <Route path="/org/:orgId/reviews" element={<ReviewsPage />} />
         <Route path="/org/:orgId/share" element={<SharePage />} />

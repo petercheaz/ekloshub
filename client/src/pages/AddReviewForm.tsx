@@ -49,14 +49,14 @@ export default function AddReviewForm({
 
   if (!open) {
     return (
-      <button type="button" className="ghost" onClick={() => setOpen(true)}>
+      <button type="button" className="vbs-plan-save" onClick={() => setOpen(true)}>
         Add your review
       </button>
     );
   }
 
   return (
-    <form className="review-form" onSubmit={onSubmit}>
+    <form className="review-form vbs-form-panel" onSubmit={onSubmit}>
       <h3>Add your review</h3>
       <label htmlFor={`${programId}-say`}>What people say / your take</label>
       <textarea
@@ -137,10 +137,10 @@ export default function AddReviewForm({
       />
       {error ? <p className="form-error">{error}</p> : null}
       <div className="form-actions">
-        <button type="submit" disabled={submitting}>
+        <button type="submit" className="vbs-plan-save" disabled={submitting}>
           {submitting ? "Saving…" : "Publish review"}
         </button>
-        <button type="button" className="ghost" onClick={() => setOpen(false)}>
+        <button type="button" className="vbs-plan-save vbs-plan-save-danger" onClick={() => setOpen(false)}>
           Cancel
         </button>
       </div>

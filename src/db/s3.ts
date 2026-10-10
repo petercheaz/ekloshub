@@ -7,7 +7,7 @@ import {
 } from "@aws-sdk/client-s3";
 import { s3 } from "./config.js";
 
-const client = new S3Client({
+export const s3Client = new S3Client({
   region: s3.region,
   endpoint: s3.endpoint,
   forcePathStyle: true,
@@ -26,14 +26,14 @@ export function objectUrl(key: string) {
 
 export async function ensureBucket() {
   try {
-    await client.send(new HeadBucketCommand({ Bucket: s3.bucket }));
+    await s3Client.send(new HeadBucketCommand({ Bucket: s3.bucket }));
   } catch {
-    await client.send(new CreateBucketCommand({ Bucket: s3.bucket }));
+    await s3Client.send(new CreateBucketCommand({ Bucket: s3.bucket }));
   }
 }
 
 export async function getObject(key: string) {
-  return client.send(new GetObjectCommand({ Bucket: s3.bucket, Key: key }));
+  return s3Client.send(new GetObjectCommand({ Bucket: s3.bucket, Key: key }));
 }
 
 export async function waitForS3(tries = 40) {
@@ -51,7 +51,7 @@ export async function waitForS3(tries = 40) {
 }
 
 export async function putObject(key: string, body: Buffer, contentType: string) {
-  await client.send(
+  await s3Client.send(
     new PutObjectCommand({
       Bucket: s3.bucket,
       Key: key,

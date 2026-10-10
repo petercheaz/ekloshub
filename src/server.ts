@@ -28,6 +28,7 @@ import {
   getOrganization,
   listOrganizations,
   removeOrganizationMember,
+  updateOrganizationMember,
 } from "./orgs.js";
 import { acceptInvite, createInvites, getInvite } from "./invites.js";
 import { createTeam, listTeamsForViewer, updateTeam } from "./teams.js";
@@ -38,6 +39,12 @@ import {
   saveRoomIdea,
   shareRoomIdea,
 } from "./room-ideas.js";
+import {
+  browsePhotoshoppe,
+  createPhotoshoppeFolder,
+  loadPhotoshoppeDocument,
+  savePhotoshoppeDocument,
+} from "./photoshoppe-files.js";
 import {
   listNotifications,
   markNotificationRead,
@@ -180,6 +187,66 @@ app.post("/api/orgs/:id/members", requireAuth, async (req, res) => {
   res.json(result);
 });
 
+app.patch("/api/orgs/:id/members/:username", requireAuth, async (req, res) => {
+  const body = req.body as Record<string, unknown>;
+  const text = (value: unknown) => (typeof value === "string" ? value : "");
+  const result = await updateOrganizationMember(
+    String(req.params.id),
+    req.session.user!.username,
+    String(req.params.username),
+    {
+      role: text(body.role),
+      firstName: text(body.firstName),
+      lastName: text(body.lastName),
+      phone: text(body.phone),
+      email: text(body.email),
+      verified: body.verified === true,
+      newPassword: text(body.newPassword),
+      resetPasswordToDefault: body.resetPasswordToDefault === true,
+      teamAdminTeamIds: Array.isArray(body.teamAdminTeamIds)
+        ? body.teamAdminTeamIds.filter((id): id is string => typeof id === "string")
+        : [],
+    },
+  );
+  if ("error" in result) {
+    const message = result.error ?? "Could not update member";
+    res.status(message.includes("admin") ? 403 : 400).json(result);
+    return;
+  }
+  res.json(result);
+});
+
+app.get("/api/orgs/:id/contact", requireAuth, async (req, res) => {
+  const { getContactOptions } = await import("./org-contact.js");
+  const result = await getContactOptions(String(req.params.id), req.session.user!.username);
+  if ("error" in result) {
+    res.status(403).json(result);
+    return;
+  }
+  res.json(result);
+});
+
+app.post("/api/orgs/:id/contact", requireAuth, async (req, res) => {
+  const body = req.body as {
+    subject?: unknown;
+    message?: unknown;
+    scope?: unknown;
+    teamIds?: unknown;
+  };
+  const { sendOrgContact } = await import("./org-contact.js");
+  const result = await sendOrgContact(String(req.params.id), req.session.user!.username, {
+    subject: typeof body.subject === "string" ? body.subject : "",
+    message: typeof body.message === "string" ? body.message : "",
+    scope: body.scope === "teams" ? "teams" : "organization",
+    teamIds: Array.isArray(body.teamIds) ? body.teamIds.filter((id): id is string => typeof id === "string") : [],
+  });
+  if ("error" in result) {
+    res.status(400).json(result);
+    return;
+  }
+  res.json(result);
+});
+
 app.get("/api/orgs/:id/teams", requireAuth, async (req, res) => {
   const username = req.session.user!.username;
   const org = await getOrganization(String(req.params.id), username, await isPlatformAdmin(username));
@@ -191,10 +258,11 @@ app.get("/api/orgs/:id/teams", requireAuth, async (req, res) => {
 });
 
 app.post("/api/orgs/:id/teams", requireAuth, async (req, res) => {
-  const body = req.body as { name?: unknown; members?: unknown };
+  const body = req.body as { name?: unknown; members?: unknown; teamAdminUsername?: unknown };
   const result = await createTeam(String(req.params.id), req.session.user!.username, {
     name: typeof body.name === "string" ? body.name : "",
     members: typeof body.members === "string" ? body.members : "",
+    teamAdminUsername: typeof body.teamAdminUsername === "string" ? body.teamAdminUsername : undefined,
   });
   if ("error" in result) {
     const message = result.error ?? "Could not create team";
@@ -205,10 +273,11 @@ app.post("/api/orgs/:id/teams", requireAuth, async (req, res) => {
 });
 
 app.patch("/api/orgs/:id/teams/:teamId", requireAuth, async (req, res) => {
-  const body = req.body as { name?: unknown; members?: unknown };
+  const body = req.body as { name?: unknown; members?: unknown; teamAdminUsername?: unknown };
   const result = await updateTeam(String(req.params.id), String(req.params.teamId), req.session.user!.username, {
     name: typeof body.name === "string" ? body.name : "",
     members: typeof body.members === "string" ? body.members : "",
+    teamAdminUsername: typeof body.teamAdminUsername === "string" ? body.teamAdminUsername : "",
   });
   if ("error" in result) {
     const message = result.error ?? "Could not update team";
@@ -239,6 +308,76 @@ app.post("/api/orgs/:id/room-ideas/generate", requireAuth, async (req, res) => {
   });
   if (!("images" in result)) {
     res.status(result.error.includes("member") ? 403 : 400).json(result);
+    return;
+  }
+  res.json(result);
+});
+
+app.get("/api/orgs/:id/photoshoppe", requireAuth, async (req, res) => {
+  const folderId = typeof req.query.folderId === "string" && req.query.folderId.trim() ? req.query.folderId.trim() : null;
+  const result = await browsePhotoshoppe(String(req.params.id), req.session.user!.username, folderId);
+  if ("error" in result) {
+    res.status(result.error.includes("member") ? 403 : 404).json(result);
+    return;
+  }
+  res.json(result);
+});
+
+app.post("/api/orgs/:id/photoshoppe/folders", requireAuth, async (req, res) => {
+  const body = req.body as { parentId?: unknown; name?: unknown };
+  const parentId =
+    typeof body.parentId === "string" && body.parentId.trim() ? body.parentId.trim() : null;
+  const result = await createPhotoshoppeFolder(String(req.params.id), req.session.user!.username, {
+    parentId,
+    name: typeof body.name === "string" ? body.name : "",
+  });
+  if ("error" in result) {
+    const message = result.error ?? "Error";
+    res.status(message.includes("member") ? 403 : 400).json({ error: message });
+    return;
+  }
+  res.status(201).json(result);
+});
+
+app.post("/api/orgs/:id/photoshoppe/documents", requireAuth, async (req, res) => {
+  const body = req.body as {
+    parentId?: unknown;
+    name?: unknown;
+    documentId?: unknown;
+    snapshot?: unknown;
+    preview?: unknown;
+  };
+  const parentId =
+    typeof body.parentId === "string" && body.parentId.trim() ? body.parentId.trim() : null;
+  const preview = body.preview as { name?: string; type?: string; size?: number; dataUrl?: string };
+  const result = await savePhotoshoppeDocument(String(req.params.id), req.session.user!.username, {
+    parentId,
+    name: typeof body.name === "string" ? body.name : "",
+    documentId: typeof body.documentId === "string" ? body.documentId : undefined,
+    snapshot: body.snapshot as import("./photoshoppe-files.js").EditorSnapshot,
+    preview: {
+      name: typeof preview?.name === "string" ? preview.name : "preview.png",
+      type: typeof preview?.type === "string" ? preview.type : "image/png",
+      size: typeof preview?.size === "number" ? preview.size : 0,
+      dataUrl: typeof preview?.dataUrl === "string" ? preview.dataUrl : "",
+    },
+  });
+  if ("error" in result) {
+    const message = result.error ?? "Error";
+    res.status(message.includes("member") ? 403 : 400).json({ error: message });
+    return;
+  }
+  res.status(body.documentId ? 200 : 201).json(result);
+});
+
+app.get("/api/orgs/:id/photoshoppe/documents/:documentId", requireAuth, async (req, res) => {
+  const result = await loadPhotoshoppeDocument(
+    String(req.params.id),
+    req.session.user!.username,
+    String(req.params.documentId),
+  );
+  if ("error" in result) {
+    res.status(result.error.includes("member") ? 403 : 404).json(result);
     return;
   }
   res.json(result);
@@ -474,11 +613,16 @@ app.delete("/api/orgs/:id/vbs-plan/schedule-activities/:label", requireAuth, asy
 app.post("/api/orgs/:id/vbs-plan/checklist", requireAuth, async (req, res) => {
   const body = req.body as Record<string, unknown>;
   const text = (value: unknown) => (typeof value === "string" ? value : "");
+  const statusRaw = text(body.status);
   const result = await saveVbsChecklistItem(String(req.params.id), req.session.user!.username, {
     id: text(body.id) || undefined,
     category: text(body.category),
     label: text(body.label),
     done: typeof body.done === "boolean" ? body.done : undefined,
+    status:
+      statusRaw === "not_started" || statusRaw === "in_progress" || statusRaw === "done"
+        ? statusRaw
+        : undefined,
     assignedTeamId: text(body.assignedTeamId),
     dueDate: text(body.dueDate),
     notes: text(body.notes),

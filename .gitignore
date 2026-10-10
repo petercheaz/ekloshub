@@ -4,3 +4,9 @@ client/dist/
 .DS_Store
 *.log
 .env
+.env.*
+!.env.example
+*.pem
+*.p12
+credentials.json
+**/secrets.json

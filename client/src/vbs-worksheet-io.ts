@@ -1,6 +1,7 @@
 import ExcelJS from "exceljs";
 import type { VbsPlanWorkspace } from "./types";
 import type { ReadinessRow, TaskRegisterRow, WorksheetViewContext } from "./vbs-plan-worksheet-views";
+import { MILESTONE_STATUS_LABELS, normalizeMilestoneStatus } from "./vbs-milestone-status";
 import {
   buildReadinessRows,
   buildTaskRegisterRows,
@@ -111,7 +112,7 @@ function addReadinessSheet(
       row.label,
       row.assignedTeamId ? teamName(row.assignedTeamId) : "",
       row.dueDate,
-      row.done ? "Done" : "Open",
+      MILESTONE_STATUS_LABELS[normalizeMilestoneStatus(row)],
       notes,
     ]);
     for (const [index, column] of READINESS_COLUMNS.entries()) {

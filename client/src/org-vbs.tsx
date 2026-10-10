@@ -290,7 +290,12 @@ export function OrgVbsBar() {
     resetWorking,
   } = useOrgVbs();
 
-  if (location.pathname.endsWith("/vbs-plan")) {
+  const path = location.pathname;
+  if (
+    path.endsWith("/vbs-plan") ||
+    path.endsWith("/manage") ||
+    path.endsWith("/teams")
+  ) {
     return null;
   }
 

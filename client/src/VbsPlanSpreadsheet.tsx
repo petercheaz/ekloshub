@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties }
 import { api } from "./api";
 import { vbsTaskSavePayload } from "./vbs-task-payload";
 import { OrgUserTypeahead } from "./OrgUserTypeahead";
-import type { VbsPlanWorkspace, VbsTaskCategory, VbsTaskStatus } from "./types";
+import type { VbsMilestoneStatus, VbsPlanWorkspace, VbsTaskCategory, VbsTaskStatus } from "./types";
+import { MILESTONE_STATUS_LABELS, milestoneIsDone, normalizeMilestoneStatus } from "./vbs-milestone-status";
 import { applyImportedRows, exportPlanWorkbook, parseWorkbookFile } from "./vbs-worksheet-io";
 import type { SpreadsheetRow } from "./vbs-plan-spreadsheet";
 import {
@@ -1064,21 +1065,21 @@ function ReadinessRow({
   const [label, setLabel] = useState(row.label);
   const [assignedTeamId, setAssignedTeamId] = useState(row.assignedTeamId);
   const [dueDate, setDueDate] = useState(row.dueDate);
-  const [done, setDone] = useState(row.done);
+  const [status, setStatus] = useState(normalizeMilestoneStatus(row));
 
   useEffect(() => {
     setCategory(row.category);
     setLabel(row.label);
     setAssignedTeamId(row.assignedTeamId);
     setDueDate(row.dueDate);
-    setDone(row.done);
+    setStatus(normalizeMilestoneStatus(row));
   }, [row]);
 
   function notesValue() {
     return worksheetData.notes[row.rowKey] ?? item?.notes ?? "";
   }
 
-  function persist(patch: Partial<{ category: string; label: string; assignedTeamId: string; dueDate: string; done: boolean; notes: string }>) {
+  function persist(patch: Partial<{ category: string; label: string; assignedTeamId: string; dueDate: string; status: VbsMilestoneStatus; notes: string }>) {
     if (!canEdit || !item) {
       return;
     }
@@ -1090,7 +1091,7 @@ function ReadinessRow({
         assignedTeamId: patch.assignedTeamId ?? assignedTeamId,
         dueDate: patch.dueDate ?? dueDate,
         notes: patch.notes ?? item.notes,
-        done: patch.done ?? done,
+        status: patch.status ?? status,
       }),
     );
   }
@@ -1111,10 +1112,12 @@ function ReadinessRow({
         assignedTeamId: item.assignedTeamId,
         dueDate: item.dueDate,
         notes: nextNotes,
-        done: item.done,
+        status: normalizeMilestoneStatus(item),
       }),
     );
   }
+
+  const done = milestoneIsDone({ status, done: status === "done" });
 
   return (
     <tr className={done ? "vbs-spreadsheet-row readonly" : "vbs-spreadsheet-row"}>
@@ -1176,12 +1179,23 @@ function ReadinessRow({
         onClick={() => onSelectCell(viewId, row.rowKey, "status")}
       >
         {canEdit ? (
-          <label className="checkbox-line vbs-worksheet-done">
-            <input type="checkbox" checked={done} disabled={busy} onChange={(e) => { setDone(e.target.checked); persist({ done: e.target.checked }); }} />
-            {done ? "Done" : "Open"}
-          </label>
+          <select
+            value={status}
+            disabled={busy}
+            onChange={(e) => {
+              const next = e.target.value as VbsMilestoneStatus;
+              setStatus(next);
+              persist({ status: next });
+            }}
+          >
+            {(Object.keys(MILESTONE_STATUS_LABELS) as VbsMilestoneStatus[]).map((key) => (
+              <option key={key} value={key}>
+                {MILESTONE_STATUS_LABELS[key]}
+              </option>
+            ))}
+          </select>
         ) : (
-          done ? "Done" : "Open"
+          MILESTONE_STATUS_LABELS[normalizeMilestoneStatus(item ?? { status, done: false })]
         )}
       </td>
       <td

@@ -32,12 +32,20 @@ import type {
 } from "../types";
 import { vbsTaskSavePayload } from "../vbs-task-payload";
 import { enumeratePlanDays } from "../vbs-plan-worksheet-views";
+import {
+  MILESTONE_STATUS_LABELS,
+  milestoneIsDone,
+  milestoneTone,
+  normalizeMilestoneStatus,
+  type MilestoneTone,
+} from "../vbs-milestone-status";
+import type { VbsMilestoneStatus } from "../types";
 import { attachmentTooLargeMessage, MAX_ATTACHMENT_BYTES } from "@media-limits";
 
 type Tab = "overview" | "tasks" | "schedule" | "stations" | "checklist" | "board";
 
 const planSections: { id: Tab; label: string; hint: string }[] = [
-  { id: "overview", label: "Overview", hint: "Dates, budget, curriculum, workbooks & notes" },
+  { id: "overview", label: "Overview", hint: "Dates, budget, curriculum & notes" },
   { id: "checklist", label: "Milestones Checklist", hint: "Due-date timeline of launch milestones" },
   { id: "tasks", label: "Tasks", hint: "Assign and track work by team" },
   { id: "schedule", label: "VBS daily schedule", hint: "Day-by-day program from overview dates & hours" },
@@ -132,7 +140,7 @@ export default function VbsPlanPage() {
   const plan = data.plan;
   const teamName = (id: string) => data.teams.find((t) => t.id === id)?.name ?? "";
   const tasksOpen = data.tasks.filter((t) => t.status !== "done").length;
-  const checklistOpen = data.checklist.filter((c) => !c.done).length;
+  const checklistOpen = data.checklist.filter((c) => !milestoneIsDone(c)).length;
   const activeSection = planSections.find((section) => section.id === tab);
 
   const publisherName =
@@ -143,7 +151,7 @@ export default function VbsPlanPage() {
       : plan?.startDate ?? "";
 
   return (
-    <div className="reviews vbs-plan">
+    <div className="reviews vbs-plan vbs-workspace">
       <header className="vbs-plan-masthead" aria-label="VBS plan summary">
         <div className="vbs-plan-masthead-main">
           {org ? <p className="vbs-plan-masthead-org">{org.name}</p> : null}
@@ -215,38 +223,6 @@ export default function VbsPlanPage() {
 
       {error ? <p className="status">{error}</p> : null}
 
-      <section className="vbs-plan-sections" aria-labelledby="vbs-plan-sections-title">
-        <h2 id="vbs-plan-sections-title" className="vbs-plan-sections-title">
-          Planning sections
-        </h2>
-        <p className="vbs-plan-sections-lead muted">
-          These are the main areas of your plan. Pick a tab to view and edit — the team calendar below stays in
-          sync.
-        </p>
-        <nav className="vbs-tabs vbs-plan-tabs" aria-label="VBS planning sections">
-          {planSections.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              className={tab === item.id ? "active" : ""}
-              aria-current={tab === item.id ? "page" : undefined}
-              onClick={() => {
-                setTab(item.id);
-                setSearchParams(item.id === "overview" ? {} : { tab: item.id }, { replace: true });
-              }}
-            >
-              {item.label}
-            </button>
-          ))}
-        </nav>
-        {activeSection ? (
-          <p className="vbs-plan-tab-hint">
-            <strong>{activeSection.label}</strong>
-            <span className="muted"> — {activeSection.hint}</span>
-          </p>
-        ) : null}
-      </section>
-
       {user ? (
         <VbsPlanCalendar
           orgId={orgId}
@@ -258,7 +234,7 @@ export default function VbsPlanPage() {
         />
       ) : null}
 
-      {tab === "overview" && data.plan && user ? (
+      {user && data.plan ? (
         <VbsPlanSpreadsheet
           orgId={orgId}
           data={data}
@@ -270,24 +246,67 @@ export default function VbsPlanPage() {
         />
       ) : null}
 
-      {tab === "overview" ? (
-        <OverviewTab data={data} busy={busy} onSave={(input) => run(() => api.saveVbsPlan(orgId, input))} />
-      ) : null}
-      {tab === "tasks" ? (
-        <TasksTab data={data} orgId={orgId} busy={busy} teamName={teamName} onRun={run} />
-      ) : null}
-      {tab === "schedule" ? (
-        <ScheduleTab data={data} orgId={orgId} busy={busy} teamName={teamName} onRun={run} />
-      ) : null}
-      {tab === "stations" ? (
-        <StationsTab data={data} orgId={orgId} busy={busy} teamName={teamName} onRun={run} />
-      ) : null}
-      {tab === "checklist" ? (
-        <ChecklistTab data={data} orgId={orgId} busy={busy} teamName={teamName} onRun={run} />
-      ) : null}
-      {tab === "board" ? (
-        <BoardTab data={data} orgId={orgId} busy={busy} onRun={run} teamName={teamName} />
-      ) : null}
+      <section className="vbs-plan-sections" aria-labelledby="vbs-plan-sections-title">
+        <h2 id="vbs-plan-sections-title" className="vbs-plan-sections-title">
+          Planning sections
+        </h2>
+        <p className="vbs-plan-sections-lead muted">
+          These are the main areas of your plan. Pick a tab to view and edit — the team calendar above stays in
+          sync on every tab.
+        </p>
+        <div className="vbs-chrome-tabs">
+          <nav className="vbs-chrome-tabs-bar" role="tablist" aria-label="VBS planning sections">
+            {planSections.map((item) => {
+              const selected = tab === item.id;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  role="tab"
+                  id={`vbs-plan-tab-${item.id}`}
+                  className={selected ? "vbs-chrome-tab active" : "vbs-chrome-tab"}
+                  aria-selected={selected}
+                  aria-controls="vbs-plan-tabpanel"
+                  tabIndex={selected ? 0 : -1}
+                  onClick={() => {
+                    setTab(item.id);
+                    setSearchParams(item.id === "overview" ? {} : { tab: item.id }, { replace: true });
+                  }}
+                >
+                  {item.label}
+                </button>
+              );
+            })}
+          </nav>
+          <div className="vbs-chrome-tabs-panel" role="tabpanel" id="vbs-plan-tabpanel" aria-labelledby={`vbs-plan-tab-${tab}`}>
+            {activeSection ? (
+              <p className="vbs-plan-tab-hint">
+                <strong>{activeSection.label}</strong>
+                <span className="muted"> — {activeSection.hint}</span>
+              </p>
+            ) : null}
+
+            {tab === "overview" ? (
+              <OverviewTab data={data} busy={busy} onSave={(input) => run(() => api.saveVbsPlan(orgId, input))} />
+            ) : null}
+            {tab === "tasks" ? (
+              <TasksTab data={data} orgId={orgId} busy={busy} teamName={teamName} onRun={run} />
+            ) : null}
+            {tab === "schedule" ? (
+              <ScheduleTab data={data} orgId={orgId} busy={busy} teamName={teamName} onRun={run} />
+            ) : null}
+            {tab === "stations" ? (
+              <StationsTab data={data} orgId={orgId} busy={busy} teamName={teamName} onRun={run} />
+            ) : null}
+            {tab === "checklist" ? (
+              <ChecklistTab data={data} orgId={orgId} busy={busy} teamName={teamName} onRun={run} />
+            ) : null}
+            {tab === "board" ? (
+              <BoardTab data={data} orgId={orgId} busy={busy} onRun={run} teamName={teamName} />
+            ) : null}
+          </div>
+        </div>
+      </section>
     </div>
   );
 }
@@ -672,10 +691,13 @@ function filterChecklistItems(
     if (categoryFilter && item.category !== categoryFilter) {
       return false;
     }
-    if (doneFilter === "open" && item.done) {
+    if (doneFilter === "done" && !milestoneIsDone(item)) {
       return false;
     }
-    if (doneFilter === "done" && !item.done) {
+    if (doneFilter === "not_started" && normalizeMilestoneStatus(item) !== "not_started") {
+      return false;
+    }
+    if (doneFilter === "in_progress" && normalizeMilestoneStatus(item) !== "in_progress") {
       return false;
     }
     return filterByTeamId(item.assignedTeamId, teamFilter);
@@ -758,16 +780,6 @@ function milestoneTodayLinePercent(today: string, minMs: number, maxMs: number) 
   }
   const ratio = (todayMs - minMs) / (maxMs - minMs);
   return Math.min(1, Math.max(0, ratio));
-}
-
-function milestoneTone(item: VbsChecklistItem, today: string) {
-  if (item.done) {
-    return "done";
-  }
-  if (item.dueDate && item.dueDate < today) {
-    return "overdue";
-  }
-  return "upcoming";
 }
 
 /** Max horizontal shift for milestones on the due-date timeline (percent of row width). */
@@ -2387,6 +2399,7 @@ function checklistPayload(item: VbsChecklistItem) {
     assignedTeamId: item.assignedTeamId,
     dueDate: item.dueDate,
     notes: item.notes,
+    status: normalizeMilestoneStatus(item),
   };
 }
 
@@ -2522,7 +2535,8 @@ function ChecklistTab({
               }}
             >
               <option value="">All milestones</option>
-              <option value="open">Open</option>
+              <option value="not_started">Not started</option>
+              <option value="in_progress">In progress</option>
               <option value="done">Done</option>
             </select>
           </label>
@@ -2642,7 +2656,7 @@ function ChecklistRow({
   busy: boolean;
   teamName: (id: string) => string;
   datePercent: number | null;
-  tone: "done" | "overdue" | "upcoming";
+  tone: MilestoneTone;
   milestoneCategories: string[];
   expanded: boolean;
   onToggle: () => void;
@@ -2663,8 +2677,8 @@ function ChecklistRow({
     [orgId, onRun],
   );
 
-  function setDone(done: boolean) {
-    onRun(() => api.saveVbsChecklistItem(orgId, { id: item.id, done }));
+  function setStatus(status: VbsMilestoneStatus) {
+    onRun(() => api.saveVbsChecklistItem(orgId, { id: item.id, status }));
   }
 
   function confirmDelete(event: MouseEvent) {
@@ -2714,16 +2728,24 @@ function ChecklistRow({
               <MilestoneExpandIcon open={expanded} />
             </span>
           </button>
-          <div className="vbs-milestone-quick-done" role="group" aria-label="Mark milestone done">
-            <button
-              type="button"
-              className={item.done ? "vbs-milestone-done-btn active" : "vbs-milestone-done-btn"}
-              aria-pressed={item.done}
-              disabled={busy}
-              onClick={() => setDone(!item.done)}
-            >
-              {item.done ? "Done" : "Mark done"}
-            </button>
+          <div className="vbs-milestone-quick-status" role="group" aria-label="Milestone status">
+            {canEdit ? (
+              <select
+                className="vbs-milestone-status-select"
+                value={normalizeMilestoneStatus(item)}
+                disabled={busy}
+                onClick={(e) => e.stopPropagation()}
+                onChange={(e) => setStatus(e.target.value as VbsMilestoneStatus)}
+              >
+                {(Object.keys(MILESTONE_STATUS_LABELS) as VbsMilestoneStatus[]).map((key) => (
+                  <option key={key} value={key}>
+                    {MILESTONE_STATUS_LABELS[key]}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <span className="vbs-milestone-status-read">{MILESTONE_STATUS_LABELS[normalizeMilestoneStatus(item)]}</span>
+            )}
           </div>
 
       {expanded ? (
@@ -2838,37 +2860,23 @@ function ChecklistRow({
             )}
           </label>
 
-          <div className="vbs-task-status" role="group" aria-label="Checklist status">
-            <button
-              type="button"
-              className={
-                !item.done ? "vbs-task-status-pill active status-todo" : "vbs-task-status-pill status-todo"
-              }
-              aria-pressed={!item.done}
-              disabled={busy}
-              onClick={() => {
-                if (!item.done) {
-                  return;
+          <div className="vbs-task-status" role="group" aria-label="Milestone status">
+            {(Object.keys(MILESTONE_STATUS_LABELS) as VbsMilestoneStatus[]).map((key) => (
+              <button
+                key={key}
+                type="button"
+                className={
+                  normalizeMilestoneStatus(item) === key
+                    ? `vbs-task-status-pill active milestone-status-${key.replace("_", "-")}`
+                    : `vbs-task-status-pill milestone-status-${key.replace("_", "-")}`
                 }
-                setDone(false);
-              }}
-            >
-              Open
-            </button>
-            <button
-              type="button"
-              className={item.done ? "vbs-task-status-pill active status-done" : "vbs-task-status-pill status-done"}
-              aria-pressed={item.done}
-              disabled={busy}
-              onClick={() => {
-                if (item.done) {
-                  return;
-                }
-                setDone(true);
-              }}
-            >
-              Done
-            </button>
+                aria-pressed={normalizeMilestoneStatus(item) === key}
+                disabled={busy || !canEdit}
+                onClick={() => setStatus(key)}
+              >
+                {MILESTONE_STATUS_LABELS[key]}
+              </button>
+            ))}
           </div>
         </div>
       ) : null}

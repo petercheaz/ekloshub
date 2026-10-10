@@ -9,7 +9,9 @@ import type {
   VbsTask,
   VbsTaskCategory,
   VbsTaskStatus,
+  VbsMilestoneStatus,
 } from "./types";
+import { MILESTONE_STATUS_LABELS } from "./vbs-milestone-status";
 import {
   REMINDER_OFFSETS,
   addDays,
@@ -877,6 +879,7 @@ function ChecklistDetailForm({
   const [dueDate, setDueDate] = useState(item.dueDate);
   const [assignedTeamId, setAssignedTeamId] = useState(item.assignedTeamId);
   const [notes, setNotes] = useState(item.notes);
+  const [status, setStatus] = useState(item.status);
 
   function submit(e: FormEvent) {
     e.preventDefault();
@@ -887,6 +890,7 @@ function ChecklistDetailForm({
       dueDate,
       assignedTeamId,
       notes,
+      status,
     });
   }
 
@@ -931,6 +935,16 @@ function ChecklistDetailForm({
             disabled={!data.canWrite || saving}
             placeholder="Optional details…"
           />
+        </label>
+        <label>
+          Status
+          <select value={status} onChange={(e) => setStatus(e.target.value as VbsMilestoneStatus)} disabled={!data.canWrite || saving}>
+            {(Object.keys(MILESTONE_STATUS_LABELS) as VbsMilestoneStatus[]).map((key) => (
+              <option key={key} value={key}>
+                {MILESTONE_STATUS_LABELS[key]}
+              </option>
+            ))}
+          </select>
         </label>
         <div className="form-actions">
           {data.canWrite ? (

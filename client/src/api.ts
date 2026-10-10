@@ -25,9 +25,11 @@ import type {
   UserVbsDefaultPayload,
   OrgVbsCurriculum,
   OrgVbsDefaultPayload,
+  PhotoshoppeBrowseResult,
   VbsPlan,
   VbsPlanWorkspace,
 } from "./types";
+import type { EditorSnapshot } from "./photoshoppe/types";
 
 export class ApiError extends Error {
   status: number;
@@ -92,8 +94,36 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ username, role }),
     }),
+  updateOrganizationMember: (
+    id: string,
+    username: string,
+    input: {
+      role: OrgRole;
+      firstName: string;
+      lastName: string;
+      phone: string;
+      email: string;
+      verified: boolean;
+      newPassword?: string;
+      resetPasswordToDefault?: boolean;
+      teamAdminTeamIds?: string[];
+    },
+  ) =>
+    request<OrgDetail>(`/api/orgs/${id}/members/${encodeURIComponent(username)}`, {
+      method: "PATCH",
+      body: JSON.stringify(input),
+    }),
   removeOrganizationMember: (id: string, username: string) =>
     request<OrgDetail>(`/api/orgs/${id}/members/${encodeURIComponent(username)}`, { method: "DELETE" }),
+  orgContactOptions: (orgId: string) => request<import("./types").OrgContactOptions>(`/api/orgs/${orgId}/contact`),
+  sendOrgContact: (
+    orgId: string,
+    input: { subject: string; message: string; scope: "organization" | "teams"; teamIds?: string[] },
+  ) =>
+    request<{ ok: boolean; recipientCount: number }>(`/api/orgs/${orgId}/contact`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
   inviteToOrganization: (id: string, emails: string) =>
     request<{ invites: OrgInvite[] }>(`/api/orgs/${id}/invites`, {
       method: "POST",
@@ -119,15 +149,15 @@ export const api = {
   readNotification: (id: string) =>
     request<{ ok: boolean }>(`/api/notifications/${id}/read`, { method: "POST" }),
   teams: () => request<{ teams: OrgTeam[] }>("/api/teams"),
-  createTeam: (orgId: string, name: string, members: string) =>
+  createTeam: (orgId: string, name: string, members: string, teamAdminUsername?: string) =>
     request<OrgTeam>(`/api/orgs/${orgId}/teams`, {
       method: "POST",
-      body: JSON.stringify({ name, members }),
+      body: JSON.stringify({ name, members, teamAdminUsername }),
     }),
-  updateTeam: (orgId: string, teamId: string, name: string, members: string) =>
+  updateTeam: (orgId: string, teamId: string, name: string, members: string, teamAdminUsername: string) =>
     request<OrgTeam>(`/api/orgs/${orgId}/teams/${teamId}`, {
       method: "PATCH",
-      body: JSON.stringify({ name, members }),
+      body: JSON.stringify({ name, members, teamAdminUsername }),
     }),
   roomIdeas: (orgId: string) => request<RoomIdeaOptions>(`/api/orgs/${orgId}/room-ideas`),
   generateRoomIdeas: (orgId: string, input: {
@@ -159,6 +189,36 @@ export const api = {
       method: "POST",
       body: JSON.stringify(input),
     }),
+  browsePhotoshoppe: (orgId: string, folderId?: string | null) => {
+    const query = folderId ? `?folderId=${encodeURIComponent(folderId)}` : "";
+    return request<PhotoshoppeBrowseResult>(`/api/orgs/${orgId}/photoshoppe${query}`);
+  },
+  createPhotoshoppeFolder: (orgId: string, parentId: string | null, name: string) =>
+    request<{ folder: { id: string; name: string; updatedAt: string } }>(`/api/orgs/${orgId}/photoshoppe/folders`, {
+      method: "POST",
+      body: JSON.stringify({ parentId, name }),
+    }),
+  savePhotoshoppeDocument: (
+    orgId: string,
+    input: {
+      parentId: string | null;
+      name: string;
+      documentId?: string;
+      snapshot: EditorSnapshot;
+      preview: { name: string; type: string; size: number; dataUrl: string };
+    },
+  ) =>
+    request<{ document: PhotoshoppeBrowseResult["documents"][number] }>(
+      `/api/orgs/${orgId}/photoshoppe/documents`,
+      {
+        method: "POST",
+        body: JSON.stringify(input),
+      },
+    ),
+  loadPhotoshoppeDocument: (orgId: string, documentId: string) =>
+    request<{ snapshot: EditorSnapshot; document: PhotoshoppeBrowseResult["documents"][number] }>(
+      `/api/orgs/${orgId}/photoshoppe/documents/${documentId}`,
+    ),
   userVbsDefault: () => request<UserVbsDefaultPayload>("/api/me/vbs-default"),
   saveUserVbsDefault: (input: {
     year: number;

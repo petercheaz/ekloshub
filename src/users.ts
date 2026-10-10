@@ -76,11 +76,34 @@ export type UserSuggestion = {
   email: string;
 };
 
+/** When no email is set, use login id + @gmail.com (skip if username is already an email). */
+export function defaultEmailForUsername(username: string) {
+  const trimmed = username.trim();
+  if (!trimmed) {
+    return "";
+  }
+  if (trimmed.includes("@")) {
+    return trimmed;
+  }
+  return `${trimmed}@gmail.com`;
+}
+
+export function resolveUserEmail(username: string, email: string | null | undefined) {
+  const stored = (email ?? "").trim();
+  if (stored && stored.includes("@")) {
+    return stored;
+  }
+  if (stored && !stored.includes("@")) {
+    return defaultEmailForUsername(stored);
+  }
+  return defaultEmailForUsername(username);
+}
+
 export async function searchUsers(query: string, exclude?: string, tenantId?: string | null) {
   const needle = `%${query.trim().toLowerCase()}%`;
   const result = tenantId
     ? await db().query<UserSuggestion>(
-        `SELECT u.username, COALESCE(u.email, '') AS email FROM users u
+        `SELECT u.username, COALESCE(NULLIF(TRIM(u.email), ''), '') AS email FROM users u
          JOIN organization_members m ON m.username = u.username
          WHERE m.organization_id = $3
            AND ($2::text IS NULL OR u.username <> $2)
@@ -95,7 +118,10 @@ export async function searchUsers(query: string, exclude?: string, tenantId?: st
          ORDER BY username`,
         [needle, exclude ?? null],
       );
-  return result.rows;
+  return result.rows.map((row) => ({
+    username: row.username,
+    email: resolveUserEmail(row.username, row.email),
+  }));
 }
 
 export async function isPlatformAdmin(username: string) {
