@@ -1,4 +1,5 @@
 import { db } from "./db/pool.js";
+import { assignPrimaryTeamAdmin } from "./team-admin.js";
 import { getMembership } from "./orgs.js";
 import { findUser, isPlatformAdmin } from "./users.js";
 
@@ -8,6 +9,7 @@ export type OrgTeam = {
   name: string;
   members: string;
   memberUsernames: string[];
+  teamAdminUsername: string;
   createdAt: string;
 };
 
@@ -16,6 +18,7 @@ type TeamRow = {
   organization_id: string;
   name: string;
   members: string;
+  team_admin_username: string | null;
   created_at: Date;
 };
 
@@ -30,8 +33,41 @@ function present(row: TeamRow, usernames: string[]): OrgTeam {
     name: row.name,
     members: usernames.join("; "),
     memberUsernames: usernames,
+    teamAdminUsername: row.team_admin_username ?? "",
     createdAt: row.created_at.toISOString(),
   };
+}
+
+async function applyTeamAdmin(
+  organizationId: string,
+  teamId: string,
+  adminUsername: string,
+  rosterUsernames: string[],
+) {
+  return assignPrimaryTeamAdmin(organizationId, teamId, adminUsername, rosterUsernames);
+}
+
+async function resolveTeamAdmin(
+  organizationId: string,
+  adminRaw: string,
+  rosterUsernames: string[],
+): Promise<{ username: string } | { error: string }> {
+  const trimmed = adminRaw.trim();
+  if (!trimmed) {
+    return { error: "Team admin is required" };
+  }
+  const resolved = await findUser(trimmed);
+  if (!resolved) {
+    return { error: `${trimmed} is not a known user` };
+  }
+  const membership = await getMembership(organizationId, resolved);
+  if (!membership) {
+    return { error: `${trimmed} is not a member of this organization` };
+  }
+  if (!rosterUsernames.includes(resolved)) {
+    return { error: `${resolved} must be listed on the team member roster to be team admin` };
+  }
+  return { username: resolved };
 }
 
 async function resolveMembers(
@@ -64,7 +100,7 @@ async function canManageTeams(organizationId: string, username: string) {
 
 export async function listTeams(organizationId: string) {
   const result = await db().query<TeamRow>(
-    `SELECT id, organization_id, name, members, created_at
+    `SELECT id, organization_id, name, members, team_admin_username, created_at
      FROM org_teams
      WHERE organization_id = $1
      ORDER BY name, created_at`,
@@ -182,7 +218,7 @@ export async function listTeamsForViewer(
 
 export async function getTeam(organizationId: string, teamId: string) {
   const result = await db().query<TeamRow>(
-    `SELECT id, organization_id, name, members, created_at
+    `SELECT id, organization_id, name, members, team_admin_username, created_at
      FROM org_teams
      WHERE id = $1 AND organization_id = $2`,
     [teamId, organizationId],
@@ -191,7 +227,11 @@ export async function getTeam(organizationId: string, teamId: string) {
   return row ? present(row, parseMemberList(row.members)) : null;
 }
 
-export async function createTeam(organizationId: string, actor: string, input: { name: string; members: string }) {
+export async function createTeam(
+  organizationId: string,
+  actor: string,
+  input: { name: string; members: string; teamAdminUsername?: string },
+) {
   if (!(await canManageTeams(organizationId, actor))) {
     return { error: "Only org admins can create teams" as const };
   }
@@ -209,28 +249,30 @@ export async function createTeam(organizationId: string, actor: string, input: {
   const id = crypto.randomUUID();
   const createdAt = new Date().toISOString();
   const members = resolved.usernames.join("; ");
+  const teamAdminRaw = input.teamAdminUsername?.trim() || actor;
+  const adminResolved = await resolveTeamAdmin(organizationId, teamAdminRaw, resolved.usernames);
+  if ("error" in adminResolved) {
+    return { error: adminResolved.error };
+  }
   await db().query(
-    `INSERT INTO org_teams (id, organization_id, name, members, created_at)
-     VALUES ($1,$2,$3,$4,$5)`,
-    [id, organizationId, name, members, createdAt],
+    `INSERT INTO org_teams (id, organization_id, name, members, team_admin_username, created_at)
+     VALUES ($1,$2,$3,$4,$5,$6)`,
+    [id, organizationId, name, members, adminResolved.username, createdAt],
   );
-  return {
-    team: {
-      id,
-      organizationId,
-      name,
-      members,
-      memberUsernames: resolved.usernames,
-      createdAt,
-    },
-  };
+  const adminResult = await applyTeamAdmin(organizationId, id, adminResolved.username, resolved.usernames);
+  if ("error" in adminResult) {
+    await db().query("DELETE FROM org_teams WHERE id = $1", [id]);
+    return { error: adminResult.error };
+  }
+  const team = await getTeam(organizationId, id);
+  return team ? { team } : { error: "Team not found" as const };
 }
 
 export async function updateTeam(
   organizationId: string,
   teamId: string,
   actor: string,
-  input: { name: string; members: string },
+  input: { name: string; members: string; teamAdminUsername: string },
 ) {
   if (!(await canManageTeams(organizationId, actor))) {
     return { error: "Only org admins can edit teams" as const };
@@ -251,18 +293,25 @@ export async function updateTeam(
     return resolved;
   }
   const members = resolved.usernames.join("; ");
+  const adminResolved = await resolveTeamAdmin(organizationId, input.teamAdminUsername, resolved.usernames);
+  if ("error" in adminResolved) {
+    return { error: adminResolved.error };
+  }
   await db().query("UPDATE org_teams SET name = $1, members = $2 WHERE id = $3 AND organization_id = $4", [
     name,
     members,
     teamId,
     organizationId,
   ]);
-  return {
-    team: {
-      ...existing,
-      name,
-      members,
-      memberUsernames: resolved.usernames,
-    },
-  };
+  const adminResult = await applyTeamAdmin(
+    organizationId,
+    teamId,
+    adminResolved.username,
+    resolved.usernames,
+  );
+  if ("error" in adminResult) {
+    return { error: adminResult.error };
+  }
+  const team = await getTeam(organizationId, teamId);
+  return team ? { team } : { error: "Team not found" as const };
 }

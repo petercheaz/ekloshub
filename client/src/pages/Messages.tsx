@@ -1,15 +1,19 @@
 import { OrgMessagesPanel } from "../OrgMessagesPanel";
-import { OrgBanner, useOrgs } from "../orgs";
+import { OrgWorkspacePage } from "../OrgWorkspacePage";
+import { useOrgs } from "../orgs";
 
 export default function MessagesPage() {
   const { tenantId } = useOrgs();
 
   return (
-    <div className="messages-page">
-      <p className="eyebrow">Inbox</p>
-      <h1>Direct Message</h1>
-      <OrgBanner />
-      <OrgMessagesPanel key={tenantId ?? "global"} />
-    </div>
+    <OrgWorkspacePage
+      eyebrow="Inbox"
+      title="Direct Message"
+      tagline="Search teammates by name or email. Team threads reach everyone on that roster."
+    >
+      <section className="vbs-panel">
+        <OrgMessagesPanel key={tenantId ?? "global"} embedded />
+      </section>
+    </OrgWorkspacePage>
   );
 }

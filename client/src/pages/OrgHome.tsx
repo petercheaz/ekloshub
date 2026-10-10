@@ -1,28 +1,48 @@
 import { FormEvent, useEffect, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { OrgUserListInput } from "../OrgUserListInput";
-import { orgPath, useOrgs } from "../orgs";
-import type { OrgDetail, OrgRole } from "../types";
+import { OrgWorkspacePage } from "../OrgWorkspacePage";
+import { useOrgs } from "../orgs";
+import { defaultVbsPassword } from "../vbs-password";
+import type { OrgDetail, OrgMember, OrgRole } from "../types";
 
 const roles: { id: OrgRole; label: string }[] = [
   { id: "org_admin", label: "org_admin" },
+  { id: "org_team_admin", label: "org_team_admin" },
   { id: "org_write", label: "org_write" },
   { id: "org_read", label: "org_read" },
 ];
+
+function memberDisplayName(member: OrgMember) {
+  const name = [member.firstName, member.lastName].filter(Boolean).join(" ").trim();
+  return name || member.username;
+}
+
+function memberSubtitle(member: OrgMember) {
+  const parts = [member.username];
+  if (member.email && member.email.toLowerCase() !== member.username.toLowerCase()) {
+    parts.push(member.email);
+  }
+  if (member.phone) {
+    parts.push(member.phone);
+  }
+  return parts.join(" · ");
+}
 
 export default function OrgHomePage() {
   const { orgId = "" } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { canAdmin, refreshOrgs, tenantId } = useOrgs();
+  const { canAdmin, refreshOrgs } = useOrgs();
   const [detail, setDetail] = useState<OrgDetail | null>(null);
   const [error, setError] = useState("");
   const [username, setUsername] = useState("");
   const [role, setRole] = useState<OrgRole>("org_read");
   const [emails, setEmails] = useState("");
   const [inviteStatus, setInviteStatus] = useState("");
+  const [expandedMember, setExpandedMember] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -61,15 +81,6 @@ export default function OrgHomePage() {
     }
   }
 
-  async function changeRole(name: string, nextRole: OrgRole) {
-    try {
-      setDetail(await api.addOrganizationMember(orgId, name, nextRole));
-      setError("");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not change role");
-    }
-  }
-
   async function addMember(event: FormEvent) {
     event.preventDefault();
     try {
@@ -84,6 +95,9 @@ export default function OrgHomePage() {
   async function removeMember(name: string) {
     try {
       setDetail(await api.removeOrganizationMember(orgId, name));
+      if (expandedMember === name) {
+        setExpandedMember(null);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not remove member");
     }
@@ -114,34 +128,275 @@ export default function OrgHomePage() {
   }
 
   const org = detail.organization;
+  const defaultPasswordLabel = detail.vbsDefaultPassword ?? defaultVbsPassword();
   return (
-    <div className="reviews">
-      <header className="page-head">
-        <p className="eyebrow">Manage organization</p>
-        <h1>{org.name}</h1>
-        <p className="tagline">{org.address}</p>
-        <p className="tagline">Contact: {org.contact}</p>
-      </header>
-
-      <nav className="org-features" aria-label="Organization">
-        <Link to={orgPath(tenantId, "/reviews")}>Curriculum Reviews</Link>
-        <Link to={orgPath(tenantId, "/share")}>Share VBS Resources</Link>
-        <Link to={orgPath(tenantId, "/setup")}>Show Your Setup</Link>
-        <Link to={orgPath(tenantId, "/messages")}>Direct Message</Link>
-      </nav>
-
-      <section className="org-members">
-        <h2>Members</h2>
-        <ul className="entry-list">
+    <OrgWorkspacePage
+      eyebrow="Manage organization"
+      title={org.name}
+      tagline={
+        <>
+          {org.address}
+          {org.contact ? (
+            <>
+              <br />
+              Contact: {org.contact}
+            </>
+          ) : null}
+        </>
+      }
+    >
+      <section className="vbs-panel org-members">
+        <h2 className="vbs-task-team-section-title">Members</h2>
+        <p className="muted vbs-task-field-hint">
+          Expand a member to edit profile, access, and password. Default password for unset accounts:{" "}
+          <strong>{defaultPasswordLabel}</strong> (VBS year: before September = this calendar year, September onward =
+          next year).
+        </p>
+        <ul className="vbs-task-list org-member-list">
           {detail.members.map((member) => (
-            <li key={member.username} className="entry">
-              <div className="entry-meta">
-                <span className="author">{member.username}</span>
-                <span className="badge">{member.role}</span>
+            <OrgMemberRow
+              key={member.username}
+              member={member}
+              orgId={orgId}
+              teams={detail.teams ?? []}
+              defaultPasswordLabel={defaultPasswordLabel}
+              canRemove={canAdmin && member.username !== user?.username}
+              expanded={expandedMember === member.username}
+              onToggle={() =>
+                setExpandedMember((current) => (current === member.username ? null : member.username))
+              }
+              onSaved={(next) => {
+                setDetail(next);
+                setError("");
+              }}
+              onError={(message) => setError(message)}
+              onRemove={() => void removeMember(member.username)}
+            />
+          ))}
+        </ul>
+      </section>
+
+      {canAdmin ? (
+        <form
+          className="review-form share-form vbs-form-panel"
+          onSubmit={(event) => void sendInvites(event)}
+        >
+          <h3>Invite by email</h3>
+          <p className="muted vbs-task-field-hint">
+            Invites join as org_write (can post; cannot manage members or teams).
+          </p>
+          <label htmlFor="invite-emails">Emails (comma or semicolon separated)</label>
+          <OrgUserListInput
+            id="invite-emails"
+            value={emails}
+            onChange={setEmails}
+            preferEmail
+            scopeAll
+            placeholder="Type an email — suggestions from org and existing users…"
+            required
+          />
+          <div className="vbs-form-actions">
+            <button type="submit" className="vbs-plan-save">
+              Send invite
+            </button>
+          </div>
+          {inviteStatus ? <p className="tagline">{inviteStatus}</p> : null}
+          {(detail.invitations ?? []).length > 0 ? (
+            <ul className="entry-list">
+              {detail.invitations.map((invite) => (
+                <li key={invite.id} className="entry">
+                  <div className="entry-meta">
+                    <span className="author">{invite.email}</span>
+                    <span className="badge">{invite.acceptedAt ? "Joined" : "Pending"}</span>
+                  </div>
+                  {invite.acceptedAt ? null : (
+                    <p className="entry-preview">
+                      Keyword {invite.keyword} · <a href={invite.link}>Invite link</a>
+                    </p>
+                  )}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </form>
+      ) : null}
+      {canAdmin ? (
+        <form className="review-form share-form vbs-form-panel" onSubmit={(event) => void addMember(event)}>
+          <h3>Add existing user</h3>
+          <label htmlFor="member-username">Users (comma or semicolon separated)</label>
+          <OrgUserListInput
+            id="member-username"
+            value={username}
+            onChange={setUsername}
+            placeholder="Search org members by name or email…"
+            required
+          />
+          <label htmlFor="member-role">Access</label>
+          <select id="member-role" value={role} onChange={(event) => setRole(event.target.value as OrgRole)}>
+            {roles.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.label}
+              </option>
+            ))}
+          </select>
+          <div className="vbs-form-actions">
+            <button type="submit" className="vbs-plan-save">
+              Add member
+            </button>
+          </div>
+        </form>
+      ) : null}
+
+      {canAdmin ? (
+        <button type="button" className="ghost danger vbs-plan-save-danger" onClick={() => void onDelete()}>
+          Delete organization
+        </button>
+      ) : null}
+      {error ? <p className="error">{error}</p> : null}
+    </OrgWorkspacePage>
+  );
+}
+
+function OrgMemberRow({
+  member,
+  orgId,
+  teams,
+  defaultPasswordLabel,
+  canRemove,
+  expanded,
+  onToggle,
+  onSaved,
+  onError,
+  onRemove,
+}: {
+  member: OrgMember;
+  orgId: string;
+  teams: OrgDetail["teams"];
+  defaultPasswordLabel: string;
+  canRemove: boolean;
+  expanded: boolean;
+  onToggle: () => void;
+  onSaved: (detail: OrgDetail) => void;
+  onError: (message: string) => void;
+  onRemove: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [draft, setDraft] = useState(member);
+  const [newPassword, setNewPassword] = useState("");
+  const [resetPasswordToDefault, setResetPasswordToDefault] = useState(false);
+
+  useEffect(() => {
+    setDraft(member);
+    setNewPassword("");
+    setResetPasswordToDefault(false);
+  }, [member]);
+
+  async function save(event: FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    try {
+      const next = await api.updateOrganizationMember(orgId, member.username, {
+        role: draft.role,
+        firstName: draft.firstName,
+        lastName: draft.lastName,
+        phone: draft.phone,
+        email: draft.email,
+        verified: draft.verified,
+        newPassword: resetPasswordToDefault ? "" : newPassword,
+        resetPasswordToDefault,
+        teamAdminTeamIds: draft.teamAdminTeamIds,
+      });
+      onSaved(next);
+      setNewPassword("");
+      setResetPasswordToDefault(false);
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "Could not save member");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <li className={expanded ? "vbs-task-card open" : "vbs-task-card"}>
+      <button type="button" className="vbs-task-summary" aria-expanded={expanded} onClick={onToggle}>
+        <span className="vbs-task-summary-main">
+          <span className="vbs-task-summary-title">{memberDisplayName(member)}</span>
+          <span className="vbs-task-assignee-pill">{member.role}</span>
+          {member.verified ? <span className="badge verified">Verified</span> : null}
+          {member.usesDefaultPassword ? (
+            <span className="vbs-task-assignee-pill" title="Default VBS password">
+              {defaultPasswordLabel}
+            </span>
+          ) : null}
+        </span>
+        <span className="vbs-task-summary-meta muted">{memberSubtitle(member)}</span>
+        <span className="vbs-task-chevron" aria-hidden="true">
+          {expanded ? "▾" : "▸"}
+        </span>
+      </button>
+
+      {expanded ? (
+        <div className="vbs-task-body">
+          <form className="vbs-task-member-form" onSubmit={(event) => void save(event)}>
+            <label className="vbs-task-field">
+              <span className="vbs-task-field-label">Login username</span>
+              <input value={member.username} readOnly aria-readonly disabled />
+              <span className="muted vbs-task-field-hint">Used to sign in; contact support to change.</span>
+            </label>
+            <div className="vbs-task-meta-grid">
+              <label className="vbs-task-field">
+                <span className="vbs-task-field-label">First name</span>
+                <input
+                  value={draft.firstName}
+                  onChange={(e) => setDraft({ ...draft, firstName: e.target.value })}
+                  autoComplete="given-name"
+                  disabled={busy}
+                />
+              </label>
+              <label className="vbs-task-field">
+                <span className="vbs-task-field-label">Last name</span>
+                <input
+                  value={draft.lastName}
+                  onChange={(e) => setDraft({ ...draft, lastName: e.target.value })}
+                  autoComplete="family-name"
+                  disabled={busy}
+                />
+              </label>
+              <label className="vbs-task-field">
+                <span className="vbs-task-field-label">Email</span>
+                <input
+                  type="email"
+                  value={draft.email}
+                  onChange={(e) => setDraft({ ...draft, email: e.target.value })}
+                  autoComplete="email"
+                  placeholder="Leave blank to use login@gmail.com"
+                  disabled={busy}
+                />
+              </label>
+              <label className="vbs-task-field">
+                <span className="vbs-task-field-label">Phone</span>
+                <input
+                  type="tel"
+                  value={draft.phone}
+                  onChange={(e) => setDraft({ ...draft, phone: e.target.value })}
+                  autoComplete="tel"
+                  placeholder="4255550100"
+                  disabled={busy}
+                />
+              </label>
+              <label className="vbs-task-field">
+                <span className="vbs-task-field-label">Org access</span>
                 <select
-                  aria-label={`Role for ${member.username}`}
-                  value={member.role}
-                  onChange={(event) => void changeRole(member.username, event.target.value as OrgRole)}
+                  value={draft.role}
+                  onChange={(e) =>
+                    setDraft({
+                      ...draft,
+                      role: e.target.value as OrgRole,
+                      teamAdminTeamIds:
+                        e.target.value === "org_team_admin" ? draft.teamAdminTeamIds : [],
+                    })
+                  }
+                  disabled={busy}
                 >
                   {roles.map((item) => (
                     <option key={item.id} value={item.id}>
@@ -149,81 +404,106 @@ export default function OrgHomePage() {
                     </option>
                   ))}
                 </select>
-                {canAdmin && member.username !== user?.username ? (
-                  <button type="button" className="ghost" onClick={() => void removeMember(member.username)}>
-                    Remove
-                  </button>
-                ) : null}
-              </div>
-            </li>
-          ))}
-        </ul>
-      </section>
-
-        {canAdmin ? (
-          <form className="review-form share-form" onSubmit={(event) => void sendInvites(event)}>
-            <h3>Invite by email</h3>
-            <p className="tagline">Invites join as org_write (can post; cannot manage members or teams).</p>
-            <label htmlFor="invite-emails">Emails (comma or semicolon separated)</label>
-            <OrgUserListInput
-              id="invite-emails"
-              value={emails}
-              onChange={setEmails}
-              preferEmail
-              scopeAll
-              placeholder="Type an email — suggestions from org and existing users…"
-              required
-            />
-            <button type="submit">Send invite</button>
-            {inviteStatus ? <p className="tagline">{inviteStatus}</p> : null}
-            {(detail.invitations ?? []).length > 0 ? (
-              <ul className="entry-list">
-                {detail.invitations.map((invite) => (
-                  <li key={invite.id} className="entry">
-                    <div className="entry-meta">
-                      <span className="author">{invite.email}</span>
-                      <span className="badge">{invite.acceptedAt ? "Joined" : "Pending"}</span>
-                    </div>
-                    {invite.acceptedAt ? null : (
-                      <p className="entry-preview">
-                        Keyword {invite.keyword} · <a href={invite.link}>Invite link</a>
-                      </p>
-                    )}
-                  </li>
+                <span className="muted vbs-task-field-hint">
+                  Team admins can contact assigned teams only. Write/read cannot use org contact.
+                </span>
+              </label>
+            </div>
+            {draft.role === "org_team_admin" ? (
+              <fieldset className="share-targets vbs-task-field">
+                <legend>Teams this admin can contact</legend>
+                <p className="muted vbs-task-field-hint">
+                  They must already be on each team&apos;s member list in Manage teams.
+                </p>
+                {teams.length === 0 ? <p className="muted">Create teams first under Manage teams.</p> : null}
+                {teams.map((team) => (
+                  <label key={team.id} className="checkbox-line">
+                    <input
+                      type="checkbox"
+                      checked={draft.teamAdminTeamIds.includes(team.id)}
+                      onChange={(e) =>
+                        setDraft({
+                          ...draft,
+                          teamAdminTeamIds: e.target.checked
+                            ? [...draft.teamAdminTeamIds, team.id]
+                            : draft.teamAdminTeamIds.filter((id) => id !== team.id),
+                        })
+                      }
+                      disabled={busy}
+                    />
+                    {team.name}
+                  </label>
                 ))}
-              </ul>
+              </fieldset>
             ) : null}
+            <label className="checkbox-line vbs-task-field">
+              <input
+                type="checkbox"
+                checked={draft.verified}
+                onChange={(e) => setDraft({ ...draft, verified: e.target.checked })}
+                disabled={busy}
+              />
+              Verified account (can use org features that require verification)
+            </label>
+            <div className="vbs-task-meta-grid">
+              <label className="vbs-task-field">
+                <span className="vbs-task-field-label">New password</span>
+                <input
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) => {
+                    setNewPassword(e.target.value);
+                    if (e.target.value) {
+                      setResetPasswordToDefault(false);
+                    }
+                  }}
+                  autoComplete="new-password"
+                  placeholder="Leave blank to keep current"
+                  disabled={busy || resetPasswordToDefault}
+                />
+                <span className="muted vbs-task-field-hint">
+                  {member.usesDefaultPassword
+                    ? `Currently using default (${defaultPasswordLabel}).`
+                    : "Custom password is set."}
+                </span>
+              </label>
+            </div>
+            <label className="checkbox-line vbs-task-field">
+              <input
+                type="checkbox"
+                checked={resetPasswordToDefault}
+                onChange={(e) => {
+                  setResetPasswordToDefault(e.target.checked);
+                  if (e.target.checked) {
+                    setNewPassword("");
+                  }
+                }}
+                disabled={busy}
+              />
+              Reset password to default ({defaultPasswordLabel})
+            </label>
+            <div className="vbs-task-add-actions org-member-form-actions">
+              <button type="submit" className="vbs-plan-save" disabled={busy}>
+                {busy ? "Saving…" : "Save member"}
+              </button>
+              {canRemove ? (
+                <button
+                  type="button"
+                  className="vbs-plan-save vbs-plan-save-danger"
+                  disabled={busy}
+                  onClick={() => {
+                    if (window.confirm(`Remove ${memberDisplayName(member)} from this organization?`)) {
+                      onRemove();
+                    }
+                  }}
+                >
+                  Remove from org
+                </button>
+              ) : null}
+            </div>
           </form>
-        ) : null}
-        {canAdmin ? (
-          <form className="review-form share-form" onSubmit={(event) => void addMember(event)}>
-            <h3>Add existing user</h3>
-            <label htmlFor="member-username">Users (comma or semicolon separated)</label>
-            <OrgUserListInput
-              id="member-username"
-              value={username}
-              onChange={setUsername}
-              placeholder="Search org members by name or email…"
-              required
-            />
-            <label htmlFor="member-role">Access</label>
-            <select id="member-role" value={role} onChange={(event) => setRole(event.target.value as OrgRole)}>
-              {roles.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.label}
-                </option>
-              ))}
-            </select>
-            <button type="submit">Add member</button>
-          </form>
-        ) : null}
-
-      {canAdmin ? (
-        <button type="button" className="ghost danger" onClick={() => void onDelete()}>
-          Delete organization
-        </button>
+        </div>
       ) : null}
-      {error ? <p className="error">{error}</p> : null}
-    </div>
+    </li>
   );
 }

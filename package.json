@@ -10,7 +10,8 @@
     "start": "tsx --env-file=.env src/server.ts",
     "build": "tsc --noEmit && tsc --noEmit -p client/tsconfig.json && vite build",
     "docker:up": "docker compose up -d",
-    "docker:down": "docker compose down"
+    "docker:down": "docker compose down",
+    "cleanup:media": "tsx --env-file=.env scripts/cleanup-media.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1146.0",

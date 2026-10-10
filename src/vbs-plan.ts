@@ -40,6 +40,15 @@ export const vbsMilestoneCategories = [
 
 export type VbsMilestoneCategory = (typeof vbsMilestoneCategories)[number];
 
+export type VbsMilestoneStatus = "not_started" | "in_progress" | "done";
+
+function normalizeMilestoneStatus(input: { status?: string; done?: boolean }): VbsMilestoneStatus {
+  if (input.status === "not_started" || input.status === "in_progress" || input.status === "done") {
+    return input.status;
+  }
+  return input.done ? "done" : "not_started";
+}
+
 const milestoneCategoryAliases: Record<string, VbsMilestoneCategory> = {
   Facilities: "Facilities & safety",
   Communications: "Communications & registration",
@@ -562,7 +571,7 @@ export async function getVbsWorkspace(orgId: string, username: string) {
         [planId],
       ),
       db().query(
-        `SELECT id, plan_id, category, label, done, assigned_team_id, due_date, sort_order, notes
+        `SELECT id, plan_id, category, label, done, status, assigned_team_id, due_date, sort_order, notes
          FROM vbs_checklist_items WHERE plan_id = $1 ORDER BY sort_order, category, label`,
         [planId],
       ),
@@ -607,17 +616,21 @@ export async function getVbsWorkspace(orgId: string, username: string) {
         teamId: row.team_id ?? "",
         notes: row.notes,
       })),
-      checklist: checklist.rows.map((row) => ({
-        id: row.id,
-        planId: row.plan_id,
-        category: row.category,
-        label: row.label,
-        done: row.done,
-        assignedTeamId: row.assigned_team_id ?? "",
-        dueDate: formatPgDate(row.due_date),
-        sortOrder: row.sort_order,
-        notes: row.notes ?? "",
-      })),
+      checklist: checklist.rows.map((row) => {
+        const status = normalizeMilestoneStatus({ status: row.status, done: row.done });
+        return {
+          id: row.id,
+          planId: row.plan_id,
+          category: row.category,
+          label: row.label,
+          status,
+          done: status === "done",
+          assignedTeamId: row.assigned_team_id ?? "",
+          dueDate: formatPgDate(row.due_date),
+          sortOrder: row.sort_order,
+          notes: row.notes ?? "",
+        };
+      }),
     };
   };
 
@@ -1164,6 +1177,7 @@ export async function saveVbsChecklistItem(
     category?: string;
     label?: string;
     done?: boolean;
+    status?: string;
     assignedTeamId?: string;
     dueDate?: string;
     notes?: string;
@@ -1178,18 +1192,24 @@ export async function saveVbsChecklistItem(
     return { error: "Create a VBS plan first" as const };
   }
 
-  const doneOnlyUpdate =
+  const patchOnlyUpdate =
     input.id &&
-    typeof input.done === "boolean" &&
     !String(input.label ?? "").trim() &&
-    !String(input.category ?? "").trim();
+    !String(input.category ?? "").trim() &&
+    (typeof input.done === "boolean" ||
+      input.status === "not_started" ||
+      input.status === "in_progress" ||
+      input.status === "done");
 
-  if (doneOnlyUpdate) {
-    await db().query("UPDATE vbs_checklist_items SET done = $2 WHERE id = $1 AND plan_id = $3", [
-      input.id,
-      input.done,
-      plan.id,
-    ]);
+  if (patchOnlyUpdate) {
+    const status = normalizeMilestoneStatus({
+      status: input.status,
+      done: input.done,
+    });
+    await db().query(
+      "UPDATE vbs_checklist_items SET done = $2, status = $3 WHERE id = $1 AND plan_id = $4",
+      [input.id, status === "done", status, plan.id],
+    );
     return { ok: true as const };
   }
 
@@ -1204,31 +1224,27 @@ export async function saveVbsChecklistItem(
   const assignedTeamId = String(input.assignedTeamId ?? "").trim() || null;
   const dueDate = input.dueDate?.trim() || null;
   const notes = typeof input.notes === "string" ? input.notes.trim() : "";
+  const status = normalizeMilestoneStatus({
+    status: input.status,
+    done: input.done,
+  });
+  const done = status === "done";
 
   if (input.id) {
-    if (typeof input.done === "boolean") {
-      await db().query(
-        `UPDATE vbs_checklist_items
-         SET category=$2, label=$3, assigned_team_id=$4, due_date=$5, notes=$6, done=$7
-         WHERE id=$1 AND plan_id=$8`,
-        [input.id, category, label, assignedTeamId, dueDate, notes, input.done, plan.id],
-      );
-    } else {
-      await db().query(
-        `UPDATE vbs_checklist_items
-         SET category=$2, label=$3, assigned_team_id=$4, due_date=$5, notes=$6
-         WHERE id=$1 AND plan_id=$7`,
-        [input.id, category, label, assignedTeamId, dueDate, notes, plan.id],
-      );
-    }
+    await db().query(
+      `UPDATE vbs_checklist_items
+       SET category=$2, label=$3, assigned_team_id=$4, due_date=$5, notes=$6, done=$7, status=$8
+       WHERE id=$1 AND plan_id=$9`,
+      [input.id, category, label, assignedTeamId, dueDate, notes, done, status, plan.id],
+    );
   } else {
     const sort = await db().query<{ max: number }>(
       "SELECT COALESCE(MAX(sort_order), -1)::int AS max FROM vbs_checklist_items WHERE plan_id = $1",
       [plan.id],
     );
     await db().query(
-      `INSERT INTO vbs_checklist_items (id, plan_id, category, label, done, assigned_team_id, due_date, sort_order, notes)
-       VALUES ($1,$2,$3,$4,FALSE,$5,$6,$7,$8)`,
+      `INSERT INTO vbs_checklist_items (id, plan_id, category, label, done, status, assigned_team_id, due_date, sort_order, notes)
+       VALUES ($1,$2,$3,$4,FALSE,'not_started',$5,$6,$7,$8)`,
       [
         crypto.randomUUID(),
         plan.id,

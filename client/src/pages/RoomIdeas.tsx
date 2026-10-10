@@ -4,7 +4,7 @@ import { api } from "../api";
 import { OrgUserListInput } from "../OrgUserListInput";
 import { vbsProgramsMatching, vbsYearOptions } from "../vbs-cascade";
 import { useOrgVbs } from "../org-vbs";
-import { OrgBanner } from "../orgs";
+import { OrgWorkspacePage } from "../OrgWorkspacePage";
 import type { OrgTeam, Publisher, RoomIdea, RoomIdeaImage, ShareProgram } from "../types";
 
 const emptySlots: Array<RoomIdeaImage | null> = [null, null, null];
@@ -188,19 +188,13 @@ export default function RoomIdeasPage() {
   const publisherName = publishers.find((item) => item.id === publisherId)?.name ?? publisherId;
 
   return (
-    <div className="reviews">
-      <header className="page-head">
-        <p className="eyebrow">Room design</p>
-        <h1>Room Design</h1>
-        <OrgBanner />
-        <p className="tagline">
-          Upload a photo of your room or wall. We combine your org&apos;s design prompt and your notes to visualize
-          decorations for that VBS theme.
-        </p>
-      </header>
-
+    <OrgWorkspacePage
+      eyebrow="Room design"
+      title="Room Design"
+      tagline="Upload a photo of your room or wall. We combine your org's design prompt and your notes to visualize decorations for that VBS theme."
+    >
       <form
-        className="review-form share-form"
+        className="review-form share-form vbs-form-panel"
         onSubmit={(event) => {
           event.preventDefault();
           void generate(3);
@@ -280,10 +274,15 @@ export default function RoomIdeasPage() {
           placeholder="Example: decorate the back wall and leave the doorway clear"
         />
         <div className="form-actions">
-          <button type="submit" disabled={Boolean(busy)}>
+          <button type="submit" className="vbs-plan-save" disabled={Boolean(busy)}>
             {busy || "Generate 3 pictures"}
           </button>
-          <button type="button" className="ghost" onClick={resetForm} disabled={Boolean(busy)}>
+          <button
+            type="button"
+            className="vbs-plan-save vbs-plan-save-danger"
+            onClick={resetForm}
+            disabled={Boolean(busy)}
+          >
             Cancel
           </button>
         </div>
@@ -338,10 +337,15 @@ export default function RoomIdeasPage() {
             )}
           </div>
           <div className="form-actions">
-            <button type="button" onClick={() => void onSave()} disabled={Boolean(busy) || Boolean(saved)}>
-              {saved ? "Saved" : "Save"}
+            <button
+              type="button"
+              className="vbs-plan-save"
+              onClick={() => void onSave()}
+              disabled={Boolean(busy) || Boolean(saved)}
+            >
+              {saved ? "Saved" : "Save design"}
             </button>
-            <button type="button" className="ghost" onClick={resetForm}>
+            <button type="button" className="vbs-plan-save vbs-plan-save-danger" onClick={resetForm}>
               Cancel
             </button>
           </div>
@@ -349,7 +353,7 @@ export default function RoomIdeasPage() {
       ) : null}
 
       {saved ? (
-        <form className="review-form share-form" onSubmit={(event) => void onShare(event)}>
+        <form className="review-form share-form vbs-form-panel" onSubmit={(event) => void onShare(event)}>
           <h3>Share</h3>
           <fieldset className="share-targets">
             <legend>Teams</legend>
@@ -381,9 +385,11 @@ export default function RoomIdeasPage() {
             <input type="checkbox" checked={publicSetup} onChange={(event) => setPublicSetup(event.target.checked)} />
             Also post on public Show Your Setup
           </label>
-          <button type="submit" disabled={Boolean(busy)}>
-            Share
-          </button>
+          <div className="vbs-form-actions">
+            <button type="submit" className="vbs-plan-save" disabled={Boolean(busy)}>
+              Share design
+            </button>
+          </div>
         </form>
       ) : null}
 
@@ -391,9 +397,9 @@ export default function RoomIdeasPage() {
       {error ? <p className="error">{error}</p> : null}
 
       {ideas.length > 0 ? (
-        <section className="org-members">
-          <h2>Saved designs</h2>
-          <ul className="entry-list">
+        <section className="vbs-panel org-members">
+          <h2 className="vbs-task-team-section-title">Saved designs</h2>
+          <ul className="vbs-task-list org-member-list entry-list">
             {ideas.map((idea) => (
               <li key={idea.id} className="entry">
                 <div className="entry-meta">
@@ -413,6 +419,6 @@ export default function RoomIdeasPage() {
           </ul>
         </section>
       ) : null}
-    </div>
+    </OrgWorkspacePage>
   );
 }

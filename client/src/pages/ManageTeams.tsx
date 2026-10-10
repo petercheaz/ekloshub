@@ -1,17 +1,72 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { api } from "../api";
+import { useAuth } from "../auth";
 import { OrgUserListInput } from "../OrgUserListInput";
-import { OrgBanner } from "../orgs";
-import type { OrgDetail } from "../types";
+import { splitListTokens } from "../listInput";
+import { OrgUserTypeahead } from "../OrgUserTypeahead";
+import { OrgWorkspacePage } from "../OrgWorkspacePage";
+import type { OrgDetail, OrgTeam } from "../types";
+
+function normalizeMemberList(raw: string) {
+  return raw
+    .split(/[,;]+/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .join("; ");
+}
 
 export default function ManageTeamsPage() {
   const { orgId = "" } = useParams();
   const [detail, setDetail] = useState<OrgDetail | null>(null);
   const [error, setError] = useState("");
-  const [teamName, setTeamName] = useState("");
-  const [teamMembers, setTeamMembers] = useState("");
-  const [editingTeamId, setEditingTeamId] = useState<string | null>(null);
+  const [status, setStatus] = useState("");
+  const [expandedTeamId, setExpandedTeamId] = useState<string | null>(null);
+  const [dirtyTeamIds, setDirtyTeamIds] = useState<Set<string>>(() => new Set());
+  const [creatingTeam, setCreatingTeam] = useState(false);
+
+  function confirmDiscardTeam(teamId: string) {
+    if (!dirtyTeamIds.has(teamId)) {
+      return true;
+    }
+    return window.confirm("Discard unsaved changes to this team?");
+  }
+
+  function setTeamDirty(teamId: string, dirty: boolean) {
+    setDirtyTeamIds((current) => {
+      const next = new Set(current);
+      if (dirty) {
+        next.add(teamId);
+      } else {
+        next.delete(teamId);
+      }
+      return next;
+    });
+  }
+
+  function tryExpandTeam(teamId: string | null) {
+    if (expandedTeamId && expandedTeamId !== teamId && !confirmDiscardTeam(expandedTeamId)) {
+      return;
+    }
+    if (teamId && expandedTeamId === teamId) {
+      if (!confirmDiscardTeam(teamId)) {
+        return;
+      }
+      setTeamDirty(teamId, false);
+      setExpandedTeamId(null);
+      return;
+    }
+    setExpandedTeamId(teamId);
+  }
+
+  function openCreateTeam() {
+    if (expandedTeamId && !confirmDiscardTeam(expandedTeamId)) {
+      return;
+    }
+    setCreatingTeam(true);
+    setExpandedTeamId(null);
+    setStatus("");
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -33,24 +88,6 @@ export default function ManageTeamsPage() {
     };
   }, [orgId]);
 
-  async function saveTeam(event: FormEvent) {
-    event.preventDefault();
-    try {
-      if (editingTeamId) {
-        await api.updateTeam(orgId, editingTeamId, teamName, teamMembers);
-      } else {
-        await api.createTeam(orgId, teamName, teamMembers);
-      }
-      setDetail(await api.organization(orgId));
-      setTeamName("");
-      setTeamMembers("");
-      setEditingTeamId(null);
-      setError("");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not save team");
-    }
-  }
-
   if (error && !detail) {
     return <p className="status">{error}</p>;
   }
@@ -61,67 +98,278 @@ export default function ManageTeamsPage() {
     return <p className="status">Only org admins can manage teams.</p>;
   }
 
-  return (
-    <div className="reviews">
-      <header className="page-head">
-        <p className="eyebrow">Manage teams</p>
-        <h1>Teams</h1>
-        <OrgBanner />
-        <p className="tagline">Create groups of org members. Separate users with commas or semicolons.</p>
-      </header>
+  const teams = detail.teams ?? [];
 
-      <section className="org-members">
-        {(detail.teams ?? []).length === 0 ? <p className="muted">No teams yet.</p> : null}
-        <ul className="entry-list">
-          {(detail.teams ?? []).map((team) => (
-            <li key={team.id} className="entry">
-              <div className="entry-meta">
-                <span className="author">{team.name}</span>
-                <button
-                  type="button"
-                  className="ghost"
-                  onClick={() => {
-                    setEditingTeamId(team.id);
-                    setTeamName(team.name);
-                    setTeamMembers(team.members);
-                  }}
-                >
-                  Edit
-                </button>
-              </div>
-              <p className="entry-preview">{team.members}</p>
-            </li>
-          ))}
-        </ul>
-        <form className="review-form share-form" onSubmit={(event) => void saveTeam(event)}>
-          <h3>{editingTeamId ? "Edit team" : "Create team"}</h3>
-          <label htmlFor="team-name">Team name</label>
-          <input id="team-name" value={teamName} onChange={(event) => setTeamName(event.target.value)} required />
-          <label htmlFor="team-members">Users (comma or semicolon separated)</label>
-          <OrgUserListInput
-            id="team-members"
-            value={teamMembers}
-            onChange={setTeamMembers}
-            placeholder="Search org members by name or email…"
-            required
-          />
-          <button type="submit">{editingTeamId ? "Save team" : "Create team"}</button>
-          {editingTeamId ? (
-            <button
-              type="button"
-              className="ghost"
-              onClick={() => {
-                setEditingTeamId(null);
-                setTeamName("");
-                setTeamMembers("");
-              }}
-            >
-              Cancel
-            </button>
-          ) : null}
-        </form>
+  return (
+    <OrgWorkspacePage
+      eyebrow="Manage teams"
+      title="Teams"
+      tagline="Expand a team to edit its roster. Changes stay on your screen until you click Save team — closing the card or clicking Cancel discards them."
+      actions={
+        <button
+          type="button"
+          className="vbs-plan-save"
+          onClick={openCreateTeam}
+        >
+          Create team
+        </button>
+      }
+    >
+      {status ? <p className="status">{status}</p> : null}
+
+      {creatingTeam ? (
+        <TeamEditor
+          key="new"
+          orgId={orgId}
+          onCancel={() => setCreatingTeam(false)}
+          onSaved={async (teamName) => {
+            setDetail(await api.organization(orgId));
+            setCreatingTeam(false);
+            setError("");
+            setStatus(`Created team “${teamName}”.`);
+          }}
+          onError={(message) => {
+            setError(message);
+            setStatus("");
+          }}
+        />
+      ) : null}
+
+      <section className="vbs-panel org-members">
+        <h2 className="vbs-task-team-section-title">Organization teams</h2>
+        {teams.length === 0 ? (
+          <p className="muted vbs-task-field-hint">No teams yet. Use Create team to add your first group.</p>
+        ) : (
+          <ul className="vbs-task-list org-member-list">
+            {teams.map((team) => (
+              <TeamRow
+                key={team.id}
+                team={team}
+                orgId={orgId}
+                expanded={expandedTeamId === team.id}
+                dirty={dirtyTeamIds.has(team.id)}
+                onRequestToggle={() => {
+                  setStatus("");
+                  tryExpandTeam(expandedTeamId === team.id ? null : team.id);
+                }}
+                onDirtyChange={(dirty) => setTeamDirty(team.id, dirty)}
+                onSaved={async (teamName) => {
+                  setDetail(await api.organization(orgId));
+                  setTeamDirty(team.id, false);
+                  setExpandedTeamId(null);
+                  setError("");
+                  setStatus(`Saved “${teamName}”.`);
+                }}
+                onError={(message) => {
+                  setError(message);
+                  setStatus("");
+                }}
+              />
+            ))}
+          </ul>
+        )}
       </section>
       {error ? <p className="error">{error}</p> : null}
-    </div>
+    </OrgWorkspacePage>
+  );
+}
+
+function TeamRow({
+  team,
+  orgId,
+  expanded,
+  dirty,
+  onRequestToggle,
+  onDirtyChange,
+  onSaved,
+  onError,
+}: {
+  team: OrgTeam;
+  orgId: string;
+  expanded: boolean;
+  dirty: boolean;
+  onRequestToggle: () => void;
+  onDirtyChange: (dirty: boolean) => void;
+  onSaved: (teamName: string) => void;
+  onError: (message: string) => void;
+}) {
+  const memberCount = team.members.split(/[,;]+/).filter((s) => s.trim()).length;
+
+  return (
+    <li className={expanded ? "vbs-task-card open" : "vbs-task-card"}>
+      <button type="button" className="vbs-task-summary" aria-expanded={expanded} onClick={onRequestToggle}>
+        <span className="vbs-task-summary-main">
+          <span className="vbs-task-summary-title">{team.name}</span>
+          <span className="vbs-task-assignee-pill">{memberCount} members</span>
+          {expanded && dirty ? (
+            <span className="vbs-task-assignee-pill" title="Unsaved edits">
+              Unsaved
+            </span>
+          ) : null}
+        </span>
+        <span className="vbs-task-summary-meta muted">
+          Admin: {team.teamAdminUsername || "—"}
+          {team.members ? ` · ${team.members}` : ""}
+        </span>
+        <span className="vbs-task-chevron" aria-hidden="true">
+          {expanded ? "▾" : "▸"}
+        </span>
+      </button>
+      {expanded ? (
+        <div className="vbs-task-body">
+          <TeamEditor
+            orgId={orgId}
+            team={team}
+            onDirtyChange={onDirtyChange}
+            onCancel={onRequestToggle}
+            onSaved={onSaved}
+            onError={onError}
+          />
+        </div>
+      ) : null}
+    </li>
+  );
+}
+
+function TeamEditor({
+  orgId,
+  team,
+  onDirtyChange,
+  onCancel,
+  onSaved,
+  onError,
+}: {
+  orgId: string;
+  team?: OrgTeam;
+  onDirtyChange?: (dirty: boolean) => void;
+  onCancel: () => void;
+  onSaved: (teamName: string) => void;
+  onError: (message: string) => void;
+}) {
+  const { user } = useAuth();
+  const savedName = team?.name ?? "";
+  const savedMembers = team?.members ?? "";
+  const savedAdmin = team?.teamAdminUsername ?? user?.username ?? "";
+  const [busy, setBusy] = useState(false);
+  const [teamName, setTeamName] = useState(savedName);
+  const [teamMembers, setTeamMembers] = useState(savedMembers);
+  const [teamAdmin, setTeamAdmin] = useState(savedAdmin);
+
+  useEffect(() => {
+    setTeamName(savedName);
+    setTeamMembers(savedMembers);
+    setTeamAdmin(team?.teamAdminUsername ?? user?.username ?? "");
+  }, [team?.id, savedName, savedMembers, team?.teamAdminUsername, user?.username]);
+
+  const dirty = useMemo(() => {
+    if (!team) {
+      return teamName.trim() !== "" || teamMembers.trim() !== "" || teamAdmin.trim() !== (user?.username ?? "");
+    }
+    return (
+      teamName.trim() !== savedName.trim() ||
+      normalizeMemberList(teamMembers) !== normalizeMemberList(savedMembers) ||
+      teamAdmin.trim() !== savedAdmin.trim()
+    );
+  }, [team, teamName, teamMembers, teamAdmin, savedName, savedMembers, savedAdmin, user?.username]);
+
+  useEffect(() => {
+    onDirtyChange?.(dirty);
+  }, [dirty, onDirtyChange]);
+
+  function discard() {
+    setTeamName(savedName);
+    setTeamMembers(savedMembers);
+    setTeamAdmin(savedAdmin);
+    onDirtyChange?.(false);
+    onCancel();
+  }
+
+  async function save(event: FormEvent) {
+    event.preventDefault();
+    if (!dirty && team) {
+      onCancel();
+      return;
+    }
+    setBusy(true);
+    try {
+      const name = teamName.trim();
+      const members = teamMembers.trim();
+      const admin = teamAdmin.trim();
+      if (!admin) {
+        onError("Choose a team admin");
+        return;
+      }
+      if (team) {
+        await api.updateTeam(orgId, team.id, name, members, admin);
+      } else {
+        await api.createTeam(orgId, name, members, admin);
+      }
+      onDirtyChange?.(false);
+      onSaved(name);
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "Could not save team");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form className="vbs-task-member-form" onSubmit={(event) => void save(event)}>
+      {!team ? (
+        <p className="muted vbs-task-field-hint">Nothing is stored until you click Create team.</p>
+      ) : (
+        <p className="muted vbs-task-field-hint">
+          Picking someone from search only updates this form. Click <strong>Save team</strong> to update the
+          organization.
+        </p>
+      )}
+      <label className="vbs-task-field">
+        <span className="vbs-task-field-label">Team name</span>
+        <input
+          value={teamName}
+          onChange={(event) => setTeamName(event.target.value)}
+          required
+          disabled={busy}
+        />
+      </label>
+      <label className="vbs-task-field">
+        <span className="vbs-task-field-label">Members</span>
+        <OrgUserListInput
+          value={teamMembers}
+          onChange={setTeamMembers}
+          placeholder="Search org members by name or email…"
+          required
+          disabled={busy}
+        />
+        <span className="muted vbs-task-field-hint">Separate multiple people with commas or semicolons.</span>
+      </label>
+      <label className="vbs-task-field">
+        <span className="vbs-task-field-label">Team admin</span>
+        <OrgUserTypeahead
+          orgId={orgId}
+          value={teamAdmin}
+          onChange={setTeamAdmin}
+          memberListDraft={teamMembers}
+          placeholder={
+            splitListTokens(teamMembers).length === 0
+              ? "Add members first…"
+              : "Search someone on this team…"
+          }
+          disabled={busy || splitListTokens(teamMembers).length === 0}
+        />
+        <span className="muted vbs-task-field-hint">
+          Must be one of the members above (defaults to you when creating a team). Team admins can contact this team
+          via Contact org &amp; teams.
+        </span>
+      </label>
+      <div className="vbs-task-add-actions org-member-form-actions">
+        <button type="submit" className="vbs-plan-save" disabled={busy || (!dirty && Boolean(team))}>
+          {busy ? "Saving…" : team ? "Save team" : "Create team"}
+        </button>
+        <button type="button" className="vbs-plan-save vbs-plan-save-danger" disabled={busy} onClick={discard}>
+          Cancel
+        </button>
+      </div>
+    </form>
   );
 }

@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
 import { useOrgVbs } from "../org-vbs";
-import { OrgBanner, useOrgs } from "../orgs";
+import { OrgWorkspacePage } from "../OrgWorkspacePage";
+import { useOrgs } from "../orgs";
 import { VbsFilterPanel } from "../VbsFilterPanel";
 import { vbsPublisherOptions } from "../vbs-cascade";
 import { applyVbsFilterDefault } from "../vbs-filters";
@@ -217,16 +218,11 @@ export default function ReviewsPage() {
   }
 
   return (
-    <div className="reviews">
-      <header className="page-head">
-        <p className="eyebrow">VBS curriculum</p>
-        <h1>Curriculum Reviews</h1>
-        <OrgBanner />
-        <p className="tagline">
-          Compare publishers by year. After September 1, this page defaults to next year’s programs.
-        </p>
-      </header>
-
+    <OrgWorkspacePage
+      eyebrow="VBS curriculum"
+      title="Curriculum Reviews"
+      tagline="Compare publishers by year. After September 1, this page defaults to next year’s programs. Expand a review to read scores and notes."
+    >
       <VbsFilterPanel
         programs={catalogPrograms}
         publishers={catalogPublishers}
@@ -299,6 +295,6 @@ export default function ReviewsPage() {
           })}
         </div>
       )}
-    </div>
+    </OrgWorkspacePage>
   );
 }

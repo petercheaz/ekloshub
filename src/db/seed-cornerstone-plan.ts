@@ -1,5 +1,6 @@
 import { addDaysToIsoDate, normalizeMilestoneCategory } from "../vbs-plan.js";
 import { dedupeOrgTeamsByName } from "../teams.js";
+import { cornerstoneMemberUsernames } from "./seed-cornerstone-members.js";
 import { db } from "./pool.js";
 
 const SAMPLE_MARKER = "cornerstone-sample-v2";
@@ -137,7 +138,8 @@ export async function ensureCornerstoneSamplePlan(orgId: string, username: strin
   }
 
   const now = new Date().toISOString();
-  const members = username;
+  const roster = [...new Set([username, ...cornerstoneMemberUsernames()])].join("; ");
+  const adminOnly = username;
 
   for (const [key, teamId] of Object.entries(TEAM_IDS)) {
     const names: Record<string, string> = {
@@ -147,6 +149,7 @@ export async function ensureCornerstoneSamplePlan(orgId: string, username: strin
       vbsWeek: "VBS Week Team",
     };
     const name = names[key];
+    const members = key === "vbsWeek" ? roster : adminOnly;
     await db().query(
       `DELETE FROM org_teams
        WHERE organization_id = $1 AND LOWER(TRIM(name)) = LOWER(TRIM($2)) AND id <> $3`,

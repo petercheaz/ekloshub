@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
+import { OrgWorkspacePage } from "../OrgWorkspacePage";
 import { orgPath, useOrgs } from "../orgs";
 import type { OrgNotificationSettings } from "../types";
 
@@ -58,15 +59,11 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="reviews profile-page">
-      <header className="page-head">
-        <p className="eyebrow">Account</p>
-        <h1>Notification profile</h1>
-        <p className="tagline">
-          Choose how each organization reaches you for VBS tasks, the message board, and calendar reminders.
-          Muted users can still post—you just will not get alerts from them.
-        </p>
-      </header>
+    <OrgWorkspacePage
+      eyebrow="Account"
+      title="Notification profile"
+      tagline="Expand an organization to edit alerts. Muted users can still post—you just will not get alerts from them."
+    >
 
       {error ? <p className="error">{error}</p> : null}
       {status ? <p className="status">{status}</p> : null}
@@ -92,11 +89,11 @@ export default function ProfilePage() {
                   <h2>Tasks &amp; assignments</h2>
                   <label className="checkbox-line">
                     <input type="checkbox" name="notifyEmail" defaultChecked={org.notifyEmail} />
-                    Email me about task assignments and plan updates
+                    Email me about task assignments, plan updates, and org/team messages from admins
                   </label>
                   <label className="checkbox-line">
                     <input type="checkbox" name="notifySms" defaultChecked={org.notifySms} />
-                    Text me about urgent task updates
+                    Text me about urgent task updates and org/team messages from admins
                   </label>
 
                   <h2>Message board</h2>
@@ -148,15 +145,17 @@ export default function ProfilePage() {
                     />
                   </label>
 
-                  <button type="submit" disabled={busy}>
-                    Save {org.organizationName}
-                  </button>
+                  <div className="vbs-form-actions">
+                    <button type="submit" className="vbs-plan-save" disabled={busy}>
+                      {busy ? "Saving…" : `Save ${org.organizationName}`}
+                    </button>
+                  </div>
                 </form>
               ) : null}
             </section>
           );
         })}
       </div>
-    </div>
+    </OrgWorkspacePage>
   );
 }

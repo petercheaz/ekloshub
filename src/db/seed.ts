@@ -8,6 +8,7 @@ import { seedListings } from "../share.js";
 import { seedSetupComments, seedSetupPosts } from "../setup.js";
 import { seedUsers, seedVerifiedUsers } from "../users.js";
 import { db } from "./pool.js";
+import { ensureCornerstoneMembers } from "./seed-cornerstone-members.js";
 import { ensureCornerstoneSamplePlan } from "./seed-cornerstone-plan.js";
 import { putObject } from "./s3.js";
 
@@ -109,14 +110,15 @@ export async function ensureKnownAccounts() {
   const passwordHash = bcrypt.hashSync(process.env.AUTH_PASSWORD ?? "vbs-dev", 10);
   const username = "pcheaz@gmail.com";
   await db().query(
-    `INSERT INTO users (username, password_hash, verified, platform_admin, email, first_name, last_name, phone)
-     VALUES ($1,$2,TRUE,FALSE,$1,'Peter','Cheaz','4253547740')
+    `INSERT INTO users (username, password_hash, password_custom, verified, platform_admin, email, first_name, last_name, phone)
+     VALUES ($1,$2,TRUE,TRUE,FALSE,$1,'Peter','Cheaz','4253547740')
      ON CONFLICT (username) DO UPDATE SET
        email = EXCLUDED.email,
        first_name = EXCLUDED.first_name,
        last_name = EXCLUDED.last_name,
        phone = EXCLUDED.phone,
-       verified = TRUE`,
+       verified = TRUE,
+       password_custom = TRUE`,
     [username, passwordHash],
   );
 
@@ -139,6 +141,8 @@ export async function ensureKnownAccounts() {
      ON CONFLICT (organization_id, username) DO UPDATE SET role = 'org_admin'`,
     [id, username],
   );
+
+  await ensureCornerstoneMembers(id);
 
   await db().query(
     `UPDATE org_teams SET name = 'Building Team'

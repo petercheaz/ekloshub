@@ -9,7 +9,7 @@ export type UserSuggestion = {
   email: string;
 };
 
-export type OrgRole = "org_admin" | "org_write" | "org_read";
+export type OrgRole = "org_admin" | "org_team_admin" | "org_write" | "org_read";
 
 export type Organization = {
   id: string;
@@ -24,6 +24,13 @@ export type Organization = {
 export type OrgMember = {
   username: string;
   role: OrgRole;
+  email: string;
+  firstName: string;
+  lastName: string;
+  phone: string;
+  verified: boolean;
+  usesDefaultPassword: boolean;
+  teamAdminTeamIds: string[];
 };
 
 export type OrgInvite = {
@@ -42,6 +49,7 @@ export type OrgTeam = {
   name: string;
   members: string;
   memberUsernames: string[];
+  teamAdminUsername: string;
   createdAt: string;
 };
 
@@ -50,6 +58,15 @@ export type OrgDetail = {
   members: OrgMember[];
   invitations: OrgInvite[];
   teams: OrgTeam[];
+  vbsDefaultPassword?: string;
+  contactTeamIds?: string[];
+};
+
+export type OrgContactOptions = {
+  canContactWholeOrg: boolean;
+  teams: { id: string; name: string; memberCount: number }[];
+  memberCount: number;
+  role: OrgRole;
 };
 
 export type RoomIdeaImage = {
@@ -314,11 +331,14 @@ export type VbsScheduleSlot = {
   notes: string;
 };
 
+export type VbsMilestoneStatus = "not_started" | "in_progress" | "done";
+
 export type VbsChecklistItem = {
   id: string;
   planId: string;
   category: string;
   label: string;
+  status: VbsMilestoneStatus;
   done: boolean;
   assignedTeamId: string;
   dueDate: string;
@@ -422,6 +442,20 @@ export type VbsPlanWorkspace = {
   milestoneCategories: string[];
   scheduleActivityLabels: string[];
   canAdmin: boolean;
+};
+
+export type PhotoshoppeBrowseResult = {
+  folderId: string | null;
+  path: { id: string | null; name: string }[];
+  folders: { id: string; name: string; updatedAt: string }[];
+  documents: {
+    id: string;
+    name: string;
+    parentId: string | null;
+    previewUrl: string;
+    updatedAt: string;
+    updatedBy: string;
+  }[];
 };
 
 export type ReviewDraft = {

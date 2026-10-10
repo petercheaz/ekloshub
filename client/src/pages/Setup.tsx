@@ -1,7 +1,8 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
 import { useOrgVbs } from "../org-vbs";
-import { OrgBanner, useOrgs } from "../orgs";
+import { OrgWorkspacePage } from "../OrgWorkspacePage";
+import { useOrgs } from "../orgs";
 import { VbsFilterPanel } from "../VbsFilterPanel";
 import { isSpecificVbsFilter, vbsProgramsMatching, vbsPublisherOptions } from "../vbs-cascade";
 import { applyVbsFilterDefault } from "../vbs-filters";
@@ -273,16 +274,15 @@ export default function SetupPage() {
   }
 
   return (
-    <div className="reviews">
-      <header className="page-head">
-        <p className="eyebrow">Rooms, hallways, and stations</p>
-        <h1>Show Your Setup</h1>
-        <OrgBanner />
-        <p className="tagline">Post photos, notes, and video of how you decorated. Comment on other churches’ setups.</p>
-        {canWrite ? (
+    <OrgWorkspacePage
+      eyebrow="Rooms, hallways, and stations"
+      title="Show Your Setup"
+      tagline="Post photos, notes, and video of how you decorated. Expand an entry to comment or see attachments."
+      actions={
+        canWrite ? (
           <button
             type="button"
-            className="ghost"
+            className="vbs-plan-save"
             onClick={() => {
               setDraft((current) => ({
                 ...current,
@@ -296,11 +296,11 @@ export default function SetupPage() {
           >
             Add an entry
           </button>
-        ) : null}
-      </header>
-
+        ) : null
+      }
+    >
       {showForm ? (
-        <form className="review-form share-form" onSubmit={(event) => void onSubmit(event)}>
+        <form className="review-form share-form vbs-form-panel" onSubmit={(event) => void onSubmit(event)}>
           <h3>New setup</h3>
           <label htmlFor="setup-year">Year</label>
           <select
@@ -410,10 +410,10 @@ export default function SetupPage() {
             </ul>
           ) : null}
           <div className="form-actions">
-            <button type="submit" disabled={submitting}>
-              {submitting ? "Saving…" : "Save"}
+            <button type="submit" className="vbs-plan-save" disabled={submitting}>
+              {submitting ? "Saving…" : "Save setup"}
             </button>
-            <button type="button" className="ghost" onClick={closeForm}>
+            <button type="button" className="vbs-plan-save vbs-plan-save-danger" onClick={closeForm}>
               Cancel
             </button>
           </div>
@@ -573,6 +573,6 @@ export default function SetupPage() {
           ))}
         </div>
       )}
-    </div>
+    </OrgWorkspacePage>
   );
 }

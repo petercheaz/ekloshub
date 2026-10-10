@@ -106,6 +106,7 @@ export type ReadinessRow = {
   assignedTeamId: string;
   dueDate: string;
   done: boolean;
+  status: string;
 };
 
 export function buildReadinessRows(ctx: WorksheetViewContext): ReadinessRow[] {
@@ -134,6 +135,7 @@ export function buildReadinessRows(ctx: WorksheetViewContext): ReadinessRow[] {
     assignedTeamId: item.assignedTeamId,
     dueDate: item.dueDate,
     done: item.done,
+    status: item.status,
   }));
 }
 

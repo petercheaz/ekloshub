@@ -1,4 +1,5 @@
 import type { OrgTeam, VbsChecklistItem, VbsPlan, VbsScheduleSlot, VbsTask } from "./types";
+import { MILESTONE_STATUS_LABELS, normalizeMilestoneStatus } from "./vbs-milestone-status";
 
 export type CalendarItemType = "task" | "schedule" | "checklist" | "plan_start" | "plan_end";
 export type CalendarViewMode = "day" | "week" | "month";
@@ -177,7 +178,7 @@ export function buildPlanCalendarEvents(input: {
       continue;
     }
     const team = item.assignedTeamId ? teamName(item.assignedTeamId) : "Unassigned";
-    const meta = `Milestone · ${item.category} · ${item.done ? "done" : "open"} · ${team}`;
+    const meta = `Milestone · ${item.category} · ${MILESTONE_STATUS_LABELS[normalizeMilestoneStatus(item)]} · ${team}`;
     events.push({
       key: `checklist-${item.id}`,
       itemType: "checklist",
