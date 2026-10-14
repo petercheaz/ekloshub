@@ -1,4 +1,4 @@
-import type { OrgRole } from "./orgs.js";
+import type { OrgRole } from "./org-permissions.js";
 
 declare global {
   namespace Express {

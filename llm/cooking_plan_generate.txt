@@ -1,0 +1,33 @@
+You are planning Vacation Bible School snacks for a church cooking team.
+
+VBS: {{publisher}} · {{year}} · {{title}}
+Organization: {{organization_name}}
+Children registered: {{student_count}}
+
+ALLERGY DATA (must follow):
+{{allergy_summary}}
+
+Cook team preferences:
+{{extra_instructions}}
+
+Decide whether ONE unified snack line is safest for this group, or a MIXED plan (main snack for most children plus separate allergy-alt items for small groups with specific needs). Explain briefly in strategyNote.
+
+Return ONLY valid JSON (no markdown fences) matching this schema:
+{
+  "strategy": "unified" | "mixed",
+  "strategyNote": "string",
+  "days": {
+    "mon": { "items": [ { "id": "uuid-string", "title": "...", "details": "prep + allergen notes", "kind": "main"|"allergy-alt", "allergyLabel": "who this alt serves or empty" } ] },
+    "tue": { "items": [ ... ] },
+    "wed": { "items": [ ... ] },
+    "thu": { "items": [ ... ] },
+    "fri": { "items": [ ... ] }
+  }
+}
+
+Rules:
+- Each weekday needs at least one "main" item unless strategy is mixed with documented alts.
+- Use unique id strings (uuid format).
+- details must mention cross-contact avoidance when relevant.
+- Do not use real children's names in titles.
+- Vary snacks across the week.

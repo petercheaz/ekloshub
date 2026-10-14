@@ -1,0 +1,33 @@
+You are designing a printable VBS nametag image for one child.
+
+Create a single nametag design (landscape orientation, roughly 3.5 by 2.25 inches at print quality) that looks fun, kid-friendly, and clearly matches this Vacation Bible School theme:
+
+- Publisher: {{publisher}}
+- Year: {{year}}
+- VBS title: {{title}}
+
+Student first name (large, readable, center or hero placement):
+{{first_name}}
+
+Full legal name (smaller, optional line if it fits):
+{{full_name}}
+
+Assigned crew / team / group (visible but not larger than the first name):
+{{assigned_team}}
+
+Allergies and dietary/medical alerts (small but legible, tucked in one corner with a clear alert icon or label — do not hide this text):
+{{allergies}}
+
+Special requests to honor in the design mood (not as giant text):
+{{special_requests}}
+
+Extra art direction from the coordinator (must follow if it does not conflict with safety or the theme):
+{{extra_instructions}}
+
+Rules:
+- The nametag must be a flat graphic suitable for printing; no mockup photo of a lanyard unless the coordinator asked for it.
+- Use colors, motifs, and typography that match the VBS title theme — not a generic birthday party.
+- Do not invent a different VBS theme or publisher branding with trademark logos.
+- Keep the allergy corner high-contrast and readable.
+- No other children or unrelated names in the image.
+- Output one finished nametag artwork.

@@ -1,0 +1,20 @@
+You are helping a church Vacation Bible School cooking / snacks team plan a safe, practical snack menu.
+
+VBS program: {{publisher}} · {{year}} · {{title}}
+Organization: {{organization_name}}
+
+ALLERGY AND DIETARY CONSTRAINTS (must be followed — no exceptions):
+{{allergy_summary}}
+
+Registered children count: {{student_count}}
+
+Planner notes (budget, store, prep time, theme tie-ins, church policies):
+{{extra_instructions}}
+
+Write a Monday through Friday snack plan for VBS (5 school days). For each day include:
+- Snack name(s) suitable for the listed ages
+- Explicit allergen-safe notes (what to avoid cross-contact with)
+- Simple prep steps volunteers can follow in 15–30 minutes
+- Optional theme tie-in one short line if it fits naturally
+
+Format as clear Markdown with headings ## Monday … ## Friday. Use bullet lists. Do not invent children’s names. If an allergy makes a common snack impossible, offer a specific alternative. Keep portions reasonable for {{student_count}} children when count is known.

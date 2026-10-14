@@ -18,7 +18,7 @@ import {
 import { applySchema } from "./db/schema.js";
 import { isAcceptableAttachment } from "./media-limits.js";
 import { waitForDb } from "./db/pool.js";
-import { getObject, waitForS3 } from "./db/s3.js";
+import { getObject, userCanAccessObjectKey, waitForS3 } from "./db/s3.js";
 import { ensureKnownAccounts, seedIfEmpty } from "./db/seed.js";
 import { isPlatformAdmin, isVerified, searchUsers } from "./users.js";
 import {
@@ -31,7 +31,7 @@ import {
   updateOrganizationMember,
 } from "./orgs.js";
 import { acceptInvite, createInvites, getInvite } from "./invites.js";
-import { createTeam, listTeamsForViewer, updateTeam } from "./teams.js";
+import { createTeam, deleteTeam, listTeamsForViewer, updateTeam } from "./teams.js";
 import {
   generateRoomIdeaImages,
   listRoomIdeas,
@@ -47,6 +47,7 @@ import {
 } from "./photoshoppe-files.js";
 import {
   listNotifications,
+  markAllNotificationsRead,
   markNotificationRead,
   unreadNotificationCount,
 } from "./notifications.js";
@@ -71,7 +72,38 @@ import {
   updateVbsNotificationPrefs,
   upsertVbsPlan,
 } from "./vbs-plan.js";
+import {
+  deleteRegistrationStudent,
+  generateRegistrationNametag,
+  getRegistrationWorkspace,
+  saveRegistrationStudent,
+} from "./vbs-registration.js";
+import {
+  assignClassStaff,
+  assignStudentClass,
+  deleteRegistrationClass,
+  removeClassStaff,
+  saveRegistrationClass,
+} from "./vbs-registration-classes.js";
+import { generateSnacksMenu, getCookingWorkspace, saveCookingSettings } from "./vbs-registration-cooking.js";
+import {
+  generateCookingPlan,
+  getCookingPlanWorkspace,
+  saveCookingPlanLayout,
+  saveCookingPlanSettings,
+} from "./vbs-cooking-plan.js";
+import {
+  closeReimbursementCycle,
+  getReimbursementQueue,
+  markTaskReimbursed,
+} from "./vbs-reimbursements.js";
+import {
+  getPublicRegistrationForm,
+  submitPublicRegistration,
+  updatePublicRegistrationSettings,
+} from "./vbs-public-registration.js";
 import { createBoardPost, createBoardReply } from "./vbs-board.js";
+import { getUserContact, saveUserContact } from "./user-contact.js";
 import { getNotificationProfile, updateOrgNotificationProfile } from "./user-profile.js";
 import {
   processCalendarReminders,
@@ -83,19 +115,28 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const clientDist = path.join(__dirname, "..", "dist", "client");
 const port = Number(process.env.PORT) || 3000;
 const publisherIds = new Set(publishers.map((publisher) => publisher.id));
+const isProduction = process.env.NODE_ENV === "production";
+const sessionSecret = process.env.SESSION_SECRET?.trim();
+if (isProduction && !sessionSecret) {
+  throw new Error("SESSION_SECRET is required when NODE_ENV=production");
+}
 
 const app = express();
+if (isProduction) {
+  app.set("trust proxy", 1);
+}
 
 app.use(express.json({ limit: "25mb" }));
 app.use(
   session({
     name: "vbs.sid",
-    secret: process.env.SESSION_SECRET ?? "dev-only-change-me",
+    secret: sessionSecret ?? "dev-only-change-me",
     resave: false,
     saveUninitialized: false,
     cookie: {
       httpOnly: true,
       sameSite: "lax",
+      secure: isProduction,
       maxAge: 7 * 24 * 60 * 60 * 1000,
     },
   }),
@@ -287,6 +328,16 @@ app.patch("/api/orgs/:id/teams/:teamId", requireAuth, async (req, res) => {
   res.json(result.team);
 });
 
+app.delete("/api/orgs/:id/teams/:teamId", requireAuth, async (req, res) => {
+  const result = await deleteTeam(String(req.params.id), String(req.params.teamId), req.session.user!.username);
+  if ("error" in result) {
+    const message = result.error ?? "Could not delete team";
+    res.status(message === "Team not found" ? 404 : 403).json(result);
+    return;
+  }
+  res.json(result);
+});
+
 app.get("/api/orgs/:id/room-ideas", requireAuth, async (req, res) => {
   const result = await listRoomIdeas(String(req.params.id), req.session.user!.username);
   if ("error" in result) {
@@ -427,10 +478,341 @@ app.put("/api/orgs/:id/vbs-default", requireAuth, async (req, res) => {
   res.json(result);
 });
 
+app.get("/api/public/register/:token", async (req, res) => {
+  const result = await getPublicRegistrationForm(String(req.params.token));
+  if ("error" in result) {
+    res.status(404).json(result);
+    return;
+  }
+  res.json(result);
+});
+
+app.post("/api/public/register/:token", async (req, res) => {
+  const result = await submitPublicRegistration(
+    String(req.params.token),
+    req.body as Record<string, unknown>,
+    { ip: req.ip, forwarded: req.get("x-forwarded-for") ?? undefined },
+  );
+  if (!("ok" in result)) {
+    res.status(400).json(result);
+    return;
+  }
+  res.status(201).json(result);
+});
+
+app.patch("/api/orgs/:id/vbs-registration/public", requireAuth, async (req, res) => {
+  const body = req.body as { enabled?: unknown; regenerateToken?: unknown };
+  const result = await updatePublicRegistrationSettings(
+    String(req.params.id),
+    req.session.user!.username,
+    {
+      enabled: typeof body.enabled === "boolean" ? body.enabled : undefined,
+      regenerateToken: body.regenerateToken === true,
+    },
+  );
+  if ("error" in result) {
+    const message = result.error ?? "Error";
+    res.status(message.includes("permission") ? 403 : 400).json(result);
+    return;
+  }
+  res.json(result);
+});
+
+app.get("/api/orgs/:id/vbs-registration", requireAuth, async (req, res) => {
+  const result = await getRegistrationWorkspace(String(req.params.id), req.session.user!.username);
+  if ("error" in result) {
+    res.status(403).json(result);
+    return;
+  }
+  res.json(result);
+});
+
+app.get("/api/orgs/:id/vbs-registration/cooking", requireAuth, async (req, res) => {
+  const result = await getCookingWorkspace(String(req.params.id), req.session.user!.username);
+  if ("error" in result) {
+    const message = result.error ?? "Error";
+    res.status(message.includes("permission") ? 403 : 400).json(result);
+    return;
+  }
+  res.json(result);
+});
+
+app.patch("/api/orgs/:id/vbs-registration/cooking", requireAuth, async (req, res) => {
+  const body = req.body as { cookingTeamId?: unknown; extraInstructions?: unknown };
+  const result = await saveCookingSettings(String(req.params.id), req.session.user!.username, {
+    cookingTeamId: typeof body.cookingTeamId === "string" ? body.cookingTeamId : undefined,
+    extraInstructions: typeof body.extraInstructions === "string" ? body.extraInstructions : undefined,
+  });
+  if ("error" in result) {
+    const message = result.error ?? "Error";
+    res.status(message.includes("permission") ? 403 : 400).json(result);
+    return;
+  }
+  res.json(result);
+});
+
+app.get("/api/orgs/:id/cooking-plan", requireAuth, async (req, res) => {
+  const result = await getCookingPlanWorkspace(String(req.params.id), req.session.user!.username);
+  if ("error" in result) {
+    const message = result.error ?? "Error";
+    res.status(message.includes("permission") ? 403 : 400).json(result);
+    return;
+  }
+  res.json(result);
+});
+
+app.patch("/api/orgs/:id/cooking-plan", requireAuth, async (req, res) => {
+  const body = req.body as { cookingTeamId?: unknown; extraInstructions?: unknown };
+  const result = await saveCookingPlanSettings(String(req.params.id), req.session.user!.username, {
+    cookingTeamId: typeof body.cookingTeamId === "string" ? body.cookingTeamId : undefined,
+    extraInstructions: typeof body.extraInstructions === "string" ? body.extraInstructions : undefined,
+  });
+  if ("error" in result) {
+    const message = result.error ?? "Error";
+    res.status(message.includes("permission") ? 403 : 400).json(result);
+    return;
+  }
+  res.json(result);
+});
+
+app.put("/api/orgs/:id/cooking-plan/layout", requireAuth, async (req, res) => {
+  const result = await saveCookingPlanLayout(
+    String(req.params.id),
+    req.session.user!.username,
+    req.body,
+  );
+  if ("error" in result) {
+    const message = result.error ?? "Error";
+    res.status(message.includes("permission") ? 403 : 400).json(result);
+    return;
+  }
+  res.json(result);
+});
+
+app.post("/api/orgs/:id/cooking-plan/generate", requireAuth, async (req, res) => {
+  const body = req.body as { publisherId?: unknown; year?: unknown; title?: unknown; replaceItemIds?: unknown };
+  const replaceItemIds = Array.isArray(body.replaceItemIds)
+    ? body.replaceItemIds.filter((id): id is string => typeof id === "string")
+    : undefined;
+  const result = await generateCookingPlan(String(req.params.id), req.session.user!.username, {
+    publisherId: typeof body.publisherId === "string" ? body.publisherId : "",
+    year: Number(body.year),
+    title: typeof body.title === "string" ? body.title : "",
+    replaceItemIds,
+  });
+  if ("error" in result) {
+    const message = result.error ?? "Error";
+    res.status(message.includes("permission") ? 403 : 400).json(result);
+    return;
+  }
+  res.json(result);
+});
+
+app.post("/api/orgs/:id/vbs-registration/cooking/generate-menu", requireAuth, async (req, res) => {
+  const body = req.body as {
+    publisherId?: unknown;
+    year?: unknown;
+    title?: unknown;
+    regenerateDays?: unknown;
+    dayHints?: unknown;
+  };
+  const dayHintsRaw = body.dayHints;
+  const dayHints =
+    dayHintsRaw && typeof dayHintsRaw === "object" && !Array.isArray(dayHintsRaw)
+      ? (dayHintsRaw as Partial<Record<string, string>>)
+      : undefined;
+  const result = await generateSnacksMenu(String(req.params.id), req.session.user!.username, {
+    publisherId: typeof body.publisherId === "string" ? body.publisherId : "",
+    year: Number(body.year),
+    title: typeof body.title === "string" ? body.title : "",
+    regenerateDays: body.regenerateDays,
+    dayHints,
+  });
+  if ("error" in result) {
+    const message = result.error ?? "Error";
+    res.status(message.includes("permission") ? 403 : 400).json(result);
+    return;
+  }
+  res.json(result);
+});
+
+app.post("/api/orgs/:id/vbs-registration/students", requireAuth, async (req, res) => {
+  const result = await saveRegistrationStudent(
+    String(req.params.id),
+    req.session.user!.username,
+    req.body as Record<string, unknown>,
+  );
+  if (!("student" in result)) {
+    const message = "error" in result ? (result.error ?? "Error") : "Error";
+    res.status(message.includes("permission") ? 403 : 400).json(result);
+    return;
+  }
+  res.status(typeof (req.body as { id?: string }).id === "string" ? 200 : 201).json(result);
+});
+
+app.post("/api/orgs/:id/vbs-registration/classes", requireAuth, async (req, res) => {
+  const result = await saveRegistrationClass(
+    String(req.params.id),
+    req.session.user!.username,
+    req.body as Record<string, unknown>,
+  );
+  if ("error" in result) {
+    const message = result.error ?? "Error";
+    res.status(message.includes("permission") ? 403 : 400).json(result);
+    return;
+  }
+  res.json(result);
+});
+
+app.delete("/api/orgs/:id/vbs-registration/classes/:classId", requireAuth, async (req, res) => {
+  const result = await deleteRegistrationClass(
+    String(req.params.id),
+    req.session.user!.username,
+    String(req.params.classId),
+  );
+  if ("error" in result) {
+    const message = result.error ?? "Error";
+    res.status(message.includes("permission") ? 403 : 400).json(result);
+    return;
+  }
+  res.json(result);
+});
+
+app.patch("/api/orgs/:id/vbs-registration/students/:studentId/class", requireAuth, async (req, res) => {
+  const body = req.body as { classId?: unknown };
+  const classId =
+    body.classId === null || body.classId === ""
+      ? null
+      : typeof body.classId === "string"
+        ? body.classId.trim()
+        : null;
+  const result = await assignStudentClass(
+    String(req.params.id),
+    req.session.user!.username,
+    String(req.params.studentId),
+    classId,
+  );
+  if ("error" in result) {
+    const message = result.error ?? "Error";
+    res.status(message.includes("permission") ? 403 : 400).json(result);
+    return;
+  }
+  res.json(result);
+});
+
+app.put("/api/orgs/:id/vbs-registration/classes/:classId/staff", requireAuth, async (req, res) => {
+  const body = req.body as { username?: unknown; role?: unknown };
+  const roleRaw = typeof body.role === "string" ? body.role : "teacher";
+  const role = roleRaw === "leader" ? "leader" : roleRaw === "helper" ? "helper" : "teacher";
+  const username = typeof body.username === "string" ? body.username : "";
+  const result = await assignClassStaff(
+    String(req.params.id),
+    req.session.user!.username,
+    String(req.params.classId),
+    username,
+    role,
+  );
+  if ("error" in result) {
+    const message = result.error ?? "Error";
+    res.status(message.includes("permission") ? 403 : 400).json(result);
+    return;
+  }
+  res.json(result);
+});
+
+app.delete(
+  "/api/orgs/:id/vbs-registration/classes/:classId/staff/:username",
+  requireAuth,
+  async (req, res) => {
+    const result = await removeClassStaff(
+      String(req.params.id),
+      req.session.user!.username,
+      String(req.params.classId),
+      String(req.params.username),
+    );
+    if ("error" in result) {
+      const message = result.error ?? "Error";
+      res.status(message.includes("permission") ? 403 : 400).json(result);
+      return;
+    }
+    res.json(result);
+  },
+);
+
+app.delete("/api/orgs/:id/vbs-registration/students/:studentId", requireAuth, async (req, res) => {
+  const result = await deleteRegistrationStudent(
+    String(req.params.id),
+    req.session.user!.username,
+    String(req.params.studentId),
+  );
+  if ("error" in result) {
+    const message = result.error ?? "Error";
+    res.status(message.includes("permission") ? 403 : 400).json(result);
+    return;
+  }
+  res.json(result);
+});
+
+app.post("/api/orgs/:id/vbs-registration/students/:studentId/nametag", requireAuth, async (req, res) => {
+  const body = req.body as Record<string, unknown>;
+  const result = await generateRegistrationNametag(
+    String(req.params.id),
+    req.session.user!.username,
+    String(req.params.studentId),
+    {
+      publisherId: typeof body.publisherId === "string" ? body.publisherId : "",
+      year: Number(body.year),
+      title: typeof body.title === "string" ? body.title : "",
+      extraInstructions: typeof body.extraInstructions === "string" ? body.extraInstructions : "",
+      assignedTeamId: typeof body.assignedTeamId === "string" ? body.assignedTeamId : "",
+    },
+  );
+  if (!("student" in result)) {
+    const message = "error" in result ? (result.error ?? "Error") : "Error";
+    res.status(message.includes("permission") ? 403 : 400).json(result);
+    return;
+  }
+  res.json(result);
+});
+
 app.get("/api/orgs/:id/vbs-plan", requireAuth, async (req, res) => {
   const result = await getVbsWorkspace(String(req.params.id), req.session.user!.username);
   if ("error" in result) {
     res.status(403).json(result);
+    return;
+  }
+  res.json(result);
+});
+
+app.get("/api/orgs/:id/vbs-plan/reimbursements", requireAuth, async (req, res) => {
+  const result = await getReimbursementQueue(String(req.params.id), req.session.user!.username);
+  if ("error" in result) {
+    const message = result.error ?? "Error";
+    res.status(message.includes("org admin") ? 403 : 400).json(result);
+    return;
+  }
+  res.json(result);
+});
+
+app.post("/api/orgs/:id/vbs-plan/reimbursements/:taskId/reimbursed", requireAuth, async (req, res) => {
+  const result = await markTaskReimbursed(
+    String(req.params.id),
+    req.session.user!.username,
+    String(req.params.taskId),
+  );
+  if ("error" in result) {
+    const message = result.error ?? "Error";
+    res.status(message.includes("org admin") ? 403 : 400).json(result);
+    return;
+  }
+  res.json(result);
+});
+
+app.post("/api/orgs/:id/vbs-plan/reimbursements/close-cycle", requireAuth, async (req, res) => {
+  const result = await closeReimbursementCycle(String(req.params.id), req.session.user!.username);
+  if ("error" in result) {
+    const message = result.error ?? "Error";
+    res.status(message.includes("org admin") ? 403 : 400).json(result);
     return;
   }
   res.json(result);
@@ -683,6 +1065,30 @@ app.get("/api/profile/notifications", requireAuth, async (req, res) => {
   res.json(result);
 });
 
+app.get("/api/profile/contact", requireAuth, async (req, res) => {
+  const result = await getUserContact(req.session.user!.username);
+  if ("error" in result) {
+    res.status(404).json(result);
+    return;
+  }
+  res.json(result);
+});
+
+app.patch("/api/profile/contact", requireAuth, async (req, res) => {
+  const body = req.body as Record<string, unknown>;
+  const result = await saveUserContact(req.session.user!.username, {
+    email: typeof body.email === "string" ? body.email : "",
+    phone: typeof body.phone === "string" ? body.phone : "",
+    firstName: typeof body.firstName === "string" ? body.firstName : "",
+    lastName: typeof body.lastName === "string" ? body.lastName : "",
+  });
+  if ("error" in result) {
+    res.status(404).json(result);
+    return;
+  }
+  res.json(result);
+});
+
 app.patch("/api/orgs/:id/profile/notifications", requireAuth, async (req, res) => {
   const body = req.body as Record<string, unknown>;
   const result = await updateOrgNotificationProfile(String(req.params.id), req.session.user!.username, {
@@ -788,15 +1194,17 @@ app.post("/api/orgs/:id/room-ideas/:ideaId/share", requireAuth, async (req, res)
 });
 
 app.post("/api/orgs/:id/invites", requireAuth, async (req, res) => {
-  const body = req.body as { emails?: unknown };
+  const body = req.body as { emails?: unknown; role?: unknown };
   const result = await createInvites(
     String(req.params.id),
     req.session.user!.username,
     typeof body.emails === "string" ? body.emails : "",
+    typeof body.role === "string" ? body.role : "org_read",
   );
   if ("error" in result) {
+    const message = result.error ?? "Error";
     const status =
-      result.error === "Organization not found" ? 404 : result.error === "Only org admins can send invites" ? 403 : 400;
+      message === "Organization not found" ? 404 : message.includes("admin") ? 403 : 400;
     res.status(status).json(result);
     return;
   }
@@ -849,6 +1257,15 @@ app.get("/api/notifications", requireAuth, async (req, res) => {
 app.post("/api/notifications/:id/read", requireAuth, async (req, res) => {
   await markNotificationRead(req.session.user!.username, String(req.params.id));
   res.json({ ok: true });
+});
+
+app.post("/api/notifications/read-all", requireAuth, async (req, res) => {
+  const marked = await markAllNotificationsRead(req.session.user!.username);
+  res.json({
+    ok: true,
+    unread: await unreadNotificationCount(req.session.user!.username),
+    marked,
+  });
 });
 
 app.delete("/api/orgs/:id/members/:username", requireAuth, async (req, res) => {
@@ -1164,6 +1581,11 @@ app.use("/files", requireAuth, async (req, res) => {
   const key = decodeURIComponent(req.path.replace(/^\/+/, ""));
   if (!key || key.includes("..")) {
     res.status(400).json({ error: "Invalid file" });
+    return;
+  }
+  const username = req.session.user!.username;
+  if (!(await userCanAccessObjectKey(username, key))) {
+    res.status(404).json({ error: "File not found" });
     return;
   }
   try {

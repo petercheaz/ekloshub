@@ -13,7 +13,7 @@ const RAIL_KEY = "vbs.railCollapsed";
 function Shell() {
   const { user, loading, logout } = useAuth();
   const { unreadCount } = useMessages();
-  const { notifications, unread, markRead } = useNotifications();
+  const { notifications, unread, markRead, markAllRead } = useNotifications();
   const { organizations, tenantId } = useOrgs();
   const location = useLocation();
   const [showNotices, setShowNotices] = useState(false);
@@ -181,6 +181,15 @@ function Shell() {
             </button>
             {showNotices ? (
               <div className="notice-panel">
+                {unread > 0 ? (
+                  <button
+                    type="button"
+                    className="ghost notice-mark-all"
+                    onClick={() => void markAllRead()}
+                  >
+                    Mark all read
+                  </button>
+                ) : null}
                 {notifications.length === 0 ? <p className="muted">No notifications</p> : null}
                 {notifications.map((item) => (
                   <Link
@@ -265,6 +274,18 @@ function OrgGroup({
             collapsed={false}
           />
           <RailLink
+            to={`/org/${org.id}/registration`}
+            icon={ICONS.users}
+            label="Registration"
+            collapsed={false}
+          />
+          <RailLink
+            to={`/org/${org.id}/cooking-plan`}
+            icon={ICONS.food}
+            label="Cooking Plan"
+            collapsed={false}
+          />
+          <RailLink
             to={`/org/${org.id}/room-design`}
             icon={ICONS.sparkle}
             label="Room Design"
@@ -284,21 +305,21 @@ function OrgGroup({
               collapsed={false}
             />
           ) : null}
+          {org.role === "org_admin" || org.role === "registration_admin" ? (
+            <RailLink
+              to={`/org/${org.id}/manage`}
+              icon={ICONS.settings}
+              label="Manage Org"
+              collapsed={false}
+            />
+          ) : null}
           {org.role === "org_admin" ? (
-            <>
-              <RailLink
-                to={`/org/${org.id}/manage`}
-                icon={ICONS.settings}
-                label="Manage Org"
-                collapsed={false}
-              />
-              <RailLink
-                to={`/org/${org.id}/teams`}
-                icon={ICONS.users}
-                label="Manage Teams"
-                collapsed={false}
-              />
-            </>
+            <RailLink
+              to={`/org/${org.id}/teams`}
+              icon={ICONS.users}
+              label="Manage Teams"
+              collapsed={false}
+            />
           ) : null}
         </div>
       ) : null}
@@ -353,6 +374,8 @@ const ICONS = {
     "M20 2H4a2 2 0 0 0-2 2v18l4-4h14a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2zm-2 12H6v-2h12zm0-3H6V9h12zm0-3H6V6h12z",
   calendar:
     "M19 4h-1V2h-2v2H8V2H6v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2zm0 16H5V10h14v10zM7 12h2v2H7v-2zm4 0h2v2h-2v-2zm4 0h2v2h-2v-2z",
+  food:
+    "M8.1 13.34l2.83-2.83L3.91 3.5a4.008 4.008 0 0 0 0 5.66l4.19 4.19zm6.78-1.81a11.044 11.044 0 0 1-2.66 6.05l1.42 1.42c1.17-1.88 1.9-4.02 2.09-6.29h-2.85v-1.18zM20 2H4c-1.1 0-2 .9-2 2v3.01c0 .72.43 1.34 1 1.69V20c0 1.1 1.1 2 2 2h14c.55 0 1-.45 1-1v-1h-6.34C16.93 20.06 14.5 18 12 18s-4.93 2.06-5.66 4.5H4v-9.81C4.57 12.34 5 11.72 5 11.01V4h15v3h2V4c0-1.1-.9-2-2-2z",
   sparkle:
     "M12 2l1.6 4.4L18 8l-4.4 1.6L12 14l-1.6-4.4L6 8l4.4-1.6L12 2zm7 10 1 2.7L23 16l-3 1.1L19 20l-1-2.9L15 16l2.9-1.1L19 12zM5 14l.8 2.2L8 17l-2.2.8L5 20l-.8-2.2L2 17l2.2-.8L5 14z",
   edit:

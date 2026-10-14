@@ -5,9 +5,22 @@ import {
   hashVbsDefaultPassword,
 } from "./vbs-password.js";
 import { defaultEmailForUsername, findUser, resolveUserEmail } from "./users.js";
+import { canManageOrgMembers, isOrgRole, type OrgRole } from "./org-permissions.js";
 
-export const orgRoles = ["org_admin", "org_team_admin", "org_write", "org_read"] as const;
-export type OrgRole = (typeof orgRoles)[number];
+export {
+  canContactOrg,
+  canManageOrg,
+  canManageOrgMembers,
+  canManageRegistration,
+  canUseOrgEditors,
+  canWriteRole,
+  hasOrgWideTeamAccess,
+  isOrgRole,
+  isProtectedFromTeamAdminPromotion,
+  orgRoleLabels,
+  orgRoles,
+  type OrgRole,
+} from "./org-permissions.js";
 
 export type Organization = {
   id: string;
@@ -65,20 +78,16 @@ function present(row: OrgRow): Organization {
   };
 }
 
-export function isOrgRole(value: string): value is OrgRole {
-  return orgRoles.includes(value as OrgRole);
-}
-
-export function canWriteRole(role: OrgRole | null) {
-  return role === "org_admin" || role === "org_write";
-}
-
-export function canContactOrg(role: OrgRole | null) {
-  return role === "org_admin" || role === "org_team_admin";
-}
-
-export function canManageOrg(role: OrgRole | null) {
-  return role === "org_admin";
+async function actorCanManageMembers(organizationId: string, actor: string) {
+  const { isPlatformAdmin } = await import("./users.js");
+  if (await isPlatformAdmin(actor)) {
+    return { ok: true as const };
+  }
+  const membership = await getMembership(organizationId, actor);
+  if (!membership || !canManageOrgMembers(membership.role)) {
+    return { error: "Only org admins or registration admins can manage members" as const };
+  }
+  return { ok: true as const };
 }
 
 export async function getMembership(organizationId: string, username: string) {
@@ -126,7 +135,7 @@ export async function getOrganization(organizationId: string, username: string, 
     [organizationId],
   );
   const invitations =
-    org.role === "org_admin"
+    org.role === "org_admin" || org.role === "registration_admin"
       ? (
           await db().query<{
             id: string;
@@ -155,7 +164,7 @@ export async function getOrganization(organizationId: string, username: string, 
   const { listTeamsForViewer } = await import("./teams.js");
   const { listTeamAdminTeamIds } = await import("./org-contact.js");
   const teamAdminByUser = new Map<string, string[]>();
-  if (org.role === "org_admin") {
+  if (org.role === "org_admin" || org.role === "registration_admin") {
     const assignments = await db().query<{ username: string; team_id: string }>(
       `SELECT username, team_id FROM org_team_admin_assignments WHERE organization_id = $1`,
       [organizationId],
@@ -246,16 +255,18 @@ export async function addOrganizationMember(
   username: string,
   role: string,
 ) {
-  const membership = await getMembership(organizationId, actor);
-  if (membership?.role !== "org_admin") {
-    return { error: "Only org admins can add members" as const };
+  const access = await actorCanManageMembers(organizationId, actor);
+  if (!access.ok) {
+    return { error: access.error };
   }
   const names = [...new Set(username.split(/[,;]+/).map((item) => item.trim()).filter(Boolean))];
   if (names.length === 0) {
     return { error: "Enter at least one user" as const };
   }
   if (!isOrgRole(role)) {
-    return { error: "Role must be org_admin, org_team_admin, org_write, or org_read" as const };
+    return {
+      error: "Role must be org_admin, registration_admin, org_team_admin, org_write, or org_read" as const,
+    };
   }
   const resolved: string[] = [];
   for (const name of names) {
@@ -304,16 +315,18 @@ export async function updateOrganizationMember(
     teamAdminTeamIds: string[];
   },
 ) {
-  const membership = await getMembership(organizationId, actor);
-  if (membership?.role !== "org_admin") {
-    return { error: "Only org admins can edit members" as const };
+  const access = await actorCanManageMembers(organizationId, actor);
+  if (!access.ok) {
+    return { error: access.error };
   }
   const target = await getMembership(organizationId, memberUsername);
   if (!target) {
     return { error: "User is not a member of this organization" as const };
   }
   if (!isOrgRole(input.role)) {
-    return { error: "Role must be org_admin, org_team_admin, org_write, or org_read" as const };
+    return {
+      error: "Role must be org_admin, registration_admin, org_team_admin, org_write, or org_read" as const,
+    };
   }
   if (input.role === "org_team_admin" && input.teamAdminTeamIds.length === 0) {
     return { error: "Team admins must be assigned to at least one team" as const };
@@ -432,9 +445,9 @@ export async function updateOrganizationMember(
 }
 
 export async function removeOrganizationMember(organizationId: string, actor: string, username: string) {
-  const membership = await getMembership(organizationId, actor);
-  if (membership?.role !== "org_admin") {
-    return { error: "Only org admins can remove members" as const };
+  const access = await actorCanManageMembers(organizationId, actor);
+  if (!access.ok) {
+    return { error: access.error };
   }
   const target = await getMembership(organizationId, username);
   if (!target) {

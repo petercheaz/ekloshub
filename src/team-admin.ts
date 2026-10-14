@@ -1,5 +1,6 @@
 import { db } from "./db/pool.js";
 import { getMembership } from "./orgs.js";
+import { isProtectedFromTeamAdminPromotion } from "./org-permissions.js";
 import { findUser } from "./users.js";
 
 function parseMemberList(raw: string) {
@@ -62,7 +63,7 @@ async function teamAdminTeamCount(organizationId: string, username: string) {
 /** Org admins keep org_admin; everyone else assigned as team admin becomes org_team_admin. */
 export async function promoteMemberToTeamAdmin(organizationId: string, username: string) {
   const membership = await getMembership(organizationId, username);
-  if (!membership || membership.role === "org_admin") {
+  if (!membership || isProtectedFromTeamAdminPromotion(membership.role)) {
     return;
   }
   if (membership.role === "org_team_admin") {
@@ -78,7 +79,7 @@ export async function promoteMemberToTeamAdmin(organizationId: string, username:
 /** Drop org_team_admin when the member no longer administers any team. */
 export async function reconcileTeamAdminMemberRole(organizationId: string, username: string) {
   const membership = await getMembership(organizationId, username);
-  if (!membership || membership.role === "org_admin") {
+  if (!membership || isProtectedFromTeamAdminPromotion(membership.role)) {
     return;
   }
   if (membership.role !== "org_team_admin") {

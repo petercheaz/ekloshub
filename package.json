@@ -11,7 +11,13 @@
     "build": "tsc --noEmit && tsc --noEmit -p client/tsconfig.json && vite build",
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down",
-    "cleanup:media": "tsx --env-file=.env scripts/cleanup-media.ts"
+    "cleanup:media": "tsx --env-file=.env scripts/cleanup-media.ts",
+    "validate": "playwright test && tsx scripts/open-validate-report.ts",
+    "test:e2e": "playwright test",
+    "test:e2e:report": "tsx scripts/open-validate-report.ts",
+    "test:e2e:setup": "playwright install chromium && tsx --env-file=.env scripts/e2e-ensure-users.ts",
+    "test:e2e:headed": "E2E_PLAYWRIGHT_HEADLESS=false playwright test",
+    "test:e2e:ui": "playwright test --ui"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1146.0",
@@ -20,16 +26,19 @@
     "exceljs": "^4.4.0",
     "express": "^5.1.0",
     "express-session": "^1.18.2",
+    "nodemailer": "^10.1.1",
     "pg": "^8.23.1",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "react-router-dom": "^7.9.3"
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.1",
     "@types/bcryptjs": "^2.4.6",
     "@types/express": "^5.0.3",
     "@types/express-session": "^1.18.2",
     "@types/node": "^24.5.2",
+    "@types/nodemailer": "^8.0.2",
     "@types/pg": "^8.23.1",
     "@types/react": "^19.1.13",
     "@types/react-dom": "^19.1.9",

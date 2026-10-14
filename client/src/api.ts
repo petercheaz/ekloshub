@@ -28,6 +28,9 @@ import type {
   PhotoshoppeBrowseResult,
   VbsPlan,
   VbsPlanWorkspace,
+  VbsRegistrationStudent,
+  VbsRegistrationWorkspace,
+  PublicRegistrationForm,
 } from "./types";
 import type { EditorSnapshot } from "./photoshoppe/types";
 
@@ -70,6 +73,30 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new ApiError(response.status, message);
   }
 
+  return (await response.json()) as T;
+}
+
+async function publicRequest<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(path, {
+    ...init,
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+      ...(init?.headers ?? {}),
+    },
+  });
+  if (!response.ok) {
+    let message = `HTTP ${response.status}`;
+    try {
+      const body = (await response.json()) as { error?: string };
+      if (body.error) {
+        message = body.error;
+      }
+    } catch {
+      // ignore
+    }
+    throw new ApiError(response.status, message);
+  }
   return (await response.json()) as T;
 }
 
@@ -124,10 +151,10 @@ export const api = {
       method: "POST",
       body: JSON.stringify(input),
     }),
-  inviteToOrganization: (id: string, emails: string) =>
+  inviteToOrganization: (id: string, emails: string, role: import("./types").OrgRole = "org_read") =>
     request<{ invites: OrgInvite[] }>(`/api/orgs/${id}/invites`, {
       method: "POST",
-      body: JSON.stringify({ emails }),
+      body: JSON.stringify({ emails, role }),
     }),
   invite: (token: string, email: string) =>
     request<{ organizationName: string; email: string; existingUser: boolean; accepted: boolean }>(
@@ -148,6 +175,19 @@ export const api = {
   notifications: () => request<{ notifications: AppNotification[]; unread: number }>("/api/notifications"),
   readNotification: (id: string) =>
     request<{ ok: boolean }>(`/api/notifications/${id}/read`, { method: "POST" }),
+  readAllNotifications: () =>
+    request<{ ok: boolean; unread: number; marked: number }>(`/api/notifications/read-all`, {
+      method: "POST",
+    }),
+  userContact: () =>
+    request<{ username: string; email: string; phone: string; firstName: string; lastName: string }>(
+      "/api/profile/contact",
+    ),
+  saveUserContact: (input: { email: string; phone: string; firstName: string; lastName: string }) =>
+    request<{ username: string; email: string; phone: string; firstName: string; lastName: string }>(
+      "/api/profile/contact",
+      { method: "PATCH", body: JSON.stringify(input) },
+    ),
   teams: () => request<{ teams: OrgTeam[] }>("/api/teams"),
   createTeam: (orgId: string, name: string, members: string, teamAdminUsername?: string) =>
     request<OrgTeam>(`/api/orgs/${orgId}/teams`, {
@@ -236,7 +276,175 @@ export const api = {
       method: "PUT",
       body: JSON.stringify(input),
     }),
+  publicRegistrationForm: (token: string) =>
+    publicRequest<PublicRegistrationForm>(`/api/public/register/${encodeURIComponent(token)}`),
+  submitPublicRegistration: (token: string, input: Record<string, unknown>) =>
+    publicRequest<{ ok: boolean; confirmationId: string; childFullName: string }>(
+      `/api/public/register/${encodeURIComponent(token)}`,
+      { method: "POST", body: JSON.stringify(input) },
+    ),
+  updateVbsRegistrationPublic: (
+    orgId: string,
+    input: { enabled?: boolean; regenerateToken?: boolean },
+  ) =>
+    request<{ enabled: boolean; link: string }>(`/api/orgs/${orgId}/vbs-registration/public`, {
+      method: "PATCH",
+      body: JSON.stringify(input),
+    }),
+  vbsRegistration: (orgId: string) => request<VbsRegistrationWorkspace>(`/api/orgs/${orgId}/vbs-registration`),
+  saveVbsRegistrationStudent: (orgId: string, input: Record<string, unknown>) =>
+    request<{ student: VbsRegistrationStudent }>(`/api/orgs/${orgId}/vbs-registration/students`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  deleteVbsRegistrationStudent: (orgId: string, studentId: string) =>
+    request<{ ok: boolean }>(`/api/orgs/${orgId}/vbs-registration/students/${studentId}`, { method: "DELETE" }),
+  generateVbsRegistrationNametag: (
+    orgId: string,
+    studentId: string,
+    input: {
+      publisherId: string;
+      year: number;
+      title: string;
+      extraInstructions?: string;
+      assignedTeamId?: string;
+    },
+  ) =>
+    request<{ student: VbsRegistrationStudent; image: { key: string; url: string } }>(
+      `/api/orgs/${orgId}/vbs-registration/students/${studentId}/nametag`,
+      { method: "POST", body: JSON.stringify(input) },
+    ),
+  saveVbsRegistrationClass: (orgId: string, input: Record<string, unknown>) =>
+    request<{ classes: import("./types").VbsRegistrationClass[] }>(`/api/orgs/${orgId}/vbs-registration/classes`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  deleteVbsRegistrationClass: (orgId: string, classId: string) =>
+    request<{ ok: boolean }>(`/api/orgs/${orgId}/vbs-registration/classes/${classId}`, { method: "DELETE" }),
+  assignVbsRegistrationStudentClass: (orgId: string, studentId: string, classId: string | null) =>
+    request<{ ok: boolean }>(`/api/orgs/${orgId}/vbs-registration/students/${studentId}/class`, {
+      method: "PATCH",
+      body: JSON.stringify({ classId }),
+    }),
+  assignVbsRegistrationClassStaff: (
+    orgId: string,
+    classId: string,
+    input: { username: string; role: "leader" | "teacher" | "helper" },
+  ) =>
+    request<{ ok: boolean }>(`/api/orgs/${orgId}/vbs-registration/classes/${classId}/staff`, {
+      method: "PUT",
+      body: JSON.stringify(input),
+    }),
+  removeVbsRegistrationClassStaff: (orgId: string, classId: string, username: string) =>
+    request<{ ok: boolean }>(
+      `/api/orgs/${orgId}/vbs-registration/classes/${classId}/staff/${encodeURIComponent(username)}`,
+      { method: "DELETE" },
+    ),
+  vbsRegistrationCooking: (orgId: string) =>
+    request<{
+      cookingTeamId: string;
+      teams: { id: string; name: string }[];
+      canConfigureCooking: boolean;
+      extraInstructions: string;
+      menuText: string;
+      menuUpdatedAt: string;
+      menuDays: { id: string; label: string; body: string }[];
+    }>(`/api/orgs/${orgId}/vbs-registration/cooking`),
+  saveVbsRegistrationCooking: (
+    orgId: string,
+    input: { cookingTeamId?: string; extraInstructions?: string },
+  ) =>
+    request<{
+      cookingTeamId: string;
+      teams: { id: string; name: string }[];
+      canConfigureCooking: boolean;
+      extraInstructions: string;
+      menuText: string;
+      menuUpdatedAt: string;
+    }>(`/api/orgs/${orgId}/vbs-registration/cooking`, {
+      method: "PATCH",
+      body: JSON.stringify(input),
+    }),
+  cookingPlan: (orgId: string) =>
+    request<import("./types-cooking-plan").CookingPlanWorkspace>(`/api/orgs/${orgId}/cooking-plan`),
+  saveCookingPlanSettings: (
+    orgId: string,
+    input: { cookingTeamId?: string; extraInstructions?: string },
+  ) =>
+    request<import("./types-cooking-plan").CookingPlanWorkspace>(`/api/orgs/${orgId}/cooking-plan`, {
+      method: "PATCH",
+      body: JSON.stringify(input),
+    }),
+  saveCookingPlanLayout: (orgId: string, plan: import("./types-cooking-plan").CookingPlanDocument) =>
+    request<import("./types-cooking-plan").CookingPlanWorkspace>(`/api/orgs/${orgId}/cooking-plan/layout`, {
+      method: "PUT",
+      body: JSON.stringify(plan),
+    }),
+  generateCookingPlan: (
+    orgId: string,
+    input: { publisherId: string; year: number; title: string; replaceItemIds?: string[] },
+  ) =>
+    request<{
+      plan: import("./types-cooking-plan").CookingPlanDocument;
+      generatedAt: string;
+      replacedItemCount: number;
+    }>(`/api/orgs/${orgId}/cooking-plan/generate`, { method: "POST", body: JSON.stringify(input) }),
+  generateVbsRegistrationSnacksMenu: (
+    orgId: string,
+    input: {
+      publisherId: string;
+      year: number;
+      title: string;
+      regenerateDays?: string[];
+      dayHints?: Record<string, string>;
+    },
+  ) =>
+    request<{ menuText: string; generatedAt: string; regeneratedDays: string[]; partial: boolean }>(
+      `/api/orgs/${orgId}/vbs-registration/cooking/generate-menu`,
+      { method: "POST", body: JSON.stringify(input) },
+    ),
   vbsPlan: (orgId: string) => request<VbsPlanWorkspace>(`/api/orgs/${orgId}/vbs-plan`),
+  vbsReimbursementQueue: (orgId: string) =>
+    request<{
+      queue: {
+        taskId: string;
+        title: string;
+        expenseAmount: number;
+        assignedUsername: string;
+        dueDate: string;
+        attachments: import("./types").VbsTaskAttachment[];
+      }[];
+      totalPendingAmount: number;
+      reimbursedAwaitingArchive: number;
+    }>(`/api/orgs/${orgId}/vbs-plan/reimbursements`),
+  markVbsTaskReimbursed: (orgId: string, taskId: string) =>
+    request<{
+      queue: {
+        taskId: string;
+        title: string;
+        expenseAmount: number;
+        assignedUsername: string;
+        dueDate: string;
+        attachments: import("./types").VbsTaskAttachment[];
+      }[];
+      totalPendingAmount: number;
+      reimbursedAwaitingArchive: number;
+    }>(`/api/orgs/${orgId}/vbs-plan/reimbursements/${taskId}/reimbursed`, { method: "POST" }),
+  closeVbsReimbursementCycle: (orgId: string) =>
+    request<{
+      ok: boolean;
+      archivedCount: number;
+      queue: {
+        taskId: string;
+        title: string;
+        expenseAmount: number;
+        assignedUsername: string;
+        dueDate: string;
+        attachments: import("./types").VbsTaskAttachment[];
+      }[];
+      totalPendingAmount: number;
+      reimbursedAwaitingArchive: number;
+    }>(`/api/orgs/${orgId}/vbs-plan/reimbursements/close-cycle`, { method: "POST" }),
   saveVbsWorksheet: (orgId: string, worksheetData: Record<string, unknown>) =>
     request<{ ok: boolean }>(`/api/orgs/${orgId}/vbs-plan/worksheet`, {
       method: "PATCH",

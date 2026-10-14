@@ -14,6 +14,9 @@ import PhotoshoppeLitePage from "./pages/PhotoshoppeLite";
 import OrgContactPage from "./pages/OrgContact";
 import ProfilePage from "./pages/Profile";
 import VbsPlanPage from "./pages/VbsPlan";
+import VbsRegistrationPage from "./pages/VbsRegistration";
+import CookingPlanPage from "./pages/CookingPlanPage";
+import ParentRegisterPage from "./pages/ParentRegister";
 import SharePage from "./pages/Share";
 import SetupPage from "./pages/Setup";
 
@@ -22,6 +25,7 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/invite/:token" element={<InvitePage />} />
+      <Route path="/register/:token" element={<ParentRegisterPage />} />
       <Route element={<Layout />}>
         <Route path="/" element={<HomePage />} />
         <Route path="/reviews" element={<ReviewsPage />} />
@@ -39,6 +43,8 @@ export default function App() {
         <Route path="/org/:orgId/room-design" element={<RoomIdeasPage />} />
         <Route path="/org/:orgId/photoshoppe-lite" element={<PhotoshoppeLitePage />} />
         <Route path="/org/:orgId/vbs-plan" element={<VbsPlanPage />} />
+        <Route path="/org/:orgId/registration" element={<VbsRegistrationPage />} />
+        <Route path="/org/:orgId/cooking-plan" element={<CookingPlanPage />} />
         <Route path="/org/:orgId/reviews" element={<ReviewsPage />} />
         <Route path="/org/:orgId/share" element={<SharePage />} />
         <Route path="/org/:orgId/setup" element={<SetupPage />} />

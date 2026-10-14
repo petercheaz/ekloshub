@@ -10,6 +10,13 @@ import {
 import type { SpreadsheetRow } from "./vbs-plan-spreadsheet";
 import type { PlanWorksheetData, TimelineColumn } from "./vbs-worksheet-types";
 import { resolveCellStyle, worksheetRowKey } from "./vbs-worksheet-types";
+import {
+  allergiesSheetRows,
+  classesSheetRows,
+  registrationSheetRows,
+  type WorkbookExportBundle,
+  volunteersSheetRows,
+} from "./vbs-workbook-sheets";
 
 const TIMELINE_HEADERS = ["Date", "Start", "End", "Type", "Title", "Team / owner", "Notes"] as const;
 const TIMELINE_COLUMNS: TimelineColumn[] = ["date", "start", "end", "type", "title", "team", "notes"];
@@ -122,10 +129,42 @@ function addReadinessSheet(
   sheet.getRow(1).font = { bold: true };
 }
 
+function addObjectSheet(workbook: ExcelJS.Workbook, name: string, rows: Record<string, string | number>[]) {
+  const sheet = workbook.addWorksheet(name.slice(0, 31));
+  if (rows.length === 0) {
+    sheet.addRow(["(no rows)"]);
+    return;
+  }
+  const headers = Object.keys(rows[0]!);
+  sheet.columns = headers.map((header) => ({ header, width: Math.min(42, Math.max(12, header.length + 4)) }));
+  for (const row of rows) {
+    sheet.addRow(headers.map((header) => row[header] ?? ""));
+  }
+  sheet.getRow(1).font = { bold: true };
+}
+
+function addReimbursementSheets(workbook: ExcelJS.Workbook, bundle: WorkbookExportBundle) {
+  const headers = ["Task", "Amount", "Assigned to", "Due date", "Status"] as const;
+  const add = (sheetName: string, rows: WorkbookExportBundle["reimbursementOpen"]) => {
+    const sheet = workbook.addWorksheet(sheetName.slice(0, 31));
+    sheet.columns = headers.map((header) => ({ header, width: header === "Task" ? 36 : 14 }));
+    for (const row of rows) {
+      sheet.addRow([row.title, row.amount, row.assignedUsername, row.dueDate, row.status]);
+    }
+    if (rows.length === 0) {
+      sheet.addRow(["(none)", "", "", "", ""]);
+    }
+    sheet.getRow(1).font = { bold: true };
+  };
+  add("Reimbursements (open)", bundle.reimbursementOpen);
+  add("Reimbursements (archived)", bundle.reimbursementArchived);
+}
+
 export async function exportPlanWorkbook(
   ctx: WorksheetViewContext,
   worksheetData: PlanWorksheetData,
   planTitle: string,
+  extra?: WorkbookExportBundle | null,
 ) {
   const workbook = new ExcelJS.Workbook();
   const timeline = buildTimelineRows(ctx);
@@ -135,6 +174,26 @@ export async function exportPlanWorkbook(
   addTimelineSheet(workbook, timeline, worksheetData);
   addTaskRegisterSheet(workbook, tasks, worksheetData, ctx.teamName);
   addReadinessSheet(workbook, readiness, worksheetData, ctx.teamName);
+
+  if (extra?.registration) {
+    const reg = extra.registration;
+    addObjectSheet(
+      workbook,
+      "Registration",
+      registrationSheetRows(reg, reg.canViewContacts),
+    );
+    addObjectSheet(workbook, "Classes", classesSheetRows(reg));
+    if (reg.canViewAllergies) {
+      addObjectSheet(workbook, "Allergies", allergiesSheetRows(reg));
+    }
+    addObjectSheet(workbook, "Volunteers", volunteersSheetRows(reg, ctx.data));
+  } else if (extra) {
+    addObjectSheet(workbook, "Volunteers", volunteersSheetRows(null, ctx.data));
+  }
+
+  if (extra) {
+    addReimbursementSheets(workbook, extra);
+  }
 
   const buffer = await workbook.xlsx.writeBuffer();
   const blob = new Blob([buffer], {

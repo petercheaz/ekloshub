@@ -4,13 +4,17 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
 const repoRoot = path.dirname(fileURLToPath(import.meta.url));
+const sharedSrc = path.join(repoRoot, "src");
 
 export default defineConfig({
   plugins: [react()],
   root: "client",
   resolve: {
     alias: {
-      "@media-limits": path.join(repoRoot, "src/media-limits.ts"),
+      "@media-limits": path.join(sharedSrc, "media-limits.ts"),
+      "@org-permissions": path.join(sharedSrc, "org-permissions.ts"),
+      "@vbs-snacks-menu-days": path.join(sharedSrc, "vbs-snacks-menu-days.ts"),
+      "@vbs-cooking-plan-types": path.join(sharedSrc, "vbs-cooking-plan-types.ts"),
     },
   },
   server: {

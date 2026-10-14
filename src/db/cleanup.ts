@@ -24,6 +24,9 @@ export async function collectReferencedObjectKeys() {
     `SELECT object_key AS key FROM vbs_task_attachments WHERE object_key <> ''`,
     `SELECT object_key AS key FROM room_idea_images WHERE object_key <> ''`,
     `SELECT source_key AS key FROM room_ideas WHERE source_key <> ''`,
+    `SELECT nametag_image_key AS key FROM vbs_registrations WHERE nametag_image_key <> ''`,
+    `SELECT snapshot_key AS key FROM photoshoppe_entries WHERE snapshot_key <> ''`,
+    `SELECT preview_key AS key FROM photoshoppe_entries WHERE preview_key <> ''`,
   ];
   for (const sql of queries) {
     const result = await db().query<{ key: string }>(sql);

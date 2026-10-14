@@ -16,6 +16,7 @@ type NotificationsContextValue = {
   unread: number;
   refresh: () => Promise<void>;
   markRead: (id: string) => Promise<void>;
+  markAllRead: () => Promise<void>;
 };
 
 const NotificationsContext = createContext<NotificationsContextValue | null>(null);
@@ -58,9 +59,14 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     [refresh],
   );
 
+  const markAllRead = useCallback(async () => {
+    await api.readAllNotifications();
+    await refresh();
+  }, [refresh]);
+
   const value = useMemo(
-    () => ({ notifications, unread, refresh, markRead }),
-    [notifications, unread, refresh, markRead],
+    () => ({ notifications, unread, refresh, markRead, markAllRead }),
+    [notifications, unread, refresh, markRead, markAllRead],
   );
 
   return <NotificationsContext.Provider value={value}>{children}</NotificationsContext.Provider>;
