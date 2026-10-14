@@ -5,6 +5,7 @@ import { OrgUserTypeahead } from "./OrgUserTypeahead";
 import type { VbsMilestoneStatus, VbsPlanWorkspace, VbsTaskCategory, VbsTaskStatus } from "./types";
 import { MILESTONE_STATUS_LABELS, milestoneIsDone, normalizeMilestoneStatus } from "./vbs-milestone-status";
 import { applyImportedRows, exportPlanWorkbook, parseWorkbookFile } from "./vbs-worksheet-io";
+import { reimbursementRowsFromPlan, type WorkbookExportBundle } from "./vbs-workbook-sheets";
 import type { SpreadsheetRow } from "./vbs-plan-spreadsheet";
 import {
   WORKSHEET_VIEWS,
@@ -151,7 +152,18 @@ export function VbsPlanSpreadsheet({ orgId, data, username, seesAllTeams, teamNa
   }
 
   async function onExport() {
-    await exportPlanWorkbook(ctx, worksheetData, data.plan?.title ?? "VBS plan");
+    const reimb = reimbursementRowsFromPlan(data.tasks);
+    const extra: WorkbookExportBundle = {
+      registration: null,
+      reimbursementOpen: reimb.open,
+      reimbursementArchived: reimb.archived,
+    };
+    try {
+      extra.registration = await api.vbsRegistration(orgId);
+    } catch {
+      extra.registration = null;
+    }
+    await exportPlanWorkbook(ctx, worksheetData, data.plan?.title ?? "VBS plan", extra);
   }
 
   async function onImportFile(file: File) {
@@ -174,8 +186,8 @@ export function VbsPlanSpreadsheet({ orgId, data, username, seesAllTeams, teamNa
         <div className="vbs-plan-worksheets-head-text">
           <strong>Plan workbooks</strong>
           <p className="muted">
-            Three PM-style views—master timeline, task register, and launch checklist. Export downloads one Excel file
-            with three tabs. Import reads the <em>Master timeline</em> tab.
+            Plan views plus export: one Excel file with timeline, tasks, milestones, registration, classes, allergies,
+            volunteers, and reimbursement tabs (when you have access). Import reads the <em>Master timeline</em> tab.
           </p>
         </div>
         {anyExpanded ? (

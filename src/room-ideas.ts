@@ -5,6 +5,8 @@ import { buildRoomIdeaPrompt, decorateRoomPhoto } from "./llm-images.js";
 import { sendMessage } from "./messages.js";
 import { addNotification } from "./notifications.js";
 import { getMembership } from "./orgs.js";
+import { canUseOrgEditors } from "./org-permissions.js";
+import { isPlatformAdmin } from "./users.js";
 import { publisherName } from "./setup.js";
 import { findUser } from "./users.js";
 
@@ -46,11 +48,17 @@ function isPublisher(id: string): id is PublisherId {
 }
 
 async function requireMember(organizationId: string, username: string) {
+  const platformAdmin = await isPlatformAdmin(username);
   const membership = await getMembership(organizationId, username);
-  if (!membership) {
+  if (!membership && !platformAdmin) {
     return { error: "Not a member of this organization" as const };
   }
-  return { ok: true as const, membership };
+  return { ok: true as const, membership, platformAdmin };
+}
+
+function canEditRoomIdeas(access: { membership?: { role: string }; platformAdmin?: boolean }) {
+  const role = access.membership?.role ?? null;
+  return access.platformAdmin || canUseOrgEditors(role as import("./org-permissions.js").OrgRole | null);
 }
 
 function present(row: IdeaRow, images: RoomIdeaImage[]): RoomIdea {
@@ -125,6 +133,9 @@ export async function generateRoomIdeaImages(
   if (!access.ok) {
     return { error: access.error };
   }
+  if (!canEditRoomIdeas(access)) {
+    return { error: "Coordinator or org admin access is required to generate room designs" as const };
+  }
   if (!isPublisher(input.publisherId) || !Number.isInteger(input.year) || !input.title.trim()) {
     return { error: "Publisher, year, and VBS title are required" as const };
   }
@@ -175,6 +186,9 @@ export async function saveRoomIdea(
   const access = await requireMember(organizationId, username);
   if (!access.ok) {
     return { error: access.error };
+  }
+  if (!canEditRoomIdeas(access)) {
+    return { error: "Coordinator or org admin access is required to save room designs" as const };
   }
   if (!isPublisher(input.publisherId) || !Number.isInteger(input.year) || !input.title.trim()) {
     return { error: "Publisher, year, and VBS title are required" as const };

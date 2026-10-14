@@ -1,0 +1,23 @@
+---
+description: E2E tests are regression guards — fix the app when they fail; extend coverage when features change
+alwaysApply: true
+---
+
+# E2E regression discipline
+
+## When tests fail
+
+1. **Assume the product regressed** until you prove otherwise (intentional spec change, env/persona drift).
+2. **Fix application code or config** (bug, RBAC, broken route, missing API).
+3. **Update tests only when** requirements intentionally changed — document why in the test summary.
+4. **Never** weaken assertions (drop checks, widen regexes, add `.first()` to hide strict-mode violations, increase timeouts) just to get green without user approval.
+5. **Selector updates** are OK when the UI changed but **behavior and expectations stay the same** (same role/label, new DOM structure).
+
+## When adding or changing product areas
+
+- New **route or nav section** → extend `routes-org.spec.ts` / `routes-global.spec.ts` or the deepest existing spec; add row in `e2e/site-coverage.ts`.
+- **RBAC / tab visibility** → `roles-access.spec.ts`.
+- **Create/update/delete** with API → extend or add `crud-*.spec.ts` with `test_` prefix + purge; raise `depth` to `crud` or `workflow` in `site-coverage.ts`.
+- Run **`npm run validate`** before finishing; all tests must pass without muting failures.
+
+Invoke skill **`/validate`** for the full workflow (`/.cursor/skills/validate/SKILL.md`).

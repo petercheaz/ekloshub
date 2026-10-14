@@ -1,3 +1,4 @@
+import { absoluteAppLink } from "./app-url.js";
 import { db } from "./db/pool.js";
 import { sendMail } from "./mail.js";
 import { addNotification } from "./notifications.js";
@@ -69,7 +70,7 @@ export async function deliverOrgNotifications(
   }
 
   const [prefs, contactMap] = await Promise.all([memberPrefs(organizationId, unique), contacts(unique)]);
-  const fullBody = link ? `${body}\n\nOpen: ${link}` : body;
+  const fullBody = link ? `${body}\n\nOpen: ${absoluteAppLink(link)}` : body;
 
   for (const username of unique) {
     const pref = prefs.get(username) ?? { notifyEmail: true, notifySms: false };

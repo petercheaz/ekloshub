@@ -24,7 +24,7 @@ const statements = [
   `CREATE TABLE IF NOT EXISTS organization_members (
     organization_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
     username TEXT NOT NULL REFERENCES users(username),
-    role TEXT NOT NULL CHECK (role IN ('org_admin', 'org_team_admin', 'org_write', 'org_read')),
+    role TEXT NOT NULL CHECK (role IN ('org_admin', 'registration_admin', 'org_team_admin', 'org_write', 'org_read')),
     PRIMARY KEY (organization_id, username)
   )`,
   `CREATE TABLE IF NOT EXISTS org_invites (
@@ -38,6 +38,10 @@ const statements = [
     created_at TIMESTAMPTZ NOT NULL,
     accepted_at TIMESTAMPTZ
   )`,
+  `ALTER TABLE org_invites ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'org_read'`,
+  `ALTER TABLE org_invites DROP CONSTRAINT IF EXISTS org_invites_role_check`,
+  `ALTER TABLE org_invites ADD CONSTRAINT org_invites_role_check
+     CHECK (role IN ('org_admin', 'registration_admin', 'org_team_admin', 'org_write', 'org_read'))`,
   `CREATE TABLE IF NOT EXISTS org_teams (
     id TEXT PRIMARY KEY,
     organization_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
@@ -212,6 +216,7 @@ const statements = [
   )`,
   `ALTER TABLE vbs_tasks ADD COLUMN IF NOT EXISTS expense_amount NUMERIC(12, 2) NOT NULL DEFAULT 0`,
   `ALTER TABLE vbs_tasks ADD COLUMN IF NOT EXISTS reimbursement_status TEXT NOT NULL DEFAULT 'none'`,
+  `ALTER TABLE vbs_tasks ADD COLUMN IF NOT EXISTS reimbursement_archived BOOLEAN NOT NULL DEFAULT FALSE`,
   `ALTER TABLE vbs_tasks ADD COLUMN IF NOT EXISTS notes TEXT NOT NULL DEFAULT ''`,
   `CREATE TABLE IF NOT EXISTS vbs_task_attachments (
     id TEXT PRIMARY KEY,
@@ -301,7 +306,7 @@ const statements = [
   `UPDATE vbs_plans SET title = 'Building Team' WHERE LOWER(TRIM(title)) = 'building team 2027'`,
   `ALTER TABLE organization_members DROP CONSTRAINT IF EXISTS organization_members_role_check`,
   `ALTER TABLE organization_members ADD CONSTRAINT organization_members_role_check
-     CHECK (role IN ('org_admin', 'org_team_admin', 'org_write', 'org_read'))`,
+     CHECK (role IN ('org_admin', 'registration_admin', 'org_team_admin', 'org_write', 'org_read'))`,
   `CREATE TABLE IF NOT EXISTS org_team_admin_assignments (
     organization_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
     username TEXT NOT NULL REFERENCES users(username) ON DELETE CASCADE,
@@ -339,6 +344,80 @@ const statements = [
   `ALTER TABLE vbs_checklist_items DROP CONSTRAINT IF EXISTS vbs_checklist_items_status_check`,
   `ALTER TABLE vbs_checklist_items ADD CONSTRAINT vbs_checklist_items_status_check
      CHECK (status IN ('not_started', 'in_progress', 'done'))`,
+  `CREATE TABLE IF NOT EXISTS vbs_registrations (
+    id TEXT PRIMARY KEY,
+    organization_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    child_full_name TEXT NOT NULL,
+    birth_month INT NOT NULL CHECK (birth_month >= 1 AND birth_month <= 12),
+    birth_year INT NOT NULL CHECK (birth_year >= 1990 AND birth_year <= 2100),
+    allergies_common TEXT[] NOT NULL DEFAULT '{}',
+    allergies_other TEXT NOT NULL DEFAULT '',
+    comments TEXT NOT NULL DEFAULT '',
+    special_requests TEXT NOT NULL DEFAULT '',
+    contact1_name TEXT NOT NULL DEFAULT '',
+    contact1_phone TEXT NOT NULL DEFAULT '',
+    contact2_name TEXT NOT NULL DEFAULT '',
+    contact2_phone TEXT NOT NULL DEFAULT '',
+    attend_mon BOOLEAN NOT NULL DEFAULT FALSE,
+    attend_tue BOOLEAN NOT NULL DEFAULT FALSE,
+    attend_wed BOOLEAN NOT NULL DEFAULT FALSE,
+    attend_thu BOOLEAN NOT NULL DEFAULT FALSE,
+    attend_fri BOOLEAN NOT NULL DEFAULT FALSE,
+    tshirt_size TEXT NOT NULL DEFAULT '',
+    assigned_team_id TEXT,
+    nametag_image_key TEXT NOT NULL DEFAULT '',
+    nametag_extra_instructions TEXT NOT NULL DEFAULT '',
+    created_by TEXT REFERENCES users(username),
+    created_at TIMESTAMPTZ NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL
+  )`,
+  `CREATE INDEX IF NOT EXISTS vbs_registrations_org ON vbs_registrations (organization_id, updated_at DESC)`,
+  `ALTER TABLE vbs_registrations ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'staff'`,
+  `ALTER TABLE vbs_registrations DROP CONSTRAINT IF EXISTS vbs_registrations_source_check`,
+  `ALTER TABLE vbs_registrations ADD CONSTRAINT vbs_registrations_source_check
+     CHECK (source IN ('staff', 'public'))`,
+  `ALTER TABLE organizations ADD COLUMN IF NOT EXISTS public_registration_enabled BOOLEAN NOT NULL DEFAULT FALSE`,
+  `ALTER TABLE organizations ADD COLUMN IF NOT EXISTS public_registration_token TEXT NOT NULL DEFAULT ''`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS organizations_public_registration_token_unique
+     ON organizations (public_registration_token) WHERE public_registration_token <> ''`,
+  `CREATE TABLE IF NOT EXISTS vbs_registration_classes (
+    id TEXT PRIMARY KEY,
+    organization_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    min_age INT NOT NULL DEFAULT 0,
+    max_age INT NOT NULL DEFAULT 12,
+    capacity_max INT NOT NULL DEFAULT 0,
+    registration_closed BOOLEAN NOT NULL DEFAULT FALSE,
+    sort_order INT NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS vbs_registration_classes_org ON vbs_registration_classes (organization_id, sort_order)`,
+  `CREATE TABLE IF NOT EXISTS vbs_registration_class_staff (
+    class_id TEXT NOT NULL REFERENCES vbs_registration_classes(id) ON DELETE CASCADE,
+    username TEXT NOT NULL REFERENCES users(username),
+    role TEXT NOT NULL CHECK (role IN ('leader', 'teacher', 'helper')),
+    PRIMARY KEY (class_id, username)
+  )`,
+  `ALTER TABLE vbs_registration_class_staff DROP CONSTRAINT IF EXISTS vbs_registration_class_staff_role_check`,
+  `ALTER TABLE vbs_registration_class_staff ADD CONSTRAINT vbs_registration_class_staff_role_check
+     CHECK (role IN ('leader', 'teacher', 'helper'))`,
+  `ALTER TABLE vbs_registration_classes ADD COLUMN IF NOT EXISTS capacity_warn_notified_count INT NOT NULL DEFAULT 0`,
+  `ALTER TABLE vbs_registrations ADD COLUMN IF NOT EXISTS class_id TEXT REFERENCES vbs_registration_classes(id) ON DELETE SET NULL`,
+  `ALTER TABLE vbs_registrations ADD COLUMN IF NOT EXISTS payment_status TEXT NOT NULL DEFAULT 'pending'`,
+  `ALTER TABLE vbs_registrations DROP CONSTRAINT IF EXISTS vbs_registrations_payment_status_check`,
+  `ALTER TABLE vbs_registrations ADD CONSTRAINT vbs_registrations_payment_status_check
+     CHECK (payment_status IN ('pending', 'paid', 'waived'))`,
+  `ALTER TABLE organizations ADD COLUMN IF NOT EXISTS cooking_team_id TEXT REFERENCES org_teams(id) ON DELETE SET NULL`,
+  `CREATE TABLE IF NOT EXISTS vbs_registration_snacks_menu (
+    organization_id TEXT PRIMARY KEY REFERENCES organizations(id) ON DELETE CASCADE,
+    extra_instructions TEXT NOT NULL DEFAULT '',
+    menu_text TEXT NOT NULL DEFAULT '',
+    menu_json TEXT NOT NULL DEFAULT '',
+    updated_by TEXT REFERENCES users(username),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `ALTER TABLE vbs_registration_snacks_menu ADD COLUMN IF NOT EXISTS menu_json TEXT NOT NULL DEFAULT ''`,
 ];
 
 const TEAM_NAME_UNIQUE_INDEX = `CREATE UNIQUE INDEX IF NOT EXISTS org_teams_org_name_unique

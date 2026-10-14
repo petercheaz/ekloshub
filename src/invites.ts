@@ -2,7 +2,8 @@ import bcrypt from "bcryptjs";
 import { db } from "./db/pool.js";
 import { sendMail } from "./mail.js";
 import { addNotification } from "./notifications.js";
-import { getMembership } from "./orgs.js";
+import { canManageOrgMembers, getMembership, isOrgRole } from "./orgs.js";
+import { isPlatformAdmin } from "./users.js";
 import { findUserByEmail, updateProfile } from "./users.js";
 
 const appUrl = (process.env.APP_PUBLIC_URL ?? "http://localhost:5173").replace(/\/$/, "");
@@ -71,14 +72,30 @@ export async function listInvites(organizationId: string) {
   return result.rows.map(present);
 }
 
-export async function createInvites(organizationId: string, actor: string, rawEmails: string) {
+export async function createInvites(
+  organizationId: string,
+  actor: string,
+  rawEmails: string,
+  roleInput = "org_read",
+) {
   const membership = await getMembership(organizationId, actor);
-  if (membership?.role !== "org_admin") {
-    return { error: "Only org admins can send invites" as const };
+  const platformAdmin = await isPlatformAdmin(actor);
+  if (!platformAdmin && (!membership || !canManageOrgMembers(membership.role))) {
+    return { error: "Only org admins or registration admins can send invites" as const };
   }
   const emails = parseEmails(rawEmails);
   if (emails.length === 0) {
     return { error: "Enter at least one email address" as const };
+  }
+  const inviteRole = isOrgRole(roleInput) ? roleInput : "org_read";
+  if (inviteRole === "org_admin") {
+    return { error: "Invites cannot grant org admin; add admins from Manage Org after they join" as const };
+  }
+  if (inviteRole === "registration_admin") {
+    return { error: "Assign registration admin from Manage Org after they join" as const };
+  }
+  if (inviteRole === "org_team_admin") {
+    return { error: "Assign team admin from Manage Org after they join" as const };
   }
   const org = await db().query<{ name: string }>("SELECT name FROM organizations WHERE id = $1", [organizationId]);
   const orgName = org.rows[0]?.name;
@@ -94,9 +111,9 @@ export async function createInvites(organizationId: string, actor: string, rawEm
     const secretHash = bcrypt.hashSync(keyword, 10);
     await db().query(
       `INSERT INTO org_invites (
-        id, organization_id, email, token, secret_hash, keyword, invited_by, created_at
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-      [id, organizationId, email, token, secretHash, keyword, actor, new Date().toISOString()],
+        id, organization_id, email, token, secret_hash, keyword, invited_by, created_at, role
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+      [id, organizationId, email, token, secretHash, keyword, actor, new Date().toISOString(), inviteRole],
     );
     const link = inviteLink(token, email);
     const text = [
@@ -166,8 +183,8 @@ export async function acceptInvite(
     return { error: "Email, keyword, name, last name, and phone are required" as const };
   }
 
-  const result = await db().query<InviteRow>(
-    `SELECT id, organization_id, email, token, secret_hash, keyword, created_at, accepted_at
+  const result = await db().query<InviteRow & { role: string }>(
+    `SELECT id, organization_id, email, token, secret_hash, keyword, created_at, accepted_at, role
      FROM org_invites
      WHERE token = $1`,
     [token],
@@ -199,11 +216,12 @@ export async function acceptInvite(
     await updateProfile(username, { email, firstName, lastName, phone });
   }
 
+  const memberRole = isOrgRole(invite.role) ? invite.role : "org_read";
   await db().query(
     `INSERT INTO organization_members (organization_id, username, role)
-     VALUES ($1,$2,'org_write')
+     VALUES ($1,$2,$3)
      ON CONFLICT (organization_id, username) DO NOTHING`,
-    [invite.organization_id, username],
+    [invite.organization_id, username, memberRole],
   );
   await db().query("UPDATE org_invites SET accepted_at = NOW() WHERE id = $1", [invite.id]);
   return { username, organizationId: invite.organization_id };

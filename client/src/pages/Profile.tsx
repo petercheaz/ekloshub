@@ -8,6 +8,10 @@ import type { OrgNotificationSettings } from "../types";
 export default function ProfilePage() {
   const { tenantId } = useOrgs();
   const [organizations, setOrganizations] = useState<OrgNotificationSettings[]>([]);
+  const [contactEmail, setContactEmail] = useState("");
+  const [contactPhone, setContactPhone] = useState("");
+  const [contactFirst, setContactFirst] = useState("");
+  const [contactLast, setContactLast] = useState("");
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
@@ -21,7 +25,40 @@ export default function ProfilePage() {
         setExpandedOrg((current) => current ?? data.organizations[0]?.organizationId ?? null);
       })
       .catch((err: Error) => setError(err.message));
+    void api
+      .userContact()
+      .then((c) => {
+        setContactEmail(c.email);
+        setContactPhone(c.phone);
+        setContactFirst(c.firstName);
+        setContactLast(c.lastName);
+      })
+      .catch(() => undefined);
   }, []);
+
+  async function saveContact(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    setStatus("");
+    try {
+      const saved = await api.saveUserContact({
+        email: contactEmail,
+        phone: contactPhone,
+        firstName: contactFirst,
+        lastName: contactLast,
+      });
+      setContactEmail(saved.email);
+      setContactPhone(saved.phone);
+      setContactFirst(saved.firstName);
+      setContactLast(saved.lastName);
+      setStatus("Saved contact info for email and SMS delivery.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save contact info");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function save(org: OrgNotificationSettings, event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -62,11 +99,47 @@ export default function ProfilePage() {
     <OrgWorkspacePage
       eyebrow="Account"
       title="Notification profile"
-      tagline="Expand an organization to edit alerts. Muted users can still post—you just will not get alerts from them."
+      tagline="Contact info powers email and SMS. Per-org toggles below control what you receive—you can opt out of email, SMS, or both."
     >
 
       {error ? <p className="error">{error}</p> : null}
       {status ? <p className="status">{status}</p> : null}
+
+      <section className="vbs-panel profile-contact-panel">
+        <h2>Contact for delivery</h2>
+        <p className="muted">
+          Email alerts need a valid address; SMS needs a mobile number (E.164, e.g. +12065551234). In-app bell
+          notifications always work when you are signed in.
+        </p>
+        <form className="review-form" onSubmit={(e) => void saveContact(e)}>
+          <label>
+            Email
+            <input type="email" value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} required />
+          </label>
+          <label>
+            Mobile phone (SMS)
+            <input
+              type="tel"
+              value={contactPhone}
+              onChange={(e) => setContactPhone(e.target.value)}
+              placeholder="+1…"
+            />
+          </label>
+          <label>
+            First name
+            <input value={contactFirst} onChange={(e) => setContactFirst(e.target.value)} />
+          </label>
+          <label>
+            Last name
+            <input value={contactLast} onChange={(e) => setContactLast(e.target.value)} />
+          </label>
+          <div className="vbs-form-actions">
+            <button type="submit" className="vbs-plan-save" disabled={busy}>
+              {busy ? "Saving…" : "Save contact info"}
+            </button>
+          </div>
+        </form>
+      </section>
 
       {organizations.length === 0 ? <p className="muted">Join an organization to configure notifications.</p> : null}
 

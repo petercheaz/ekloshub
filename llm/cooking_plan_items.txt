@@ -1,0 +1,34 @@
+You are updating specific snack items in an existing VBS cooking plan.
+
+VBS: {{publisher}} · {{year}} · {{title}}
+Organization: {{organization_name}}
+
+ALLERGY DATA (must follow):
+{{allergy_summary}}
+
+Cook team preferences:
+{{extra_instructions}}
+
+Current plan strategy: {{strategy}} — {{strategy_note}}
+
+ITEMS TO REPLACE (must propose DIFFERENT snacks — not the same title or equivalent):
+{{replace_items_json}}
+
+OTHER ITEMS IN THE PLAN (keep unchanged — do not duplicate these):
+{{keep_items_json}}
+
+Return ONLY valid JSON:
+{
+  "replacements": [
+    {
+      "id": "same id as input",
+      "dayId": "mon"|"tue"|"wed"|"thu"|"fri",
+      "title": "new snack name",
+      "details": "prep and safety notes",
+      "kind": "main"|"allergy-alt",
+      "allergyLabel": "..."
+    }
+  ]
+}
+
+Every listed id must appear exactly once. Titles must differ meaningfully from the previous item.

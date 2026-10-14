@@ -11,8 +11,43 @@ import { db } from "./pool.js";
 import { ensureCornerstoneMembers } from "./seed-cornerstone-members.js";
 import { ensureCornerstoneSamplePlan } from "./seed-cornerstone-plan.js";
 import { putObject } from "./s3.js";
+import { hashVbsDefaultPassword } from "../vbs-password.js";
 
 const photoDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "seed-photos");
+
+const PATTI_USERNAME = "patti.tam@gmail.com";
+const PATTI_PHONE = "4256613847";
+
+async function ensurePattiRegistrationAdmin(orgId: string) {
+  const passwordHash = hashVbsDefaultPassword();
+  await db().query(
+    `INSERT INTO users (
+       username, password_hash, password_custom, verified, platform_admin, email, first_name, last_name, phone,
+       vbs_default_all_filters
+     ) VALUES ($1,$2,FALSE,TRUE,FALSE,$1,'Patti','Tam',$3,TRUE)
+     ON CONFLICT (username) DO UPDATE SET
+       email = EXCLUDED.email,
+       first_name = EXCLUDED.first_name,
+       last_name = EXCLUDED.last_name,
+       phone = EXCLUDED.phone,
+       verified = TRUE,
+       password_hash = CASE
+         WHEN users.password_custom THEN users.password_hash
+         ELSE EXCLUDED.password_hash
+       END,
+       password_custom = CASE
+         WHEN users.password_custom THEN users.password_custom
+         ELSE FALSE
+       END`,
+    [PATTI_USERNAME, passwordHash, PATTI_PHONE],
+  );
+  await db().query(
+    `INSERT INTO organization_members (organization_id, username, role)
+     VALUES ($1,$2,'registration_admin')
+     ON CONFLICT (organization_id, username) DO UPDATE SET role = 'registration_admin'`,
+    [orgId, PATTI_USERNAME],
+  );
+}
 
 export async function seedIfEmpty() {
   const existing = await db().query("SELECT COUNT(*)::int AS count FROM users");
@@ -143,6 +178,7 @@ export async function ensureKnownAccounts() {
   );
 
   await ensureCornerstoneMembers(id);
+  await ensurePattiRegistrationAdmin(id);
 
   await db().query(
     `UPDATE org_teams SET name = 'Building Team'

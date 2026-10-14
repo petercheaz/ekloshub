@@ -41,19 +41,33 @@ import {
 } from "../vbs-milestone-status";
 import type { VbsMilestoneStatus } from "../types";
 import { attachmentTooLargeMessage, MAX_ATTACHMENT_BYTES } from "@media-limits";
+import { VbsPlanReimbursementsTab } from "./VbsPlanReimbursements";
+import { VbsPlanAdherence } from "../VbsPlanAdherence";
 
-type Tab = "overview" | "tasks" | "schedule" | "stations" | "checklist" | "board";
+type Tab =
+  | "overview"
+  | "adherence"
+  | "tasks"
+  | "reimbursements"
+  | "schedule"
+  | "stations"
+  | "checklist"
+  | "board";
 
 const planSections: { id: Tab; label: string; hint: string }[] = [
   { id: "overview", label: "Overview", hint: "Dates, budget, curriculum & notes" },
+  { id: "adherence", label: "Schedule health", hint: "Overdue work and gaps before VBS week" },
   { id: "checklist", label: "Milestones Checklist", hint: "Due-date timeline of launch milestones" },
   { id: "tasks", label: "Tasks", hint: "Assign and track work by team" },
+  {
+    id: "reimbursements",
+    label: "Reimbursements",
+    hint: "Org admin — submitted receipts and payout tracking",
+  },
   { id: "schedule", label: "VBS daily schedule", hint: "Day-by-day program from overview dates & hours" },
   { id: "stations", label: "Stations", hint: "Rooms, rotations & default teams" },
   { id: "board", label: "Message board", hint: "Team updates, replies & alerts" },
 ];
-
-const tabIds = new Set<string>(planSections.map((t) => t.id));
 
 function formatPlanMoney(amount: number) {
   return new Intl.NumberFormat(undefined, {
@@ -69,9 +83,9 @@ function parseMoneyInput(raw: string) {
   return Number.isFinite(value) ? Math.max(0, value) : 0;
 }
 
-function tabFromSearch(params: URLSearchParams): Tab {
+function tabFromSearch(params: URLSearchParams, allowed: Set<string>): Tab {
   const raw = params.get("tab");
-  if (raw && tabIds.has(raw)) {
+  if (raw && allowed.has(raw)) {
     return raw as Tab;
   }
   return "overview";
@@ -85,11 +99,17 @@ export default function VbsPlanPage() {
   const [data, setData] = useState<VbsPlanWorkspace | null>(null);
   const [error, setError] = useState("");
   const [searchParams, setSearchParams] = useSearchParams();
-  const [tab, setTab] = useState<Tab>(() => tabFromSearch(searchParams));
+  const visibleSections = useMemo(
+    () => planSections.filter((section) => section.id !== "reimbursements" || data?.canAdmin),
+    [data?.canAdmin],
+  );
+  const tabIds = useMemo(() => new Set(visibleSections.map((t) => t.id)), [visibleSections]);
+
+  const [tab, setTab] = useState<Tab>("overview");
 
   useEffect(() => {
-    setTab(tabFromSearch(searchParams));
-  }, [searchParams]);
+    setTab(tabFromSearch(searchParams, tabIds));
+  }, [searchParams, tabIds]);
   const [busy, setBusy] = useState(false);
 
   const reload = useCallback(async () => {
@@ -256,7 +276,7 @@ export default function VbsPlanPage() {
         </p>
         <div className="vbs-chrome-tabs">
           <nav className="vbs-chrome-tabs-bar" role="tablist" aria-label="VBS planning sections">
-            {planSections.map((item) => {
+            {visibleSections.map((item) => {
               const selected = tab === item.id;
               return (
                 <button
@@ -287,10 +307,17 @@ export default function VbsPlanPage() {
             ) : null}
 
             {tab === "overview" ? (
-              <OverviewTab data={data} busy={busy} onSave={(input) => run(() => api.saveVbsPlan(orgId, input))} />
+              <>
+                <VbsPlanAdherence data={data} />
+                <OverviewTab data={data} busy={busy} onSave={(input) => run(() => api.saveVbsPlan(orgId, input))} />
+              </>
             ) : null}
+            {tab === "adherence" ? <VbsPlanAdherence data={data} /> : null}
             {tab === "tasks" ? (
               <TasksTab data={data} orgId={orgId} busy={busy} teamName={teamName} onRun={run} />
+            ) : null}
+            {tab === "reimbursements" && data.canAdmin ? (
+              <VbsPlanReimbursementsTab orgId={orgId} />
             ) : null}
             {tab === "schedule" ? (
               <ScheduleTab data={data} orgId={orgId} busy={busy} teamName={teamName} onRun={run} />

@@ -2,6 +2,8 @@ import { db } from "./db/pool.js";
 import { getObject, objectUrl, parseDataUrl, putObject } from "./db/s3.js";
 import { isAcceptableAttachment } from "./media-limits.js";
 import { getMembership } from "./orgs.js";
+import { canUseOrgEditors } from "./org-permissions.js";
+import { isPlatformAdmin } from "./users.js";
 
 export type EditorSnapshot = {
   layers: unknown[];
@@ -45,9 +47,22 @@ export type PhotoshoppeBrowseResult = {
 };
 
 async function requireMember(organizationId: string, username: string) {
+  const platformAdmin = await isPlatformAdmin(username);
   const membership = await getMembership(organizationId, username);
-  if (!membership) {
+  if (!membership && !platformAdmin) {
     return { error: "Not a member of this organization" as const };
+  }
+  return { ok: true as const, membership, platformAdmin };
+}
+
+async function requireEditor(organizationId: string, username: string) {
+  const gate = await requireMember(organizationId, username);
+  if ("error" in gate) {
+    return gate;
+  }
+  const role = gate.membership?.role ?? null;
+  if (!gate.platformAdmin && !canUseOrgEditors(role)) {
+    return { error: "Coordinator or org admin access is required to edit files" as const };
   }
   return { ok: true as const };
 }
@@ -166,7 +181,7 @@ export async function createPhotoshoppeFolder(
   username: string,
   input: { parentId: string | null; name: string },
 ) {
-  const gate = await requireMember(organizationId, username);
+  const gate = await requireEditor(organizationId, username);
   if ("error" in gate) {
     return { error: gate.error };
   }
@@ -203,7 +218,7 @@ export async function savePhotoshoppeDocument(
     preview: { name: string; type: string; size: number; dataUrl: string };
   },
 ) {
-  const gate = await requireMember(organizationId, username);
+  const gate = await requireEditor(organizationId, username);
   if ("error" in gate) {
     return { error: gate.error };
   }

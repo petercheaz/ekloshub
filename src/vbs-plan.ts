@@ -2,7 +2,9 @@ import { listCalendarReminders, readCalendarViewPref } from "./vbs-calendar.js";
 import { defaultCurriculumYear, programs, publishers } from "./curriculum.js";
 import { formatPgDate } from "./pg-dates.js";
 import { db } from "./db/pool.js";
+import { vbsPlanTabLink } from "./app-url.js";
 import { deliverOrgNotifications } from "./notify-delivery.js";
+import { orgAdminUsernames } from "./org-notify.js";
 import { canWriteRole, getMembership, type OrgRole } from "./orgs.js";
 import { listBoardPosts } from "./vbs-board.js";
 import { getTeam, listTeamsForViewer } from "./teams.js";
@@ -169,18 +171,29 @@ function planLink(orgId: string) {
 }
 
 async function requireMember(orgId: string, username: string) {
+  const { isPlatformAdmin } = await import("./users.js");
+  const platformAdmin = await isPlatformAdmin(username);
   const membership = await getMembership(orgId, username);
-  if (!membership) {
+  if (!membership && !platformAdmin) {
     return { error: "Not a member of this organization" as const };
   }
-  return { membership };
+  return {
+    membership: membership ?? { username, role: "org_admin" as OrgRole },
+    platformAdmin,
+  };
 }
 
 function canWrite(role: OrgRole) {
   return canWriteRole(role);
 }
 
-async function getPlanRow(orgId: string) {
+type MemberAccess = { membership: { role: OrgRole; username?: string }; platformAdmin?: boolean };
+
+function planWriteAllowed(access: MemberAccess) {
+  return canWrite(access.membership.role) || access.platformAdmin === true;
+}
+
+export async function getPlanRow(orgId: string) {
   const result = await db().query<{
     id: string;
     organization_id: string;
@@ -240,7 +253,7 @@ export async function saveVbsWorksheet(
   if ("error" in access) {
     return access;
   }
-  if (!canWrite(access.membership.role)) {
+  if (!planWriteAllowed(access)) {
     return { error: "You need write access" as const };
   }
   const plan = await getPlanRow(orgId);
@@ -366,7 +379,7 @@ export async function addScheduleActivityLabel(orgId: string, username: string, 
   if ("error" in access) {
     return access;
   }
-  if (!canWrite(access.membership.role)) {
+  if (!planWriteAllowed(access)) {
     return { error: "You need write access" as const };
   }
   const trimmed = label.trim();
@@ -429,7 +442,7 @@ export async function generateVbsDailySchedule(orgId: string, username: string, 
   if ("error" in access) {
     return access;
   }
-  if (!canWrite(access.membership.role)) {
+  if (!planWriteAllowed(access)) {
     return { error: "You need write access" as const };
   }
   const plan = await getPlanRow(orgId);
@@ -495,7 +508,7 @@ export async function getOrgVbsDefault(orgId: string, username: string) {
     planRow && planRow.publisher_id && planRow.program_title ? presentCurriculum(planRow) : null;
   return {
     orgDefault,
-    canWrite: canWrite(access.membership.role),
+    canWrite: planWriteAllowed(access),
     ...curriculumPayload(),
   };
 }
@@ -556,7 +569,7 @@ export async function getVbsWorkspace(orgId: string, username: string) {
       db().query(
         `SELECT id, plan_id, title, description, notes, category, status, due_date,
                 assigned_username, assigned_team_id, sort_order, created_at,
-                expense_amount, reimbursement_status
+                expense_amount, reimbursement_status, reimbursement_archived
          FROM vbs_tasks WHERE plan_id = $1 ORDER BY sort_order, created_at`,
         [planId],
       ),
@@ -595,6 +608,7 @@ export async function getVbsWorkspace(orgId: string, username: string) {
         reimbursementStatus: reimbursementStatuses.includes(row.reimbursement_status as VbsReimbursementStatus)
           ? (row.reimbursement_status as VbsReimbursementStatus)
           : "none",
+        reimbursementArchived: row.reimbursement_archived === true,
         attachments: attachmentsByTask.get(row.id) ?? [],
       })),
       stations: stations.rows.map((row) => ({
@@ -661,8 +675,8 @@ export async function getVbsWorkspace(orgId: string, username: string) {
     ...related,
     boardPosts,
     teams,
-    canWrite: canWrite(role),
-    canAdmin: role === "org_admin",
+    canWrite: planWriteAllowed(access),
+    canAdmin: role === "org_admin" || access.platformAdmin === true,
     scheduleActivityLabels,
     notificationPrefs: {
       notifyEmail: prefs?.notify_email ?? true,
@@ -705,7 +719,7 @@ export async function upsertVbsPlan(
   if ("error" in access) {
     return access;
   }
-  if (!canWrite(access.membership.role)) {
+  if (!planWriteAllowed(access)) {
     return { error: "You need write access to edit the VBS plan" as const };
   }
   if (!input.year) {
@@ -896,30 +910,38 @@ export async function saveVbsTask(
   const dueDate = input.dueDate || null;
   const now = new Date().toISOString();
 
+  let previousReimbursementStatus: VbsReimbursementStatus | null = null;
+
   if (input.id) {
     const existing = await db().query<{
       id: string;
       assigned_username: string | null;
       assigned_team_id: string | null;
-    }>("SELECT id, assigned_username, assigned_team_id FROM vbs_tasks WHERE id = $1 AND plan_id = $2", [
-      input.id,
-      plan.id,
-    ]);
+      reimbursement_status: string;
+    }>(
+      "SELECT id, assigned_username, assigned_team_id, reimbursement_status FROM vbs_tasks WHERE id = $1 AND plan_id = $2",
+      [input.id, plan.id],
+    );
     const row = existing.rows[0];
     if (!row) {
       return { error: "Task not found" as const };
     }
+    previousReimbursementStatus = reimbursementStatuses.includes(row.reimbursement_status as VbsReimbursementStatus)
+      ? (row.reimbursement_status as VbsReimbursementStatus)
+      : "none";
     const editable =
-      canWrite(access.membership.role) ||
+      planWriteAllowed(access) ||
       (await canEditTask(orgId, username, access.membership.role, row));
     if (!editable) {
       return { error: "You cannot edit this task" as const };
     }
-    const writeFields = canWrite(access.membership.role);
+    const writeFields = planWriteAllowed(access);
     await db().query(
       writeFields
         ? `UPDATE vbs_tasks SET title=$2, description=$3, notes=$4, category=$5, status=$6, due_date=$7,
-             assigned_username=$8, assigned_team_id=$9, expense_amount=$10, reimbursement_status=$11 WHERE id=$1`
+             assigned_username=$8, assigned_team_id=$9, expense_amount=$10, reimbursement_status=$11,
+             reimbursement_archived = CASE WHEN $11 = 'submitted' THEN FALSE ELSE reimbursement_archived END
+             WHERE id=$1`
         : `UPDATE vbs_tasks SET status=$2 WHERE id=$1`,
       writeFields
         ? [
@@ -941,7 +963,7 @@ export async function saveVbsTask(
       await replaceTaskAttachments(input.id, input.attachments);
     }
   } else {
-    if (!canWrite(access.membership.role)) {
+    if (!planWriteAllowed(access)) {
       return { error: "You need write access to add tasks" as const };
     }
     const id = crypto.randomUUID();
@@ -998,6 +1020,40 @@ export async function saveVbsTask(
     }
   }
 
+  if (
+    reimbursementStatus === "submitted" &&
+    previousReimbursementStatus !== "submitted" &&
+    input.id
+  ) {
+    const admins = await orgAdminUsernames(orgId);
+    const amountLabel = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(
+      expenseAmount,
+    );
+    await deliverOrgNotifications(
+      orgId,
+      admins,
+      "Receipt submitted for reimbursement",
+      `${title} — ${amountLabel}. Review in Reimbursements.`,
+      vbsPlanTabLink(orgId, "reimbursements"),
+      { inApp: true, email: true, sms: true },
+    );
+  }
+
+  if (reimbursementStatus === "submitted" && !input.id) {
+    const admins = await orgAdminUsernames(orgId);
+    const amountLabel = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(
+      expenseAmount,
+    );
+    await deliverOrgNotifications(
+      orgId,
+      admins,
+      "Receipt submitted for reimbursement",
+      `${title} — ${amountLabel}. Review in Reimbursements.`,
+      vbsPlanTabLink(orgId, "reimbursements"),
+      { inApp: true, email: true, sms: true },
+    );
+  }
+
   await syncPlanExpensesFromTasks(plan.id);
   return { ok: true as const };
 }
@@ -1007,7 +1063,7 @@ export async function deleteVbsTask(orgId: string, username: string, taskId: str
   if ("error" in access) {
     return access;
   }
-  if (!canWrite(access.membership.role)) {
+  if (!planWriteAllowed(access)) {
     return { error: "You need write access to delete tasks" as const };
   }
   const plan = await getPlanRow(orgId);
@@ -1028,7 +1084,7 @@ export async function saveVbsStation(
   if ("error" in access) {
     return access;
   }
-  if (!canWrite(access.membership.role)) {
+  if (!planWriteAllowed(access)) {
     return { error: "You need write access" as const };
   }
   const plan = await getPlanRow(orgId);
@@ -1068,7 +1124,7 @@ export async function deleteVbsStation(orgId: string, username: string, stationI
   if ("error" in access) {
     return access;
   }
-  if (!canWrite(access.membership.role)) {
+  if (!planWriteAllowed(access)) {
     return { error: "You need write access" as const };
   }
   const plan = await getPlanRow(orgId);
@@ -1097,7 +1153,7 @@ export async function saveVbsScheduleSlot(
   if ("error" in access) {
     return access;
   }
-  if (!canWrite(access.membership.role)) {
+  if (!planWriteAllowed(access)) {
     return { error: "You need write access" as const };
   }
   const plan = await getPlanRow(orgId);
@@ -1158,7 +1214,7 @@ export async function deleteVbsScheduleSlot(orgId: string, username: string, slo
   if ("error" in access) {
     return access;
   }
-  if (!canWrite(access.membership.role)) {
+  if (!planWriteAllowed(access)) {
     return { error: "You need write access" as const };
   }
   const plan = await getPlanRow(orgId);
@@ -1213,7 +1269,7 @@ export async function saveVbsChecklistItem(
     return { ok: true as const };
   }
 
-  if (!canWrite(access.membership.role)) {
+  if (!planWriteAllowed(access)) {
     return { error: "You need write access" as const };
   }
   const label = String(input.label ?? "").trim();
@@ -1265,7 +1321,7 @@ export async function deleteVbsChecklistItem(orgId: string, username: string, it
   if ("error" in access) {
     return access;
   }
-  if (!canWrite(access.membership.role)) {
+  if (!planWriteAllowed(access)) {
     return { error: "You need write access" as const };
   }
   const plan = await getPlanRow(orgId);

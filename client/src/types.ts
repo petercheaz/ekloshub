@@ -9,7 +9,9 @@ export type UserSuggestion = {
   email: string;
 };
 
-export type OrgRole = "org_admin" | "org_team_admin" | "org_write" | "org_read";
+import type { OrgRole } from "@org-permissions";
+
+export type { OrgRole };
 
 export type Organization = {
   id: string;
@@ -307,6 +309,7 @@ export type VbsTask = {
   createdAt: string;
   expenseAmount: number;
   reimbursementStatus: VbsReimbursementStatus;
+  reimbursementArchived?: boolean;
   attachments: VbsTaskAttachment[];
 };
 
@@ -420,6 +423,92 @@ export type VbsCalendarReminder = {
 };
 
 export type CalendarViewMode = "day" | "week" | "month";
+
+export type VbsRegistrationPaymentStatus = "pending" | "paid" | "waived";
+
+export type VbsRegistrationClass = {
+  id: string;
+  organizationId: string;
+  name: string;
+  minAge: number;
+  maxAge: number;
+  capacityMax: number;
+  registrationClosed: boolean;
+  sortOrder: number;
+  enrolledCount: number;
+  leaders: string[];
+  teachers: string[];
+  helpers: string[];
+};
+
+export type VbsRegistrationStudent = {
+  id: string;
+  organizationId: string;
+  childFullName: string;
+  birthMonth: number;
+  birthYear: number;
+  ageYears: number;
+  allergiesCommon: string[];
+  allergiesOther: string;
+  comments: string;
+  specialRequests: string;
+  contact1Name: string;
+  contact1Phone: string;
+  contact2Name: string;
+  contact2Phone: string;
+  attendMon: boolean;
+  attendTue: boolean;
+  attendWed: boolean;
+  attendThu: boolean;
+  attendFri: boolean;
+  tshirtSize: string;
+  assignedTeamId: string;
+  assignedTeamName: string;
+  classId: string;
+  className: string;
+  paymentStatus: VbsRegistrationPaymentStatus;
+  nametagImageKey: string;
+  nametagImageUrl: string;
+  nametagExtraInstructions: string;
+  createdBy: string;
+  source: "staff" | "public";
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type VbsRegistrationWorkspace = {
+  students: VbsRegistrationStudent[];
+  teams: { id: string; name: string }[];
+  classes: VbsRegistrationClass[];
+  summary: {
+    total: number;
+    parentOnline: number;
+    staffEntered: number;
+    unassigned: number;
+    paymentPending: number;
+  };
+  paymentNote: string;
+  canWrite: boolean;
+  canViewContacts: boolean;
+  canViewAllergies: boolean;
+  canConfigureCooking: boolean;
+  cookingTeamId: string;
+  commonAllergies: string[];
+  tshirtSizes: string[];
+  defaultYear: number;
+  publishers: Publisher[];
+  programs: ShareProgram[];
+  publicRegistration: { enabled: boolean; link: string } | null;
+};
+
+export type PublicRegistrationForm = {
+  organizationName: string;
+  programLabel: string;
+  privacyNotice: string;
+  commonAllergies: string[];
+  tshirtSizes: string[];
+  paymentNote: string;
+};
 
 export type VbsPlanWorkspace = {
   plan: VbsPlan | null;

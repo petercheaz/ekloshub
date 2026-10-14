@@ -25,7 +25,11 @@ export async function attachTenant(req: Request, res: Response, next: NextFuncti
 }
 
 export function requireWrite(req: Request, res: Response, next: NextFunction) {
-  if (!req.tenantId || canWriteRole(req.tenantRole)) {
+  if (!req.tenantId) {
+    next();
+    return;
+  }
+  if (req.platformAdmin || canWriteRole(req.tenantRole)) {
     next();
     return;
   }

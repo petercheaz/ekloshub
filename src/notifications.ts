@@ -63,3 +63,11 @@ export async function markNotificationRead(username: string, id: string) {
     username,
   ]);
 }
+
+export async function markAllNotificationsRead(username: string) {
+  const result = await db().query(
+    `UPDATE notifications SET read_at = NOW() WHERE username = $1 AND read_at IS NULL`,
+    [username],
+  );
+  return result.rowCount ?? 0;
+}

@@ -206,7 +206,8 @@ export async function listTeamsForViewer(
   }
   const membership = await getMembership(organizationId, viewerUsername);
   const platformAdmin = platformAdminHint || (await isPlatformAdmin(viewerUsername));
-  const allTeamsAccess = platformAdmin || membership?.role === "org_admin";
+  const { hasOrgWideTeamAccess } = await import("./org-permissions.js");
+  const allTeamsAccess = hasOrgWideTeamAccess(membership?.role ?? null, platformAdmin);
   if (!allTeamsAccess) {
     return teams;
   }
@@ -314,4 +315,20 @@ export async function updateTeam(
   }
   const team = await getTeam(organizationId, teamId);
   return team ? { team } : { error: "Team not found" as const };
+}
+
+export async function deleteTeam(organizationId: string, teamId: string, actor: string) {
+  if (!(await canManageTeams(organizationId, actor))) {
+    return { error: "Only org admins can delete teams" as const };
+  }
+  const existing = await getTeam(organizationId, teamId);
+  if (!existing) {
+    return { error: "Team not found" as const };
+  }
+  await db().query(
+    `DELETE FROM org_team_admin_assignments WHERE organization_id = $1 AND team_id = $2`,
+    [organizationId, teamId],
+  );
+  await db().query(`DELETE FROM org_teams WHERE id = $1 AND organization_id = $2`, [teamId, organizationId]);
+  return { ok: true as const };
 }

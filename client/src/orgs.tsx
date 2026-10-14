@@ -18,6 +18,8 @@ type OrgContextValue = {
   current: Organization | null;
   canWrite: boolean;
   canAdmin: boolean;
+  canManageMembers: boolean;
+  canManageRegistration: boolean;
   canContact: boolean;
   refreshOrgs: () => Promise<void>;
 };
@@ -52,13 +54,36 @@ export function OrgProvider({ children }: { children: ReactNode }) {
 
   const current = organizations.find((org) => org.id === tenantId) ?? null;
   const role: OrgRole | null = current?.role ?? null;
+  const platformAdmin = user?.platformAdmin === true;
   const canWrite = !tenantId || role === "org_admin" || role === "org_write";
-  const canAdmin = role === "org_admin";
+  const canAdmin = role === "org_admin" || platformAdmin;
+  const canManageMembers = role === "org_admin" || role === "registration_admin" || platformAdmin;
+  const canManageRegistration = canManageMembers;
   const canContact = role === "org_admin" || role === "org_team_admin";
 
   const value = useMemo(
-    () => ({ organizations, tenantId, current, canWrite, canAdmin, canContact, refreshOrgs }),
-    [organizations, tenantId, current, canWrite, canAdmin, canContact, refreshOrgs],
+    () => ({
+      organizations,
+      tenantId,
+      current,
+      canWrite,
+      canAdmin,
+      canManageMembers,
+      canManageRegistration,
+      canContact,
+      refreshOrgs,
+    }),
+    [
+      organizations,
+      tenantId,
+      current,
+      canWrite,
+      canAdmin,
+      canManageMembers,
+      canManageRegistration,
+      canContact,
+      refreshOrgs,
+    ],
   );
 
   return <OrgContext.Provider value={value}>{children}</OrgContext.Provider>;

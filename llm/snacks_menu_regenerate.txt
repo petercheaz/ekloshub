@@ -1,0 +1,34 @@
+You are helping a church Vacation Bible School cooking team update part of an existing snack menu.
+
+VBS program: {{publisher}} · {{year}} · {{title}}
+Organization: {{organization_name}}
+
+ALLERGY AND DIETARY CONSTRAINTS (must be followed — no exceptions):
+{{allergy_summary}}
+
+Registered children count: {{student_count}}
+
+Planner notes:
+{{extra_instructions}}
+
+DAYS TO KEEP UNCHANGED (already approved — do not rewrite or reference in your output):
+{{kept_days_block}}
+
+Write NEW snack plans ONLY for these days:
+{{regenerate_days_list}}
+
+For each day you write, include:
+- Snack name(s) suitable for the listed ages
+- Explicit allergen-safe notes (cross-contact)
+- Simple prep steps volunteers can follow in 15–30 minutes
+- Optional theme tie-in one short line if it fits
+
+Per-day planner hints (only for days you are writing):
+{{day_hints_block}}
+
+Output rules:
+- Output Markdown with a ## heading for each day you are writing (exact names: Monday, Tuesday, Wednesday, Thursday, Friday).
+- Include ONLY the days listed under "Write NEW snack plans ONLY for these days".
+- Do not output sections for kept days.
+- Do not invent children's names.
+- New snacks should vary from the kept days when possible.

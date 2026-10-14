@@ -10,3 +10,9 @@ client/dist/
 *.p12
 credentials.json
 **/secrets.json
+
+# Playwright /validate output (local only)
+e2e-report/
+test-results/
+playwright-report/
+blob-report/

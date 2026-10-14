@@ -6,14 +6,12 @@ import { OrgUserListInput } from "../OrgUserListInput";
 import { OrgWorkspacePage } from "../OrgWorkspacePage";
 import { useOrgs } from "../orgs";
 import { defaultVbsPassword } from "../vbs-password";
+import { inviteableRoles, orgRoleLabels } from "@org-permissions";
 import type { OrgDetail, OrgMember, OrgRole } from "../types";
 
-const roles: { id: OrgRole; label: string }[] = [
-  { id: "org_admin", label: "org_admin" },
-  { id: "org_team_admin", label: "org_team_admin" },
-  { id: "org_write", label: "org_write" },
-  { id: "org_read", label: "org_read" },
-];
+const roles: { id: OrgRole; label: string }[] = (
+  Object.entries(orgRoleLabels) as [OrgRole, string][]
+).map(([id, label]) => ({ id, label }));
 
 function memberDisplayName(member: OrgMember) {
   const name = [member.firstName, member.lastName].filter(Boolean).join(" ").trim();
@@ -35,12 +33,13 @@ export default function OrgHomePage() {
   const { orgId = "" } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { canAdmin, refreshOrgs } = useOrgs();
+  const { canAdmin, canManageMembers, refreshOrgs } = useOrgs();
   const [detail, setDetail] = useState<OrgDetail | null>(null);
   const [error, setError] = useState("");
   const [username, setUsername] = useState("");
   const [role, setRole] = useState<OrgRole>("org_read");
   const [emails, setEmails] = useState("");
+  const [inviteRole, setInviteRole] = useState<OrgRole>("org_read");
   const [inviteStatus, setInviteStatus] = useState("");
   const [expandedMember, setExpandedMember] = useState<string | null>(null);
 
@@ -67,7 +66,7 @@ export default function OrgHomePage() {
   async function sendInvites(event: FormEvent) {
     event.preventDefault();
     try {
-      const result = await api.inviteToOrganization(orgId, emails);
+      const result = await api.inviteToOrganization(orgId, emails, inviteRole);
       setDetail(await api.organization(orgId));
       setEmails("");
       setInviteStatus(
@@ -123,8 +122,13 @@ export default function OrgHomePage() {
     return <p className="status">Loading organization…</p>;
   }
 
-  if (detail.organization.role !== "org_admin") {
-    return <p className="status">Only org admins can manage this organization.</p>;
+  const canManage =
+    Boolean(user?.platformAdmin) ||
+    canManageMembers ||
+    detail.organization.role === "org_admin" ||
+    detail.organization.role === "registration_admin";
+  if (!canManage) {
+    return <p className="status">Only org admins or registration admins can manage members.</p>;
   }
 
   const org = detail.organization;
@@ -160,7 +164,7 @@ export default function OrgHomePage() {
               orgId={orgId}
               teams={detail.teams ?? []}
               defaultPasswordLabel={defaultPasswordLabel}
-              canRemove={canAdmin && member.username !== user?.username}
+              canRemove={canManageMembers && member.username !== user?.username}
               expanded={expandedMember === member.username}
               onToggle={() =>
                 setExpandedMember((current) => (current === member.username ? null : member.username))
@@ -176,14 +180,15 @@ export default function OrgHomePage() {
         </ul>
       </section>
 
-      {canAdmin ? (
+      {canManageMembers ? (
         <form
           className="review-form share-form vbs-form-panel"
           onSubmit={(event) => void sendInvites(event)}
         >
           <h3>Invite by email</h3>
           <p className="muted vbs-task-field-hint">
-            Invites join as org_write (can post; cannot manage members or teams).
+            New invites default to viewer or coordinator. Promote to registration admin or org admin from Add
+            member after they join.
           </p>
           <label htmlFor="invite-emails">Emails (comma or semicolon separated)</label>
           <OrgUserListInput
@@ -195,6 +200,18 @@ export default function OrgHomePage() {
             placeholder="Type an email — suggestions from org and existing users…"
             required
           />
+          <label htmlFor="invite-role">Access after they accept</label>
+          <select
+            id="invite-role"
+            value={inviteRole}
+            onChange={(event) => setInviteRole(event.target.value as OrgRole)}
+          >
+            {inviteableRoles.map((item) => (
+              <option key={item} value={item}>
+                {orgRoleLabels[item]}
+              </option>
+            ))}
+          </select>
           <div className="vbs-form-actions">
             <button type="submit" className="vbs-plan-save">
               Send invite
@@ -220,7 +237,7 @@ export default function OrgHomePage() {
           ) : null}
         </form>
       ) : null}
-      {canAdmin ? (
+      {canManageMembers ? (
         <form className="review-form share-form vbs-form-panel" onSubmit={(event) => void addMember(event)}>
           <h3>Add existing user</h3>
           <label htmlFor="member-username">Users (comma or semicolon separated)</label>
