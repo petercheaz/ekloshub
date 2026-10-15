@@ -18,7 +18,7 @@
   --shadow-panel: 0 1px 0 color-mix(in srgb, #fff 4%, transparent),
     0 12px 32px -18px rgb(0 0 0 / 55%);
   --font-sans: "Segoe UI", system-ui, -apple-system, sans-serif;
-  --content-max: 72rem;
+  --content-max: none;
 }
 
 * {
@@ -183,7 +183,7 @@ body {
 
 .empty-main {
   width: 100%;
-  max-width: var(--content-max);
+  max-width: none;
   padding: 2.5rem 0 3rem;
 }
 
@@ -402,7 +402,7 @@ body {
 .vbs-workspace,
 .about {
   width: 100%;
-  max-width: var(--content-max);
+  max-width: none;
   min-width: 0;
 }
 
@@ -419,7 +419,6 @@ body {
 }
 
 .about {
-  max-width: 40rem;
   padding: 0.5rem 0 2rem;
 }
 
@@ -1062,7 +1061,7 @@ body {
 
 .inbox {
   display: grid;
-  grid-template-columns: minmax(14rem, 18rem) minmax(0, 1fr);
+  grid-template-columns: minmax(14rem, 22rem) minmax(0, 1fr);
   min-height: 28rem;
 }
 
@@ -2317,11 +2316,12 @@ legend {
 
 .vbs-workbook-schedule-table {
   table-layout: fixed;
-  width: calc(6.5rem + var(--schedule-col-count, 5) * 12.75rem);
+  width: 100%;
+  min-width: calc(6.5rem + var(--schedule-col-count, 5) * 12.75rem);
 }
 
 .vbs-workbook-schedule-table.has-row-actions {
-  width: calc(6.5rem + 2.35rem + var(--schedule-col-count, 5) * 12.75rem);
+  min-width: calc(6.5rem + 2.35rem + var(--schedule-col-count, 5) * 12.75rem);
 }
 
 .vbs-workbook-schedule-col-time {
@@ -2345,11 +2345,12 @@ legend {
 
 .vbs-workbook-placements-scroll .vbs-workbook-placements-table {
   table-layout: fixed;
-  width: calc(11rem + var(--placement-day-count, 1) * 12.75rem);
+  width: 100%;
+  min-width: calc(11rem + var(--placement-day-count, 1) * 12.75rem);
 }
 
 .vbs-workbook-placements-scroll .vbs-workbook-placements-table.has-row-actions {
-  width: calc(11rem + 2.35rem + var(--placement-day-count, 1) * 12.75rem);
+  min-width: calc(11rem + 2.35rem + var(--placement-day-count, 1) * 12.75rem);
 }
 
 .vbs-workbook-placements-table .vbs-workbook-placement-col-role {
@@ -3190,6 +3191,36 @@ legend {
 
 .vbs-spreadsheet-row.readonly {
   opacity: 0.85;
+}
+
+.vbs-volunteer-compliance-table tbody tr.is-pending {
+  background: color-mix(in srgb, #fb923c 16%, var(--panel-2));
+}
+
+.vbs-volunteer-compliance-table tbody tr.is-cleared {
+  background: color-mix(in srgb, #22c55e 14%, var(--panel-2));
+}
+
+.vbs-volunteer-compliance-table tbody tr.is-pending td,
+.vbs-volunteer-compliance-table tbody tr.is-cleared td {
+  border-bottom-color: color-mix(in srgb, var(--line) 70%, transparent);
+}
+
+.vbs-volunteer-compliance-table tbody tr.is-pending .vbs-inline-status-select,
+.vbs-volunteer-compliance-table tbody tr.is-cleared .vbs-inline-status-select {
+  background: color-mix(in srgb, var(--panel) 70%, transparent);
+  border: 1px solid var(--line);
+  color: inherit;
+  border-radius: 0.4rem;
+  padding: 0.28rem 0.45rem;
+}
+
+.vbs-volunteer-compliance-table tbody tr.is-pending .vbs-inline-status-select {
+  border-color: color-mix(in srgb, #fb923c 45%, var(--line));
+}
+
+.vbs-volunteer-compliance-table tbody tr.is-cleared .vbs-inline-status-select {
+  border-color: color-mix(in srgb, #22c55e 45%, var(--line));
 }
 
 .public-register-shell {
@@ -4051,7 +4082,7 @@ legend {
 
 .vbs-reg-class-row-students .vbs-roster-sortable-list {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
   gap: 0.35rem;
   align-items: start;
 }
@@ -4413,6 +4444,7 @@ legend {
 
 .vbs-registration-roster-table {
   table-layout: fixed;
+  width: 100%;
   min-width: 52rem;
 }
 
@@ -6917,10 +6949,17 @@ table tr.expandable-row-header {
   margin-bottom: 0.85rem;
 }
 
-.vbs-daily-schedule-day-body {
-  width: fit-content;
-  min-width: min(100%, 20rem);
-  max-width: min(100%, 36rem);
+.vbs-daily-schedule-day.vbs-milestone-node {
+  width: 100%;
+  max-width: 100%;
+  margin-left: 0;
+}
+
+.vbs-daily-schedule-day-body,
+.vbs-daily-schedule-day .vbs-milestone-node-body {
+  width: 100%;
+  min-width: 0;
+  max-width: none;
   padding: 0.65rem 0.75rem 0.55rem;
 }
 

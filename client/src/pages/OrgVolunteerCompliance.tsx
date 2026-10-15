@@ -113,7 +113,10 @@ export default function OrgVolunteerCompliancePage() {
           </thead>
           <tbody>
             {data.volunteers.map((volunteer) => (
-              <tr key={volunteer.username}>
+              <tr
+                key={volunteer.username}
+                className={`vbs-volunteer-compliance-row is-${volunteer.backgroundCheckStatus}`}
+              >
                 <td>{displayName(volunteer)}</td>
                 <td className="muted">{volunteer.username}</td>
                 <td>{orgRoleLabels[volunteer.role] ?? volunteer.role}</td>

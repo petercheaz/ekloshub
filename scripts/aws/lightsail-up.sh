@@ -126,10 +126,11 @@ if ! "${ssh_cmd[@]}" "test -f $REMOTE_ENV"; then
   POSTGRES_PASSWORD="$(openssl rand -hex 16)"
   S3_SECRET_KEY="$(openssl rand -hex 16)"
   PCHEAZ_PASSWORD="$(openssl rand -base64 18 | tr -d '/+=' | head -c 20)"
+  SITE_HOST="${PUBLIC_IP}.sslip.io"
   "${ssh_cmd[@]}" "cat > $REMOTE_ENV" <<EOF
-SITE_ADDRESS=:80
+SITE_ADDRESS=${SITE_HOST}
 ACME_EMAIL=off
-APP_PUBLIC_URL=http://${PUBLIC_IP}
+APP_PUBLIC_URL=https://${SITE_HOST}
 AUTH_PASSWORD=${AUTH_PASSWORD}
 SESSION_SECRET=${SESSION_SECRET}
 POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
@@ -139,7 +140,7 @@ EOF
   umask 077
   cat > "$COMPOSE_DIR/.credentials.local" <<EOF
 # Local copy of demo logins. Do not commit. Generated $(date -u +%Y-%m-%dT%H:%MZ)
-URL=http://${PUBLIC_IP}
+URL=https://${SITE_HOST}
 admin / ${AUTH_PASSWORD}
 pcheaz@gmail.com / ${PCHEAZ_PASSWORD}
 EOF
@@ -152,6 +153,6 @@ fi
 "${ssh_cmd[@]}" "chmod +x /opt/vbs/scripts/aws/lightsail-remote-update.sh && bash /opt/vbs/scripts/aws/lightsail-remote-update.sh"
 
 echo
-echo "Demo should be at http://$PUBLIC_IP"
+echo "Demo should be at https://${PUBLIC_IP}.sslip.io"
 echo "Logins: $COMPOSE_DIR/.credentials.local"
 echo "Tear down with: scripts/aws/lightsail-down.sh"
