@@ -1,6 +1,10 @@
 # Deploy VBS to AWS
 
-This app runs as **one Node process**: API + static React (`dist/client`). It needs **PostgreSQL**, **S3**, and environment variables. Local dev uses Docker for Postgres and s3mock; production uses **RDS** and **S3**.
+This app runs as **one Node process**: API + static React (`dist/client`). It needs **PostgreSQL**, **S3**, and environment variables. Local dev uses Docker for Postgres and s3mock.
+
+**Small demo (recommended):** one **Lightsail $12** instance running Docker (app + Postgres + s3mock + Caddy). See `scripts/aws/lightsail-up.sh`. Lightsail is not on the AWS Free plan; upgrade to Paid and let the $200 new-account credits cover the instance for a few months. Set a **$15/month spend limit** in [AWS Settings](https://settings.aws.com).
+
+**Larger AWS production:** RDS + real S3 + ECS, below.
 
 ## What is in the repo
 

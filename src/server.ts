@@ -1876,8 +1876,8 @@ app.get("/{*path}", (_req, res, next) => {
 
 async function start() {
   await waitForDb();
-  await applySchema();
   await waitForS3();
+  await applySchema();
   await seedIfEmpty();
   await ensureKnownAccounts();
   app.listen(port, () => {

@@ -409,16 +409,16 @@ const statements = [
     sort_order INT NOT NULL DEFAULT 0,
     PRIMARY KEY (class_id, student_id)
   )`,
-  `INSERT INTO vbs_registration_class_students (class_id, student_id, sort_order)
-     SELECT class_id, id, class_roster_sort FROM vbs_registrations
-     WHERE class_id IS NOT NULL
-     ON CONFLICT DO NOTHING`,
+  `ALTER TABLE vbs_registrations ADD COLUMN IF NOT EXISTS class_id TEXT REFERENCES vbs_registration_classes(id) ON DELETE SET NULL`,
   `ALTER TABLE vbs_registrations ADD COLUMN IF NOT EXISTS class_roster_sort INT NOT NULL DEFAULT 0`,
+  `INSERT INTO vbs_registration_class_students (class_id, student_id, sort_order)
+     SELECT r.class_id, r.id, r.class_roster_sort FROM vbs_registrations r
+     WHERE r.class_id IS NOT NULL
+     ON CONFLICT DO NOTHING`,
   `ALTER TABLE vbs_registration_classes ADD COLUMN IF NOT EXISTS board_order INT NOT NULL DEFAULT 0`,
   `ALTER TABLE vbs_registration_classes ADD COLUMN IF NOT EXISTS capacity_warn_notified_count INT NOT NULL DEFAULT 0`,
   `ALTER TABLE vbs_registration_classes ADD COLUMN IF NOT EXISTS rotation_index INT`,
   `ALTER TABLE vbs_registration_classes ADD COLUMN IF NOT EXISTS section_label TEXT NOT NULL DEFAULT ''`,
-  `ALTER TABLE vbs_registrations ADD COLUMN IF NOT EXISTS class_id TEXT REFERENCES vbs_registration_classes(id) ON DELETE SET NULL`,
   `ALTER TABLE vbs_registrations ADD COLUMN IF NOT EXISTS payment_status TEXT NOT NULL DEFAULT 'pending'`,
   `ALTER TABLE vbs_registrations DROP CONSTRAINT IF EXISTS vbs_registrations_payment_status_check`,
   `ALTER TABLE vbs_registrations ADD CONSTRAINT vbs_registrations_payment_status_check

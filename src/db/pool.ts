@@ -11,7 +11,7 @@ export function db() {
   return pool;
 }
 
-export async function waitForDb(tries = 40) {
+export async function waitForDb(tries = 90) {
   let lastError: unknown;
   for (let attempt = 0; attempt < tries; attempt += 1) {
     try {
