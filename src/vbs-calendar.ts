@@ -1,12 +1,13 @@
 import { db } from "./db/pool.js";
 import { deliverOrgNotifications } from "./notify-delivery.js";
 import { getMembership } from "./orgs.js";
+import { parsePrayerSchedule, prayerReminderTitle, type WorksheetPrayerRow } from "./vbs-prayer-reminders.js";
 
 type VbsTask = { id: string; dueDate: string; title: string };
 type VbsScheduleSlot = { id: string; dayDate: string; startsAt: string; label: string };
 type VbsChecklistItem = { id: string; dueDate: string; label: string };
 
-export type CalendarItemType = "task" | "schedule" | "checklist" | "plan_start" | "plan_end";
+export type CalendarItemType = "task" | "schedule" | "checklist" | "plan_start" | "plan_end" | "prayer";
 export type CalendarViewMode = "day" | "week" | "month";
 
 export const REMINDER_OFFSETS_MINUTES = [10, 20, 30, 60, 1440] as const;
@@ -149,6 +150,7 @@ function parseEventAt(
   tasks: VbsTask[],
   schedule: VbsScheduleSlot[],
   checklist: VbsChecklistItem[] = [],
+  prayerById: Map<string, WorksheetPrayerRow> = new Map(),
 ): Date | null {
   if (!plan) {
     return null;
@@ -181,6 +183,14 @@ function parseEventAt(
     }
     return new Date(`${item.dueDate}T09:00:00`);
   }
+  if (itemType === "prayer") {
+    const row = prayerById.get(itemId);
+    if (!row?.prayDate) {
+      return null;
+    }
+    const at = new Date(`${row.prayDate}T08:00:00`);
+    return Number.isNaN(at.getTime()) ? null : at;
+  }
   return null;
 }
 
@@ -191,6 +201,7 @@ function reminderLabel(
   tasks: VbsTask[],
   schedule: VbsScheduleSlot[],
   checklist: VbsChecklistItem[] = [],
+  prayerById: Map<string, WorksheetPrayerRow> = new Map(),
 ) {
   if (itemType === "plan_start") {
     return `${plan.title || "VBS"} starts`;
@@ -203,6 +214,9 @@ function reminderLabel(
   }
   if (itemType === "checklist") {
     return checklist.find((c) => c.id === itemId)?.label ?? "Checklist item";
+  }
+  if (itemType === "prayer") {
+    return prayerReminderTitle(prayerById.get(itemId));
   }
   return schedule.find((s) => s.id === itemId)?.label ?? "Schedule block";
 }
@@ -231,8 +245,9 @@ export async function processCalendarReminders() {
       title: string;
       start_date: Date | null;
       end_date: Date | null;
+      worksheet_data: unknown;
     }>(
-      `SELECT id, title, start_date, end_date FROM vbs_plans WHERE organization_id = $1 LIMIT 1`,
+      `SELECT id, title, start_date, end_date, worksheet_data FROM vbs_plans WHERE organization_id = $1 LIMIT 1`,
       [row.organization_id],
     );
     const planData = planRow.rows[0];
@@ -291,7 +306,15 @@ export async function processCalendarReminders() {
       dueDate: c.due_date ? c.due_date.toISOString().slice(0, 10) : "",
     }));
 
-    const eventAt = parseEventAt(row.item_type, row.item_id, plan, tasks, schedule, checklist);
+    const worksheet = planData.worksheet_data as { prayerSchedule?: unknown } | null;
+    const prayerById = new Map<string, WorksheetPrayerRow>();
+    for (const prayerRow of parsePrayerSchedule(worksheet?.prayerSchedule)) {
+      if (prayerRow.id?.trim()) {
+        prayerById.set(prayerRow.id.trim(), prayerRow);
+      }
+    }
+
+    const eventAt = parseEventAt(row.item_type, row.item_id, plan, tasks, schedule, checklist, prayerById);
     if (!eventAt) {
       continue;
     }
@@ -300,7 +323,7 @@ export async function processCalendarReminders() {
       continue;
     }
 
-    const title = reminderLabel(row.item_type, row.item_id, plan, tasks, schedule, checklist);
+    const title = reminderLabel(row.item_type, row.item_id, plan, tasks, schedule, checklist, prayerById);
     const when = eventAt.toLocaleString();
     const offset =
       row.minutes_before >= 1440
@@ -309,7 +332,10 @@ export async function processCalendarReminders() {
           ? `${row.minutes_before / 60} hour${row.minutes_before > 60 ? "s" : ""}`
           : `${row.minutes_before} minutes`;
     const body = `Reminder (${offset} before): ${title} at ${when}`;
-    const link = `/org/${row.organization_id}/vbs-plan`;
+    const link =
+      row.item_type === "prayer"
+        ? `/org/${row.organization_id}/vbs-plan?tab=workbook&workbook=prayer`
+        : `/org/${row.organization_id}/vbs-plan`;
 
     await deliverOrgNotifications(row.organization_id, [row.username], `VBS calendar: ${title}`, body, link, {
       inApp: true,

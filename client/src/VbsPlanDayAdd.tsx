@@ -1,6 +1,7 @@
 import { FormEvent, useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import { api } from "./api";
+import { AddActionButton } from "./CollapsibleForm";
 import { OrgUserTypeahead } from "./OrgUserTypeahead";
 import type { VbsPlanWorkspace } from "./types";
 import { formatIsoDay } from "./vbs-plan-spreadsheet";
@@ -208,7 +209,7 @@ export function VbsPlanDayAdd({ day, data, orgId, disabled, onRun }: Props) {
             </label>
           ) : null}
           <div className="vbs-cal-day-add-form-actions">
-            <button type="submit">Add</button>
+            <AddActionButton type="submit" label="Add" />
             <button type="button" className="ghost" onClick={() => setKind(null)}>
               Back
             </button>

@@ -34,8 +34,8 @@ function TreeNode({
 export function CookingPlanAllergyTree({ data }: { data: CookingPlanWorkspace }) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
-  const [scale, setScale] = useState(0.85);
-  const [pan, setPan] = useState({ x: 32, y: 24 });
+  const [scale, setScale] = useState(1);
+  const [pan, setPan] = useState({ x: 16, y: 16 });
   const [panning, setPanning] = useState(false);
   const panStart = useRef({ x: 0, y: 0, panX: 0, panY: 0 });
 
@@ -71,18 +71,47 @@ export function CookingPlanAllergyTree({ data }: { data: CookingPlanWorkspace })
       return;
     }
     const vp = viewport.getBoundingClientRect();
-    const padding = 32;
+    const contentW = stage.offsetWidth;
+    const contentH = stage.offsetHeight;
+    if (vp.width < 8 || vp.height < 8 || contentW < 8 || contentH < 8) {
+      return;
+    }
+    const padding = 24;
     const nextScale = clampZoom(
-      Math.min((vp.width - padding) / stage.offsetWidth, (vp.height - padding) / stage.offsetHeight, 1),
+      Math.min((vp.width - padding) / contentW, (vp.height - padding) / contentH),
     );
+    const scaledW = contentW * nextScale;
+    const scaledH = contentH * nextScale;
     setScale(nextScale);
-    setPan({ x: 20, y: 16 });
+    setPan({
+      x: Math.max(8, (vp.width - scaledW) / 2),
+      y: Math.max(8, (vp.height - scaledH) / 2),
+    });
   }, []);
 
   useEffect(() => {
-    const id = window.requestAnimationFrame(() => fitToView());
-    return () => window.cancelAnimationFrame(id);
-  }, [data.studentCount, data.allergyStudents.length, fitToView]);
+    let frame = 0;
+    const scheduleFit = () => {
+      frame = window.requestAnimationFrame(() => {
+        fitToView();
+        frame = window.requestAnimationFrame(() => fitToView());
+      });
+    };
+    scheduleFit();
+    return () => window.cancelAnimationFrame(frame);
+  }, [data.studentCount, data.allergyStudents.length, studentsByAllergen, fitToView]);
+
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) {
+      return;
+    }
+    const observer = new ResizeObserver(() => {
+      fitToView();
+    });
+    observer.observe(viewport);
+    return () => observer.disconnect();
+  }, [fitToView]);
 
   useEffect(() => {
     const el = viewportRef.current;

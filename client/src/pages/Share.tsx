@@ -8,6 +8,7 @@ import { vbsProgramsMatching } from "../vbs-cascade";
 import { applyVbsFilterDefault } from "../vbs-filters";
 import type { Publisher, ShareAttachment, ShareListing, ShareProgram } from "../types";
 import { attachmentTooLargeMessage, MAX_ATTACHMENT_BYTES } from "@media-limits";
+import { expandableRowHeaderProps } from "../expandable-row";
 
 const PREVIEW_CHARS = 180;
 const emptyDraft = {
@@ -399,19 +400,22 @@ export default function SharePage() {
                   const preview = previewText([listing.item, listing.details].filter(Boolean).join(" — "));
                   return (
                     <li key={listing.id} className={open ? "entry open" : "entry"}>
-                      <button
-                        type="button"
-                        className="entry-summary"
-                        aria-expanded={open}
-                        onClick={() => setOpenId(open ? null : listing.id)}
+                      <div
+                        {...expandableRowHeaderProps(
+                          open,
+                          () => setOpenId(open ? null : listing.id),
+                          "entry-row-header",
+                        )}
                       >
-                        <div className="entry-meta">
-                          <span className="author">{listing.username}</span>
-                          {listing.verified ? <span className="badge">Verified</span> : null}
-                          <span className="available-date">Available {formatAvailable(listing.availableOn)}</span>
+                        <div className="entry-summary">
+                          <div className="entry-meta">
+                            <span className="author">{listing.username}</span>
+                            {listing.verified ? <span className="badge">Verified</span> : null}
+                            <span className="available-date">Available {formatAvailable(listing.availableOn)}</span>
+                          </div>
+                          {preview ? <p className="entry-preview">{preview}</p> : null}
                         </div>
-                        {preview ? <p className="entry-preview">{preview}</p> : null}
-                      </button>
+                      </div>
                       {open ? (
                         <div className="entry-body">
                           {listing.details ? <p>{listing.details}</p> : null}

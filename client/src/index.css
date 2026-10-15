@@ -1,13 +1,24 @@
 :root {
   color-scheme: dark;
-  --bg: #0e141b;
-  --panel: #17202a;
-  --panel-2: #1d2834;
+  --bg: #0c1218;
+  --bg-elevated: #101820;
+  --panel: #161f28;
+  --panel-2: #1c2732;
   --text: #f3f7fb;
-  --muted: #9aa8b8;
-  --line: #2b3a4a;
+  --muted: #94a3b4;
+  --line: #2a3848;
+  --line-soft: color-mix(in srgb, var(--line) 65%, transparent);
   --accent: #7dd3fc;
   --accent-2: #38bdf8;
+  --accent-glow: color-mix(in srgb, var(--accent) 22%, transparent);
+  --radius-sm: 0.45rem;
+  --radius-md: 0.65rem;
+  --radius-lg: 0.85rem;
+  --radius-xl: 1rem;
+  --shadow-panel: 0 1px 0 color-mix(in srgb, #fff 4%, transparent),
+    0 12px 32px -18px rgb(0 0 0 / 55%);
+  --font-sans: "Segoe UI", system-ui, -apple-system, sans-serif;
+  --content-max: 72rem;
 }
 
 * {
@@ -17,9 +28,19 @@
 body {
   margin: 0;
   min-height: 100vh;
-  font-family: "Segoe UI", system-ui, sans-serif;
-  background: var(--bg);
+  font-family: var(--font-sans);
+  background:
+    radial-gradient(ellipse 120% 80% at 50% -20%, rgb(56 189 248 / 8%), transparent 55%),
+    radial-gradient(ellipse 80% 50% at 100% 0%, rgb(125 211 252 / 4%), transparent 45%),
+    var(--bg);
   color: var(--text);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 75%, white);
+  outline-offset: 2px;
 }
 
 #root,
@@ -44,7 +65,7 @@ body {
   min-width: 0;
   width: 100%;
   border-right: 1px solid var(--line);
-  background: #121a22;
+  background: linear-gradient(180deg, #131b24 0%, #101820 100%);
   padding: 0.65rem 0.5rem 0.7rem;
   display: flex;
   flex-direction: column;
@@ -162,8 +183,73 @@ body {
 
 .empty-main {
   width: 100%;
-  max-width: none;
-  padding-top: 4rem;
+  max-width: var(--content-max);
+  padding: 2.5rem 0 3rem;
+}
+
+.landing-hero {
+  margin: 0 0 2rem;
+  max-width: 36rem;
+}
+
+.landing-hero h1 {
+  margin: 0.35rem 0 0.65rem;
+  font-size: clamp(1.75rem, 3vw, 2.25rem);
+  font-weight: 750;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+}
+
+.landing-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.landing-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 1rem 1.05rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--panel-2) 88%, var(--accent) 12%);
+  box-shadow: var(--shadow-panel);
+  color: inherit;
+  text-decoration: none;
+  transition:
+    border-color 0.15s ease,
+    transform 0.15s ease,
+    background 0.15s ease;
+}
+
+.landing-card:hover {
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--line));
+  background: color-mix(in srgb, var(--panel-2) 82%, var(--accent) 18%);
+  transform: translateY(-1px);
+}
+
+.landing-card strong {
+  font-size: 0.95rem;
+  font-weight: 650;
+  color: var(--text);
+}
+
+.landing-card span {
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.landing-section-title {
+  margin-top: 1.75rem;
+}
+
+.landing-section-foot {
+  margin-top: 1.5rem;
 }
 
 .brand-lockup {
@@ -307,7 +393,7 @@ body {
 }
 
 .content {
-  padding: 1.5rem 1.75rem 4rem;
+  padding: 1.35rem 1.75rem 4rem;
   min-width: 0;
   width: 100%;
 }
@@ -316,8 +402,54 @@ body {
 .vbs-workspace,
 .about {
   width: 100%;
-  max-width: none;
+  max-width: var(--content-max);
   min-width: 0;
+}
+
+.vbs-workspace {
+  display: flex;
+  flex-direction: column;
+  gap: 1.15rem;
+}
+
+.vbs-workspace-head.page-head {
+  padding-bottom: 1.1rem;
+  margin-bottom: 0.15rem;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.about {
+  max-width: 40rem;
+  padding: 0.5rem 0 2rem;
+}
+
+.about h1 {
+  margin: 0.35rem 0 0.85rem;
+  font-size: clamp(1.65rem, 2.5vw, 2rem);
+  font-weight: 750;
+  letter-spacing: -0.025em;
+}
+
+.about p {
+  margin: 0 0 1rem;
+  font-size: 1.02rem;
+}
+
+.about-lead {
+  margin: 0;
+}
+
+.about-start {
+  margin-top: 0;
+}
+
+.about-em {
+  color: var(--text);
+  font-weight: 650;
+}
+
+.about .vbs-panel + .vbs-panel {
+  margin-top: 0.85rem;
 }
 
 .content-top {
@@ -376,6 +508,14 @@ body {
   background: var(--panel-2);
   border: 1px solid var(--line);
   text-decoration: none;
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease;
+}
+
+.bell:hover {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
+  background: color-mix(in srgb, var(--accent) 10%, var(--panel-2));
 }
 
 .bell svg {
@@ -527,6 +667,196 @@ body {
 .vbs-plan-adherence-grid h3 {
   font-size: 0.9rem;
   margin: 0 0 0.35rem;
+}
+
+.vbs-plan-adherence-actions {
+  margin: 0.35rem 0 0;
+  font-size: 0.86rem;
+}
+
+.vbs-plan-adherence-actions a {
+  font-weight: 650;
+}
+
+.vbs-director-inbox {
+  margin-bottom: 1.1rem;
+}
+
+.vbs-director-checklist {
+  margin-bottom: 1.25rem;
+}
+
+.vbs-director-checklist-lead {
+  margin: 0.35rem 0 0.85rem;
+}
+
+.vbs-director-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.65rem;
+}
+
+.vbs-director-step {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.75rem;
+  align-items: start;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 0.65rem;
+  background: var(--panel-2);
+}
+
+.vbs-director-step.done {
+  border-color: color-mix(in srgb, #4ade80 35%, var(--line));
+}
+
+.vbs-director-step-num {
+  width: 1.65rem;
+  height: 1.65rem;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  background: color-mix(in srgb, var(--accent) 18%, var(--panel));
+  color: var(--accent);
+}
+
+.vbs-director-step.done .vbs-director-step-num {
+  background: color-mix(in srgb, #4ade80 22%, var(--panel));
+  color: #bbf7d0;
+}
+
+.vbs-director-step-title {
+  font-weight: 650;
+  color: inherit;
+  text-decoration: none;
+}
+
+.vbs-director-step-title:hover {
+  color: var(--accent);
+}
+
+.vbs-director-step-body p {
+  margin: 0.2rem 0 0;
+  font-size: 0.86rem;
+}
+
+.vbs-director-quick {
+  margin-top: 0.5rem;
+}
+
+.vbs-director-link-grid {
+  margin-top: 0.65rem;
+}
+
+.vbs-director-quick-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.65rem;
+}
+
+.vbs-director-foot {
+  margin-top: 1.25rem;
+  font-size: 0.82rem;
+}
+
+.vbs-supply-list {
+  list-style: none;
+  margin: 0.75rem 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.vbs-supply-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto auto auto;
+  gap: 0.65rem;
+  align-items: center;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.vbs-supply-row.purchased .vbs-supply-name {
+  text-decoration: line-through;
+  opacity: 0.75;
+}
+
+.vbs-supply-add {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  align-items: flex-end;
+  margin-top: 0.85rem;
+}
+
+.vbs-plan-supply-totals {
+  font-size: 0.9rem;
+  margin: 0.35rem 0 0.5rem;
+}
+
+.vbs-my-week-schedule,
+.vbs-my-week-tasks,
+.vbs-my-week-teams {
+  list-style: none;
+  margin: 0.5rem 0 0.75rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.vbs-my-week-you {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.vbs-family-page {
+  max-width: 36rem;
+}
+
+.vbs-family-notes {
+  margin-top: 1.25rem;
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: 0.65rem;
+  background: var(--panel-2);
+}
+
+.org-links-label {
+  margin: 0.65rem 0 0.25rem;
+  padding-left: 0.35rem;
+}
+
+.vbs-reg-workflow-steps {
+  margin: 0 0 0.85rem;
+  padding-left: 1.15rem;
+  font-size: 0.88rem;
+  line-height: 1.55;
+}
+
+.vbs-schedule-editor-drawer {
+  margin-top: 1rem;
+  padding: 0.65rem 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: 0.65rem;
+  background: color-mix(in srgb, var(--panel-2) 90%, transparent);
+}
+
+.vbs-schedule-editor-drawer summary {
+  cursor: pointer;
+  font-weight: 650;
+  color: var(--accent);
+}
+
+.vbs-schedule-editor-drawer[open] summary {
+  margin-bottom: 0.75rem;
 }
 
 .vbs-plan-adherence-list {
@@ -862,6 +1192,14 @@ body {
   margin: 0.3rem 0 0.5rem;
 }
 
+.page-head h1,
+.vbs-workspace-head h1 {
+  font-size: clamp(1.55rem, 2.4vw, 1.95rem);
+  font-weight: 750;
+  letter-spacing: -0.025em;
+  line-height: 1.2;
+}
+
 .eyebrow {
   margin: 0;
   text-transform: uppercase;
@@ -886,12 +1224,12 @@ body {
 }
 
 .vbs-filter-panel {
-  margin: 1.25rem 0 1.75rem;
+  margin: 0;
   padding: 1rem 1.15rem 1.1rem;
-  border: 1px solid var(--line);
-  border-radius: 0.85rem;
-  background: color-mix(in srgb, var(--panel) 92%, var(--accent) 8%);
-  box-shadow: 0 1px 0 color-mix(in srgb, var(--text) 6%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 18%, var(--line));
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--panel) 88%, var(--accent) 12%);
+  box-shadow: var(--shadow-panel);
 }
 
 .vbs-filter-panel-compact {
@@ -1063,8 +1401,9 @@ legend {
 }
 
 .program-list {
-  display: grid;
-  gap: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.15rem;
 }
 
 .group-head {
@@ -1092,9 +1431,15 @@ legend {
 
 .entry {
   border: 1px solid var(--line);
-  border-radius: 0.75rem;
+  border-radius: var(--radius-lg);
   background: var(--panel);
   overflow: hidden;
+  box-shadow: 0 1px 0 color-mix(in srgb, #fff 3%, transparent);
+  transition: border-color 0.12s ease;
+}
+
+.entry.open {
+  border-color: color-mix(in srgb, var(--accent) 28%, var(--line));
 }
 
 .entry-summary {
@@ -1308,9 +1653,19 @@ legend {
 
 .ghost {
   border: 1px solid var(--line);
-  background: transparent;
+  background: color-mix(in srgb, var(--panel) 40%, transparent);
   color: var(--text);
   justify-self: start;
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease,
+    color 0.12s ease;
+}
+
+.ghost:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--line));
+  background: color-mix(in srgb, var(--accent) 8%, var(--panel-2));
+  color: var(--text);
 }
 
 .review-form,
@@ -1349,10 +1704,21 @@ legend {
   place-content: center;
   justify-items: center;
   gap: 1.25rem;
+  padding: 1.5rem;
+  background:
+    radial-gradient(ellipse 90% 60% at 50% 0%, rgb(56 189 248 / 12%), transparent 50%),
+    var(--bg);
 }
 
 .login-card {
   width: min(420px, 92vw);
+  box-shadow: var(--shadow-panel);
+}
+
+.login-card label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--muted);
 }
 
 .picture-grid {
@@ -1574,8 +1940,8 @@ legend {
 
 .vbs-plan-masthead {
   display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 1.25rem 1.5rem;
+  grid-template-columns: minmax(0, 1fr) minmax(14rem, 22rem);
+  gap: 1.25rem 2rem;
   align-items: start;
   margin: 0 0 1.35rem;
   padding: 1.15rem 1.25rem;
@@ -1585,9 +1951,17 @@ legend {
   box-shadow: 0 1px 0 color-mix(in srgb, var(--text) 5%, transparent);
 }
 
+.vbs-plan-masthead-main {
+  min-width: 0;
+}
+
 @media (max-width: 720px) {
   .vbs-plan-masthead {
     grid-template-columns: 1fr;
+  }
+
+  .vbs-plan-masthead-aside {
+    max-width: none;
   }
 }
 
@@ -1615,8 +1989,8 @@ legend {
 
 .vbs-plan-masthead-meta-row {
   display: grid;
-  grid-template-columns: 5.25rem 1fr;
-  gap: 0.65rem;
+  grid-template-columns: minmax(4.75rem, auto) minmax(0, 1fr);
+  gap: 0.65rem 1rem;
   align-items: baseline;
   font-size: 0.9rem;
   line-height: 1.4;
@@ -1646,7 +2020,387 @@ legend {
   display: flex;
   flex-direction: column;
   gap: 0.55rem;
-  min-width: min(100%, 15rem);
+  min-width: 0;
+  max-width: 22rem;
+  width: 100%;
+  justify-self: end;
+}
+
+.vbs-plan-excel-actions {
+  margin-top: 0.35rem;
+  padding-top: 0.65rem;
+  border-top: 1px solid var(--line);
+  min-width: 0;
+  max-width: 100%;
+}
+
+.vbs-plan-excel-actions-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.5rem;
+}
+
+.vbs-plan-excel-actions-hint {
+  margin: 0.45rem 0 0;
+  font-size: 0.78rem;
+  line-height: 1.4;
+  max-width: 100%;
+}
+
+.vbs-plan-excel-actions-details {
+  margin-top: 0.35rem;
+  font-size: 0.78rem;
+}
+
+.vbs-plan-excel-actions-details summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.vbs-plan-excel-actions-details summary::-webkit-details-marker {
+  display: none;
+}
+
+.vbs-plan-excel-actions-details ul {
+  margin: 0.35rem 0 0;
+  padding-left: 1.1rem;
+  line-height: 1.45;
+}
+
+.vbs-plan-workbook {
+  display: flex;
+  flex-direction: column;
+  gap: 1.75rem;
+}
+
+.vbs-plan-workbook-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+}
+
+.vbs-plan-workbook-head h2 {
+  margin: 0 0 0.35rem;
+}
+
+.vbs-plan-workbook-toolbar {
+  margin-bottom: 0.25rem;
+}
+
+.vbs-plan-workbook-toolbar .vbs-prep-views {
+  flex-wrap: wrap;
+}
+
+.vbs-plan-workbook-section h3 {
+  margin: 0 0 0.25rem;
+}
+
+.vbs-plan-workbook-section .muted {
+  margin: 0 0 0.65rem;
+}
+
+.vbs-plan-workbook-table textarea {
+  width: 100%;
+  min-width: 6rem;
+  font: inherit;
+  resize: vertical;
+}
+
+.vbs-plan-workbook-station-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 10rem;
+}
+
+.vbs-plan-workbook-station-cell select {
+  width: 100%;
+  font: inherit;
+}
+
+.vbs-plan-workbook-notes {
+  width: 100%;
+  font: inherit;
+  min-height: 8rem;
+}
+
+.vbs-workbook-dnd-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(11rem, 14rem);
+  gap: 0.85rem;
+  align-items: start;
+}
+
+@media (max-width: 1100px) {
+  .vbs-workbook-dnd-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.vbs-workbook-dnd-main {
+  min-width: 0;
+}
+
+.vbs-workbook-prayer-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.vbs-workbook-prayer-row {
+  position: relative;
+  padding: 0.75rem;
+  padding-right: 2.75rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--panel-2);
+  box-shadow: var(--shadow-panel);
+}
+
+.vbs-workbook-prayer-slots {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: 0.55rem;
+  align-items: start;
+}
+
+.vbs-workbook-person-slot,
+.vbs-workbook-assignment-box {
+  min-height: 3.25rem;
+  padding: 0.45rem 0.5rem;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius-md);
+  background: var(--panel);
+}
+
+.vbs-workbook-person-slot.is-drop-over,
+.vbs-workbook-assignment-box.is-drop-over {
+  border-color: var(--accent, #3d6b5e);
+  background: color-mix(in srgb, var(--accent, #3d6b5e) 8%, var(--panel));
+}
+
+.vbs-workbook-slot-label {
+  display: block;
+  margin-bottom: 0.35rem;
+  font-size: 0.68rem;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.vbs-workbook-drop-empty {
+  margin: 0.25rem 0 0;
+  font-size: 0.78rem;
+}
+
+.vbs-workbook-assigned-chip {
+  width: 100%;
+  max-width: 100%;
+}
+
+.vbs-workbook-assigned-chip .vbs-truncation-tooltip.vbs-reg-class-chip-name,
+.vbs-workbook-volunteer-pool .vbs-reg-class-chip-text > .vbs-truncation-tooltip.vbs-reg-class-chip-name {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.vbs-reg-class-chip-name-text,
+.vbs-reg-class-chip-login-text {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vbs-workbook-volunteer-pool .vbs-reg-class-chip-login.vbs-truncation-tooltip {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.vbs-workbook-assignment-chips {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.vbs-workbook-assignment-chips li.is-drop-target {
+  box-shadow: inset 0 2px 0 var(--accent, #3d6b5e);
+  border-radius: var(--radius-sm);
+}
+
+.vbs-workbook-prayer-date-col {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.vbs-workbook-prayer-date input {
+  width: 100%;
+  font: inherit;
+}
+
+.vbs-workbook-prayer-notify {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 0;
+  padding-top: 0.15rem;
+  border-top: 1px solid var(--line);
+}
+
+.vbs-workbook-prayer-notify-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.vbs-workbook-prayer-notify-toggle input {
+  margin: 0;
+}
+
+.vbs-workbook-prayer-notify-when {
+  width: 100%;
+  font: inherit;
+  padding: 0.45rem 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--panel);
+  color: var(--text);
+}
+
+.vbs-workbook-prayer-notify-when:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.vbs-workbook-prayer-row-remove {
+  position: absolute;
+  top: 0.65rem;
+  right: 0.65rem;
+  margin: 0;
+}
+
+.vbs-plan-workbook-table .vbs-workbook-table-row-actions,
+.vbs-plan-workbook-table .vbs-workbook-table-row-actions-head {
+  vertical-align: top;
+  text-align: center;
+  width: 2.35rem;
+  padding-left: 0.25rem;
+  padding-right: 0.25rem;
+}
+
+.vbs-workbook-table-row-remove {
+  margin: 0 auto;
+}
+
+.vbs-workbook-placements-scroll {
+  overflow-x: auto;
+  overflow-y: visible;
+  max-width: 100%;
+}
+
+.vbs-workbook-schedule-scroll {
+  overflow-x: auto;
+  overflow-y: visible;
+  max-width: 100%;
+}
+
+.vbs-workbook-schedule-table {
+  table-layout: fixed;
+  width: calc(6.5rem + var(--schedule-col-count, 5) * 12.75rem);
+}
+
+.vbs-workbook-schedule-table.has-row-actions {
+  width: calc(6.5rem + 2.35rem + var(--schedule-col-count, 5) * 12.75rem);
+}
+
+.vbs-workbook-schedule-col-time {
+  width: 6.5rem;
+}
+
+.vbs-workbook-schedule-col-data {
+  width: 12.75rem;
+}
+
+.vbs-workbook-schedule-col-actions {
+  width: 2.35rem;
+}
+
+.vbs-workbook-schedule-col-head,
+.vbs-workbook-schedule-data-cell,
+.vbs-workbook-schedule-time-cell {
+  vertical-align: top;
+}
+
+
+.vbs-workbook-placements-scroll .vbs-workbook-placements-table {
+  table-layout: fixed;
+  width: calc(11rem + var(--placement-day-count, 1) * 12.75rem);
+}
+
+.vbs-workbook-placements-scroll .vbs-workbook-placements-table.has-row-actions {
+  width: calc(11rem + 2.35rem + var(--placement-day-count, 1) * 12.75rem);
+}
+
+.vbs-workbook-placements-table .vbs-workbook-placement-col-role {
+  width: 11rem;
+}
+
+.vbs-workbook-placements-table .vbs-workbook-placement-col-day {
+  width: 12.75rem;
+}
+
+.vbs-workbook-placements-table .vbs-workbook-placement-col-actions {
+  width: 2.35rem;
+}
+
+.vbs-workbook-placements-table .vbs-workbook-placement-day,
+.vbs-workbook-placements-table th.vbs-workbook-placement-day-head {
+  width: 12.75rem;
+  min-width: 12.75rem;
+  max-width: 12.75rem;
+  box-sizing: border-box;
+}
+
+.vbs-workbook-placements-table .vbs-workbook-placement-day {
+  vertical-align: top;
+}
+
+.vbs-workbook-placements-table thead th.vbs-workbook-placement-day-head {
+  white-space: nowrap;
+  font-size: 0.8rem;
+  font-weight: 650;
+  line-height: 1.25;
+  padding-top: 0.45rem;
+  padding-bottom: 0.45rem;
+}
+
+.vbs-workbook-placements-table .vbs-workbook-placement-actions,
+.vbs-workbook-placements-table .vbs-workbook-placement-actions-head {
+  vertical-align: top;
+  text-align: center;
+  padding-left: 0.25rem;
+  padding-right: 0.25rem;
+}
+
+.vbs-workbook-placements-table .vbs-workbook-assignment-box {
+  min-height: 5rem;
+}
+
+.vbs-plan-workbook-notes-readonly {
+  margin: 0;
+  white-space: pre-wrap;
+  font: inherit;
 }
 
 .vbs-plan-snapshot {
@@ -1654,9 +2408,10 @@ legend {
   margin: 0;
   padding: 0;
   display: grid;
-  grid-template-columns: repeat(2, minmax(6.5rem, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.45rem;
-  min-width: min(100%, 15rem);
+  min-width: 0;
+  width: 100%;
 }
 
 .vbs-plan-financial strong {
@@ -1803,10 +2558,16 @@ legend {
 .vbs-chrome-tabs-panel {
   position: relative;
   z-index: 1;
-  padding: 0.85rem 0.9rem 0.25rem;
+  padding: 0.85rem 0.9rem 1rem;
   background: var(--chrome-tab-active);
   border: 1px solid var(--line);
-  border-radius: 0 0 0.6rem 0.6rem;
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+  box-shadow: var(--shadow-panel);
+}
+
+.vbs-chrome-tabs-panel .vbs-panel {
+  background: color-mix(in srgb, var(--panel) 55%, var(--panel-2));
+  box-shadow: 0 1px 0 color-mix(in srgb, #fff 3%, transparent);
 }
 
 .vbs-chrome-tabs-panel > .vbs-panel {
@@ -2484,31 +3245,6 @@ legend {
   font: inherit;
 }
 
-.vbs-roster-planning-views {
-  display: inline-flex;
-  gap: 0.25rem;
-  margin-bottom: 1rem;
-  padding: 0.2rem;
-  border-radius: 8px;
-  background: rgba(0, 0, 0, 0.15);
-}
-
-.vbs-roster-planning-view {
-  border: none;
-  background: transparent;
-  padding: 0.4rem 0.85rem;
-  border-radius: 6px;
-  font: inherit;
-  cursor: pointer;
-  color: inherit;
-  opacity: 0.75;
-}
-
-.vbs-roster-planning-view.active {
-  opacity: 1;
-  background: rgba(255, 255, 255, 0.1);
-}
-
 .vbs-roster-vizio {
   position: relative;
 }
@@ -2815,8 +3551,6 @@ legend {
 
 .vbs-reimbursements-actions {
   margin-top: 1.25rem;
-  flex-direction: column;
-  align-items: flex-start;
 }
 
 .vbs-reimbursements-close-hint {
@@ -2826,16 +3560,14 @@ legend {
 }
 
 .vbs-cooking-plan-page .vbs-cooking-plan-layout {
-  display: grid;
-  grid-template-columns: minmax(280px, 36%) 1fr;
+  display: flex;
+  flex-direction: column;
   gap: 1rem;
-  align-items: start;
+  align-items: stretch;
 }
 
-@media (max-width: 960px) {
-  .vbs-cooking-plan-page .vbs-cooking-plan-layout {
-    grid-template-columns: 1fr;
-  }
+.vbs-cooking-plan-page .vbs-cooking-allergy-tree {
+  width: 100%;
 }
 
 .vbs-cooking-tree-viewport {
@@ -2922,29 +3654,464 @@ legend {
   margin: 0 0 1rem;
 }
 
+.vbs-reg-class-editor-lead {
+  margin: 0 0 0.75rem;
+  font-size: 0.88rem;
+}
+
 .vbs-reg-class-editor {
   margin-bottom: 1.25rem;
 }
 
+.vbs-reg-classes-drag-hint {
+  margin: 0 0 1rem;
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+.vbs-reg-classes-head-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
 .vbs-reg-classes-layout {
   display: grid;
-  grid-template-columns: minmax(10rem, 12rem) 1fr minmax(9rem, 11rem);
-  gap: 0.75rem;
+  grid-template-columns: minmax(11rem, 14rem) 1fr minmax(11rem, 14rem);
+  gap: 0.85rem;
   align-items: start;
 }
 
-@media (max-width: 960px) {
+.vbs-reg-classes-layout-rows {
+  min-height: 16rem;
+}
+
+@media (max-width: 1100px) {
   .vbs-reg-classes-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .vbs-reg-side-pool {
+    position: static;
+    max-height: none;
+  }
+}
+
+.vbs-reg-side-pool {
+  position: sticky;
+  top: 0.5rem;
+  max-height: calc(100vh - 6rem);
+  overflow: auto;
+  padding: 0.75rem;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  box-shadow: var(--shadow-panel);
+}
+
+.vbs-reg-side-pool-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin-bottom: 0.25rem;
+}
+
+.vbs-reg-side-pool-head h3 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.vbs-reg-side-pool-note {
+  margin: 0 0 0.5rem;
+  font-size: 0.75rem;
+  line-height: 1.35;
+}
+
+.vbs-reg-pool-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-bottom: 0.5rem;
+}
+
+.vbs-reg-account-pool-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.vbs-reg-account-assignment {
+  font-size: 0.68rem;
+  padding-left: 0.35rem;
+}
+
+.vbs-reg-class-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.vbs-reg-class-row {
+  box-shadow: var(--shadow-panel);
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: 0.75rem 0.85rem 0.85rem;
+}
+
+.vbs-reg-class-row.is-closed {
+  opacity: 0.88;
+  border-style: dashed;
+}
+
+.vbs-reg-class-row.is-full {
+  border-color: var(--accent-warn, #c98a2e);
+}
+
+.vbs-reg-class-row-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  align-items: flex-start;
+  margin-bottom: 0.55rem;
+}
+
+.vbs-reg-class-row-head.expandable-row-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  margin-bottom: 0.45rem;
+}
+
+.vbs-reg-class-row-head-main {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.35rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.vbs-reg-class-row-head .vbs-registration-row-remove {
+  margin: 0;
+  margin-left: auto;
+  flex-shrink: 0;
+  align-self: center;
+}
+
+.vbs-reg-class-row-head-main .vbs-registration-roster-chevron {
+  flex-shrink: 0;
+  margin-top: 0.2rem;
+}
+
+.vbs-reg-class-row.is-expanded {
+  border-color: var(--accent, #3d6b5e);
+}
+
+.vbs-reg-class-row-editor {
+  margin: 0 0 0.75rem;
+  padding: 0.65rem 0.75rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+}
+
+.vbs-reg-classes-row-hint {
+  margin: 0 0 0.75rem;
+  font-size: 0.88rem;
+}
+
+.vbs-reg-class-row-wrap {
+  display: flex;
+  align-items: stretch;
+  gap: 0.35rem;
+}
+
+.vbs-reg-class-row-wrap.is-class-drop-over .vbs-reg-class-row {
+  outline: 2px dashed var(--accent, #3d6b5e);
+  outline-offset: 2px;
+}
+
+.vbs-roster-class-grip {
+  flex-shrink: 0;
+  align-self: flex-start;
+  margin-top: 0.65rem;
+  padding: 0.35rem 0.25rem;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--panel-2);
+  color: var(--muted);
+  cursor: grab;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.vbs-roster-class-grip:active {
+  cursor: grabbing;
+}
+
+.vbs-reg-class-row-wrap .vbs-reg-class-row {
+  flex: 1;
+  min-width: 0;
+}
+
+.vbs-roster-sortable-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-height: 2.5rem;
+}
+
+.vbs-roster-column-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.35rem;
+  margin-bottom: 0.35rem;
+}
+
+.vbs-roster-column-meta {
+  font-size: 0.72rem;
+}
+
+.vbs-reg-class-chip.vbs-roster-chip {
+  justify-content: flex-start;
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.vbs-roster-chip {
+  gap: 0.4rem;
+}
+
+.vbs-roster-chip.is-drop-over {
+  box-shadow: inset 0 0 0 2px var(--accent, #3d6b5e);
+}
+
+.vbs-roster-chip.is-drop-active {
+  opacity: 0.95;
+}
+
+.vbs-roster-chip-grip {
+  flex-shrink: 0;
+  opacity: 0.45;
+  font-size: 0.75rem;
+  user-select: none;
+}
+
+.vbs-roster-badge {
+  flex-shrink: 0;
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 1.2;
+  padding: 0.12rem 0.35rem;
+  border-radius: 4px;
+}
+
+.vbs-roster-badge-age {
+  background: rgba(255, 255, 255, 0.12);
+  min-width: 1.25rem;
+  text-align: center;
+}
+
+.vbs-roster-badge-gender.is-male {
+  background: rgba(107, 155, 209, 0.35);
+  color: #dbeafe;
+}
+
+.vbs-roster-badge-gender.is-female {
+  background: rgba(209, 107, 155, 0.3);
+  color: #fce7f3;
+}
+
+.vbs-roster-badge-gender.is-unknown {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--muted);
+}
+
+.vbs-roster-chip .vbs-reg-class-chip-name {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.vbs-roster-chip .vbs-reg-class-chip-text {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.vbs-roster-chip .vbs-roster-chip-remove {
+  flex-shrink: 0;
+  margin-left: auto;
+  width: 1.5rem;
+  height: 1.5rem;
+  font-size: 1.15rem;
+  line-height: 1;
+  align-self: center;
+}
+
+.vbs-roster-chip-open {
+  flex: 1 1 0;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.vbs-roster-chip-open:hover:not(:disabled),
+.vbs-roster-chip-open:focus-visible {
+  background: rgba(255, 255, 255, 0.06);
+  outline: 2px solid var(--accent, #3d6b5e);
+  outline-offset: 1px;
+}
+
+.vbs-roster-chip-open:disabled {
+  cursor: default;
+}
+
+.vbs-roster-chip-open .vbs-truncation-tooltip {
+  flex: 1 1 0;
+  min-width: 0;
+  pointer-events: auto;
+}
+
+.vbs-roster-chip-open .vbs-truncation-tooltip.vbs-reg-class-chip-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.vbs-roster-chip-open .vbs-truncation-tooltip .vbs-reg-class-chip-name,
+.vbs-roster-chip-open .vbs-truncation-tooltip .vbs-reg-class-chip-login,
+.vbs-roster-chip-open .vbs-truncation-tooltip .vbs-student-name-inline,
+.vbs-roster-chip-open .vbs-truncation-tooltip .vbs-student-name-text {
+  pointer-events: none;
+}
+
+.vbs-roster-list-tail {
+  min-height: 1.75rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: 6px;
+  border: 1px dashed transparent;
+  font-size: 0.72rem;
+  color: var(--muted);
+  text-align: center;
+}
+
+.vbs-roster-list-tail.is-drop-active {
+  border-color: var(--line);
+}
+
+.vbs-roster-list-tail.is-drop-over {
+  border-color: var(--accent, #3d6b5e);
+  background: rgba(61, 107, 94, 0.12);
+  color: inherit;
+}
+
+.vbs-reg-classes-layout-rows .vbs-reg-class-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.vbs-reg-class-row-head h3 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.vbs-reg-class-row-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.vbs-reg-class-row-grid {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.vbs-reg-class-row-staff {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.vbs-reg-class-row-students {
+  min-width: 0;
+}
+
+.vbs-reg-class-row-students .vbs-roster-sortable-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.35rem;
+  align-items: start;
+}
+
+.vbs-reg-class-row-students .vbs-reg-class-chip.vbs-roster-chip {
+  width: 100%;
+  max-width: 100%;
+}
+
+.vbs-reg-class-row-students .vbs-roster-list-tail {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 640px) {
+  .vbs-reg-class-row-students .vbs-roster-sortable-list {
     grid-template-columns: 1fr;
   }
 }
 
-.vbs-reg-class-columns-scroll {
+@media (max-width: 900px) {
+  .vbs-reg-class-row-staff {
+    grid-template-columns: 1fr;
+  }
+}
+
+.vbs-reg-class-row-cell h4 {
+  margin: 0 0 0.35rem;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.75;
+}
+
+.vbs-reg-drop-zone {
   display: flex;
-  gap: 0.75rem;
-  overflow-x: auto;
-  padding-bottom: 0.5rem;
-  min-height: 12rem;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-height: 3.25rem;
+  padding: 0.35rem;
+  border-radius: 6px;
+  border: 1px dashed transparent;
+  transition:
+    border-color 0.12s ease,
+    background 0.12s ease;
+}
+
+.vbs-reg-drop-zone.is-active {
+  border-color: color-mix(in srgb, var(--accent, #6b9cff) 35%, transparent);
+}
+
+.vbs-reg-drop-zone.is-over {
+  border-color: var(--accent, #6b9cff);
+  background: color-mix(in srgb, var(--accent, #6b9cff) 12%, transparent);
+}
+
+.vbs-reg-drop-placeholder,
+.vbs-reg-drop-empty {
+  margin: 0;
+  font-size: 0.78rem;
+  padding: 0.25rem 0;
 }
 
 .vbs-reg-class-column {
@@ -3036,6 +4203,25 @@ legend {
   border-left: 3px solid #7cb87a;
 }
 
+.vbs-reg-class-chip-helper {
+  border-left: 3px solid #c9a227;
+}
+
+.vbs-reg-class-chip-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.vbs-reg-class-chip-login {
+  font-size: 0.68rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .vbs-reg-class-chip-name {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3084,16 +4270,64 @@ legend {
   opacity: 0.7;
 }
 
-.vbs-reg-class-staff-pool {
-  position: sticky;
-  top: 0.5rem;
-}
-
 .vbs-registration-source {
   font-size: 0.72rem;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--muted);
+}
+
+.vbs-registration-gender {
+  border: none;
+  margin: 0 0 0.75rem;
+  padding: 0;
+}
+
+.vbs-registration-gender legend {
+  padding: 0;
+  margin-bottom: 0.45rem;
+  font-size: 0.86rem;
+  color: var(--muted);
+}
+
+.vbs-registration-gender-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem 1.25rem;
+}
+
+.vbs-registration-gender-option {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.vbs-student-name-inline {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.28rem;
+  min-width: 0;
+}
+
+.vbs-student-name-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vbs-student-gender {
+  flex-shrink: 0;
+  font-size: 0.72em;
+  font-weight: 750;
+  letter-spacing: 0.02em;
+  color: var(--accent);
+  opacity: 0.92;
+}
+
+.vbs-reg-class-chip-name .vbs-student-name-inline {
+  max-width: 100%;
 }
 
 .vbs-registration-form-head {
@@ -3147,15 +4381,129 @@ legend {
   margin-top: 1.25rem;
 }
 
+.vbs-registration-form {
+  margin-top: 1rem;
+}
+
+.vbs-registration-optional-public {
+  margin-top: 1.25rem;
+}
+
+.vbs-registration-optional-public > summary {
+  cursor: pointer;
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--muted);
+  margin-bottom: 0.5rem;
+}
+
+.vbs-registration-optional-public[open] > summary {
+  margin-bottom: 0.75rem;
+}
+
+.vbs-registration-roster-hint {
+  margin: 0 0 0.75rem;
+  font-size: 0.88rem;
+}
+
 .vbs-registration-table th:last-child,
 .vbs-registration-table td:last-child {
   white-space: nowrap;
 }
 
-.vbs-registration-row-actions {
-  display: flex;
-  gap: 0.35rem;
-  justify-content: flex-end;
+.vbs-registration-roster-table {
+  table-layout: fixed;
+  min-width: 52rem;
+}
+
+.vbs-registration-roster-table .vbs-registration-roster-col-remove {
+  width: 2.25rem;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.vbs-registration-roster-table .vbs-registration-roster-col-name {
+  width: 12rem;
+}
+
+.vbs-registration-roster-table .vbs-registration-roster-col-season {
+  width: 5.5rem;
+}
+
+.vbs-registration-roster-table .vbs-registration-roster-col-source {
+  width: 6.5rem;
+}
+
+.vbs-registration-roster-table .vbs-registration-roster-col-age {
+  width: 2.75rem;
+}
+
+.vbs-registration-roster-table .vbs-registration-roster-col-team {
+  width: 7rem;
+}
+
+.vbs-registration-roster-table .vbs-registration-roster-col-class {
+  width: 9rem;
+}
+
+.vbs-registration-roster-table .vbs-registration-roster-col-pay {
+  width: 4.5rem;
+}
+
+.vbs-registration-roster-table .vbs-registration-roster-col-allergies {
+  width: 8rem;
+}
+
+.vbs-registration-roster-table .vbs-registration-roster-col-attendance {
+  width: 9rem;
+}
+
+.vbs-registration-roster-table .vbs-registration-roster-col-shirt {
+  width: 4.5rem;
+}
+
+.vbs-registration-roster-table tbody td {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vbs-registration-roster-table tbody td.vbs-registration-roster-col-name {
+  white-space: normal;
+}
+
+.vbs-registration-roster-row {
+  cursor: pointer;
+}
+
+.vbs-registration-roster-row.open {
+  background: var(--vbs-surface-muted, rgba(0, 0, 0, 0.04));
+}
+
+.vbs-registration-roster-chevron {
+  display: inline-block;
+  width: 0.85rem;
+  color: var(--muted, #666);
+  font-size: 0.75rem;
+}
+
+.vbs-registration-roster-detail-row {
+  scroll-margin-top: 1.25rem;
+}
+
+.vbs-registration-roster-detail-row td {
+  padding: 0;
+  vertical-align: top;
+  background: var(--vbs-surface-muted, rgba(0, 0, 0, 0.03));
+}
+
+.vbs-registration-roster-detail {
+  padding: 1rem 1.1rem 1.25rem;
+  border-top: 1px solid var(--border, rgba(0, 0, 0, 0.08));
+}
+
+.vbs-registration-roster-table .vbs-registration-row-remove {
+  margin: 0 auto;
 }
 
 .vbs-registration-nametag-lead {
@@ -3355,6 +4703,9 @@ legend {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 0.35rem;
+  max-height: min(65vh, 36rem);
+  overflow: auto;
+  scrollbar-width: thin;
 }
 
 .vbs-cal-month-cell {
@@ -3367,7 +4718,7 @@ legend {
   flex-direction: column;
   gap: 0.2rem;
   min-width: 0;
-  overflow: visible;
+  overflow: hidden;
 }
 
 .vbs-cal-month-cell-events {
@@ -3376,7 +4727,10 @@ legend {
   gap: 0.2rem;
   min-width: 0;
   flex: 1;
-  overflow: hidden;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: thin;
 }
 
 .vbs-cal-month-cell .vbs-cal-event-wrap {
@@ -3385,6 +4739,7 @@ legend {
 
 .vbs-plan-calendar.expanded .vbs-cal-month-cell {
   min-height: 7.5rem;
+  max-height: 9.5rem;
 }
 
 .vbs-cal-month-cell.muted-month {
@@ -3579,6 +4934,32 @@ legend {
   width: 100%;
   max-width: none;
   min-width: 0;
+  margin: 0;
+  padding: 1rem 1.15rem 1.1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--panel-2);
+  box-shadow: var(--shadow-panel);
+}
+
+.vbs-chrome-tabs-panel > .vbs-panel:first-of-type {
+  margin-top: 0.65rem;
+}
+
+.vbs-panel + .vbs-panel,
+.vbs-workspace .vbs-form-panel + .vbs-panel {
+  margin-top: 0.85rem;
+}
+
+.vbs-panel:empty {
+  display: none;
+}
+
+.ps-lite.vbs-panel,
+.vbs-panel.ps-lite {
+  padding: 0;
+  border-radius: 0.35rem;
+  box-shadow: none;
 }
 
 .vbs-plan-overview-block {
@@ -3747,6 +5128,28 @@ legend {
   cursor: not-allowed;
 }
 
+.vbs-plan-save-compact {
+  min-width: 0;
+  padding: 0.52rem 0.95rem;
+  font-size: 0.86rem;
+}
+
+a.vbs-plan-action-link,
+a.vbs-plan-action-link:visited {
+  text-decoration: none;
+  color: #062033;
+  box-sizing: border-box;
+}
+
+a.vbs-plan-action-link:hover {
+  color: #062033;
+}
+
+a.vbs-plan-secondary-link,
+a.vbs-plan-secondary-link:visited {
+  text-decoration: none;
+}
+
 .vbs-plan-save-danger {
   min-width: 11rem;
   border-color: color-mix(in srgb, #f87171 55%, var(--line));
@@ -3759,6 +5162,115 @@ legend {
   filter: none;
   background: color-mix(in srgb, #f87171 12%, transparent);
   color: #fecaca;
+}
+
+.vbs-collapsible-form-panel {
+  margin: 0.75rem 0 1rem;
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  background: var(--panel-2);
+  padding: 1rem 1.1rem 1.1rem;
+}
+
+.vbs-collapsible-form-title {
+  margin: 0 0 0.75rem;
+}
+
+.vbs-collapsible-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.vbs-collapsible-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.35rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid var(--line);
+}
+
+.vbs-add-action:disabled,
+.vbs-collapsible-form-trigger:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.vbs-section-add-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.vbs-workbook-add-day-error {
+  margin: 0.35rem 0 0;
+}
+
+.vbs-workbook-col-head {
+  overflow: visible;
+}
+
+.vbs-workbook-col-head-inner {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 2rem;
+}
+
+.vbs-workbook-col-label-input {
+  flex: 1 1 0;
+  min-width: 0;
+  width: 100%;
+  font: inherit;
+  font-weight: 650;
+  font-size: 0.82rem;
+  padding: 0.2rem 0.35rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+}
+
+.vbs-workbook-col-label-input:hover:not(:disabled) {
+  border-color: var(--line);
+  background: var(--panel);
+}
+
+.vbs-workbook-col-label-input:focus {
+  outline: none;
+  border-color: var(--accent, #3d6b5e);
+  background: var(--panel);
+}
+
+.vbs-workbook-col-date-input {
+  flex: 1 1 0;
+  min-width: 0;
+  font: inherit;
+  font-weight: 650;
+  font-size: 0.78rem;
+  padding: 0.2rem 0.35rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+}
+
+.vbs-workbook-col-date-input:hover:not(:disabled) {
+  border-color: var(--line);
+  background: var(--panel);
+}
+
+.vbs-workbook-col-date-input:focus {
+  outline: none;
+  border-color: var(--accent, #3d6b5e);
+  background: var(--panel);
+}
+
+.vbs-workbook-col-remove {
+  flex-shrink: 0;
 }
 
 .vbs-task-add-wrap {
@@ -4077,14 +5589,167 @@ legend {
   border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
 }
 
+/* Full-width hit target for expand/collapse; .vbs-task-summary content is pointer-events: none except [data-no-row-toggle] */
+.expandable-row-header {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.expandable-row-header:hover {
+  background: color-mix(in srgb, var(--accent) 5%, transparent);
+}
+
+.expandable-row-header:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 65%, transparent);
+  outline-offset: -2px;
+}
+
+.expandable-row-header .vbs-task-summary,
+.expandable-row-header .vbs-milestone-summary,
+.expandable-row-header .vbs-daily-schedule-slot-summary,
+.expandable-row-header .entry-summary,
+.expandable-row-header .vbs-plan-calendar-brand {
+  pointer-events: none;
+}
+
+.expandable-row-header .vbs-plan-calendar-toggle {
+  pointer-events: none;
+  flex-shrink: 0;
+}
+
+.expandable-row-header.vbs-plan-calendar-strip,
+.expandable-row-header.vbs-plan-worksheet-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.expandable-row-header.vbs-plan-calendar-strip .vbs-plan-calendar-brand,
+.expandable-row-header.vbs-plan-worksheet-strip .vbs-plan-calendar-brand {
+  flex: 1;
+  min-width: 0;
+}
+
+.expandable-row-header .vbs-task-summary:hover,
+.expandable-row-header .vbs-daily-schedule-slot-summary:hover,
+.expandable-row-header .entry-summary:hover {
+  background: transparent;
+}
+
+.expandable-row-header .vbs-task-summary,
+.expandable-row-header .vbs-daily-schedule-slot-summary,
+.expandable-row-header .entry-summary {
+  cursor: inherit;
+}
+
+.expandable-row-header [data-no-row-toggle] {
+  pointer-events: auto;
+}
+
+/* expandable-row-header defaults to display:block for div/button rows — keep table rows aligned */
+table tr.expandable-row-header {
+  display: table-row;
+  width: auto;
+}
+
+.vbs-task-summary-header {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-rows: auto;
+  align-items: start;
+}
+
+.vbs-daily-schedule-slot-header {
+  display: block;
+  width: 100%;
+}
+
+.vbs-daily-schedule-slot-header .vbs-daily-schedule-slot-summary {
+  padding-right: 2rem;
+}
+
+.vbs-milestone-summary-header {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: start;
+  width: 100%;
+}
+
+.vbs-milestone-summary-header .vbs-milestone-summary {
+  grid-column: 1 / -1;
+  grid-row: 1;
+  padding-right: 6.5rem;
+}
+
+.vbs-task-quick-status {
+  grid-column: 2;
+  grid-row: 1;
+  align-self: start;
+  z-index: 2;
+  margin: 0.62rem 2.1rem 0 0.35rem;
+}
+
+.vbs-task-status-select {
+  font: inherit;
+  font-size: 0.68rem;
+  font-weight: 650;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--text);
+  cursor: pointer;
+  max-width: 9rem;
+}
+
+.vbs-task-status-select.status-todo {
+  border-color: #64748b;
+  background: rgb(100 116 139 / 22%);
+}
+
+.vbs-task-status-select.status-in_progress {
+  border-color: #6b9cff;
+  background: rgb(107 156 255 / 18%);
+  color: #c7dcff;
+}
+
+.vbs-task-status-select.status-done {
+  border-color: #4ade80;
+  background: rgb(74 222 128 / 15%);
+  color: #bbf7d0;
+}
+
+.vbs-task-status-select.status-blocked {
+  border-color: #fb923c;
+  background: rgb(251 146 60 / 15%);
+  color: #fed7aa;
+}
+
+.vbs-task-status-select:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
 .vbs-task-summary {
+  grid-column: 1 / -1;
+  grid-row: 1;
   display: grid;
   grid-template-columns: 1fr auto;
   grid-template-rows: auto auto auto;
   gap: 0.25rem 0.65rem;
   width: 100%;
   margin: 0;
-  padding: 0.7rem 0.85rem;
+  padding: 0.7rem 0.85rem 0.7rem 0.85rem;
+  padding-right: 6.75rem;
   border: 0;
   background: transparent;
   color: inherit;
@@ -4608,15 +6273,15 @@ legend {
 
 .vbs-milestone-summary {
   display: grid;
-  grid-template-columns: auto auto auto;
+  grid-template-columns: auto 1fr auto;
   grid-template-areas:
     "due main chevron"
     "due meta chevron"
     "due notes notes";
   gap: 0.25rem 0.65rem;
   align-items: start;
-  width: max-content;
-  max-width: min(100%, 52rem);
+  width: 100%;
+  box-sizing: border-box;
   padding: 0.55rem 0.65rem;
   border: none;
   background: transparent;
@@ -4786,8 +6451,13 @@ legend {
   }
 }
 
-.vbs-milestone-quick-status {
-  padding: 0 0.65rem 0.55rem;
+.vbs-milestone-summary-header .vbs-milestone-quick-status {
+  grid-column: 2;
+  grid-row: 1;
+  align-self: start;
+  z-index: 2;
+  margin: 0.55rem 0.65rem 0 0.35rem;
+  padding: 0;
 }
 
 .vbs-milestone-status-select {
@@ -4857,33 +6527,325 @@ legend {
   gap: 0.75rem 1.25rem;
 }
 
+.vbs-daily-schedule-lead-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem 0.65rem;
+}
+
+.vbs-schedule-print-only {
+  display: none;
+}
+
+.vbs-prep-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.vbs-prep-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem 1rem;
+  padding-bottom: 0.65rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.vbs-prep-scope {
+  display: inline-flex;
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  overflow: hidden;
+}
+
+.vbs-prep-scope-btn,
+.vbs-prep-view-btn {
+  border: 0;
+  background: var(--panel-2);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 650;
+  padding: 0.35rem 0.65rem;
+  cursor: pointer;
+}
+
+.vbs-prep-scope-btn.active,
+.vbs-prep-view-btn.active {
+  background: color-mix(in srgb, var(--accent) 18%, var(--panel-2));
+  color: var(--accent);
+}
+
+.vbs-prep-nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem 1rem;
+}
+
+.vbs-prep-main-views {
+  display: inline-flex;
+  border: 1px solid var(--line);
+  border-radius: 0.55rem;
+  overflow: hidden;
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--text) 6%, transparent);
+}
+
+.vbs-prep-main-view-btn {
+  border: 0;
+  background: var(--panel-2);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.92rem;
+  font-weight: 700;
+  padding: 0.5rem 1.1rem;
+  cursor: pointer;
+  min-width: 6.5rem;
+}
+
+.vbs-prep-main-view-btn + .vbs-prep-main-view-btn {
+  border-left: 1px solid var(--line);
+}
+
+.vbs-prep-main-view-btn.active {
+  background: color-mix(in srgb, var(--accent) 22%, var(--panel-2));
+  color: var(--accent);
+}
+
+.vbs-prep-timeline-view-btn {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 650;
+  padding: 0.35rem 0.75rem;
+  cursor: pointer;
+}
+
+.vbs-prep-timeline-view-btn.active {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+  background: color-mix(in srgb, var(--accent) 10%, var(--panel));
+  color: var(--accent);
+}
+
+.vbs-prep-inline-link {
+  border: 0;
+  padding: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-size: inherit;
+  font-weight: 650;
+  text-decoration: underline;
+  text-underline-offset: 0.12em;
+  cursor: pointer;
+}
+
+.vbs-prep-timeline-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.65rem;
+}
+
+.vbs-prep-timeline-empty-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.vbs-prep-views {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.vbs-prep-scope-hint {
+  margin: 0;
+  font-size: 0.82rem;
+}
+
+.vbs-prep-view-title {
+  margin: 0 0 0.75rem;
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.vbs-prep-focus {
+  margin: 0 0 1.25rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--line);
+  scroll-margin-top: 5rem;
+}
+
+.vbs-prep-focus-lead {
+  margin: 0 0 0.65rem;
+  font-size: 0.86rem;
+}
+
+.vbs-prep-focus-list {
+  margin: 0;
+}
+
+.vbs-prep-focus-milestone-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.vbs-prep-timeline-lead {
+  margin: 0;
+  font-size: 0.88rem;
+}
+
+.vbs-prep-timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.vbs-prep-timeline-open {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  grid-template-areas:
+    "kind due title"
+    "meta meta meta";
+  gap: 0.2rem 0.65rem;
+  width: 100%;
+  margin: 0;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid var(--line);
+  border-radius: 0.55rem;
+  background: var(--panel-2);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.vbs-prep-timeline-open:hover {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
+}
+
+.vbs-prep-timeline-row.done .vbs-prep-timeline-open {
+  opacity: 0.72;
+}
+
+.vbs-prep-kind {
+  grid-area: kind;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 0.1rem 0.4rem;
+  border-radius: 999px;
+  align-self: center;
+}
+
+.vbs-prep-kind.kind-task {
+  background: color-mix(in srgb, #6b9cff 22%, var(--panel));
+  color: #c7dcff;
+}
+
+.vbs-prep-kind.kind-milestone {
+  background: color-mix(in srgb, #4ade80 18%, var(--panel));
+  color: #bbf7d0;
+}
+
+.vbs-prep-timeline-due {
+  grid-area: due;
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  align-self: center;
+}
+
+.vbs-prep-timeline-title {
+  grid-area: title;
+  font-size: 0.92rem;
+  align-self: center;
+}
+
+.vbs-prep-timeline-meta {
+  grid-area: meta;
+  font-size: 0.78rem;
+}
+
+@media print {
+  .shell .sidenav,
+  .shell .content-top,
+  .vbs-plan-masthead,
+  .vbs-plan-calendar,
+  .vbs-plan-excel-actions,
+  .vbs-plan-sections-title,
+  .vbs-plan-sections-lead,
+  .vbs-chrome-tabs,
+  .vbs-plan-tab-hint,
+  .vbs-daily-schedule-lead,
+  .vbs-schedule-editor-drawer,
+  .vbs-schedule-print-btn,
+  .vbs-filter-panel,
+  .org-banner {
+    display: none !important;
+  }
+
+  .shell,
+  .shell .content,
+  .reviews.vbs-plan {
+    display: block !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #fff !important;
+    color: #000 !important;
+  }
+
+  .vbs-schedule-print-only {
+    display: block !important;
+    margin: 0 0 1rem;
+  }
+
+  .vbs-schedule-print-only h1 {
+    margin: 0 0 0.35rem;
+    font-size: 1.35rem;
+  }
+
+  .vbs-schedule-print-root {
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+  }
+
+  .vbs-daily-schedule-day {
+    break-inside: avoid;
+    page-break-inside: avoid;
+    margin-bottom: 1rem;
+    border: 1px solid #ccc !important;
+  }
+
+  .vbs-daily-schedule-slot .vbs-task-body,
+  .vbs-daily-schedule-slot .vbs-task-chevron {
+    display: none !important;
+  }
+
+  .vbs-daily-schedule-slot-summary {
+    display: grid !important;
+    pointer-events: auto !important;
+    padding: 0.35rem 0 !important;
+  }
+}
+
 .vbs-daily-schedule-lead p {
   margin: 0;
   max-width: 42rem;
   line-height: 1.45;
-}
-
-.vbs-daily-schedule-generate {
-  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line));
-  background: color-mix(in srgb, var(--accent) 12%, var(--panel-2));
-  color: var(--text);
-  border-radius: 0.5rem;
-  padding: 0.45rem 0.85rem;
-  font: inherit;
-  font-size: 0.82rem;
-  font-weight: 650;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.vbs-daily-schedule-generate:hover:not(:disabled) {
-  border-color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 18%, var(--panel-2));
-}
-
-.vbs-daily-schedule-generate:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
 }
 
 .vbs-daily-schedule-labels {
@@ -5139,6 +7101,11 @@ legend {
   font-weight: 650;
 }
 
+.org-members-form-triggers {
+  margin-top: 1rem;
+  gap: 0.5rem;
+}
+
 .org-members {
   display: flex;
   flex-direction: column;
@@ -5151,6 +7118,10 @@ legend {
 
 .org-member-list {
   margin: 0;
+}
+
+.org-member-list .vbs-task-card {
+  scroll-margin-top: 1.25rem;
 }
 
 .vbs-task-member-form {
@@ -5345,8 +7316,12 @@ legend {
   padding-right: 2rem;
 }
 
-.vbs-workspace .entry-summary:hover {
+.vbs-workspace .expandable-row-header.entry-row-header:hover {
   background: color-mix(in srgb, var(--accent) 5%, transparent);
+}
+
+.vbs-workspace .expandable-row-header.entry-row-header .entry-summary:hover {
+  background: transparent;
 }
 
 .vbs-workspace .entry-summary::after {
@@ -5374,9 +7349,6 @@ legend {
 }
 
 .vbs-workspace .profile-org-panel {
-  border: 1px solid var(--line);
-  border-radius: 0.75rem;
-  background: var(--panel-2);
   padding: 0;
   overflow: hidden;
 }
@@ -5396,7 +7368,8 @@ legend {
   cursor: pointer;
 }
 
-.vbs-workspace .profile-org-toggle:hover {
+.vbs-workspace .profile-org-toggle:hover,
+.vbs-workspace .expandable-row-header.profile-org-toggle:hover {
   background: color-mix(in srgb, var(--accent) 5%, transparent);
 }
 

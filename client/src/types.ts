@@ -7,6 +7,8 @@ export type User = {
 export type UserSuggestion = {
   username: string;
   email: string;
+  firstName: string;
+  lastName: string;
 };
 
 import type { OrgRole } from "@org-permissions";
@@ -33,6 +35,25 @@ export type OrgMember = {
   verified: boolean;
   usesDefaultPassword: boolean;
   teamAdminTeamIds: string[];
+  vbsSeasonYear: number;
+  addedAt: string;
+  removedAt: string | null;
+  backgroundCheckStatus: "not_started" | "pending" | "cleared";
+};
+
+export type VolunteerComplianceVolunteer = {
+  username: string;
+  role: OrgRole;
+  firstName: string;
+  lastName: string;
+  email: string;
+  backgroundCheckStatus: "not_started" | "pending" | "cleared";
+};
+
+export type VolunteerComplianceWorkspace = {
+  volunteers: VolunteerComplianceVolunteer[];
+  summary: { total: number; notStarted: number; pending: number; cleared: number };
+  statusOptions: ("not_started" | "pending" | "cleared")[];
 };
 
 export type OrgInvite = {
@@ -57,6 +78,7 @@ export type OrgTeam = {
 
 export type OrgDetail = {
   organization: Organization;
+  activeVbsYear: number;
   members: OrgMember[];
   invitations: OrgInvite[];
   teams: OrgTeam[];
@@ -65,10 +87,14 @@ export type OrgDetail = {
 };
 
 export type OrgContactOptions = {
+  canContactVolunteers: boolean;
+  canContactParents: boolean;
   canContactWholeOrg: boolean;
   teams: { id: string; name: string; memberCount: number }[];
   memberCount: number;
   role: OrgRole;
+  parentAll: { studentCount: number; familyEmailCount: number };
+  registrationClasses: { id: string; name: string; studentCount: number; familyEmailCount: number }[];
 };
 
 export type RoomIdeaImage = {
@@ -288,6 +314,7 @@ export type VbsPlan = {
   dailyEnd: string;
   expectedKids: number;
   coordinatorNotes: string;
+  familyPublicNotes: string;
   budgetAmount: number;
   expensesAmount: number;
   worksheetData: import("./vbs-worksheet-types").PlanWorksheetData | Record<string, unknown>;
@@ -332,6 +359,20 @@ export type VbsScheduleSlot = {
   stationId: string;
   teamId: string;
   notes: string;
+  roleLabel: string;
+  assignedUsername: string;
+};
+
+export type VbsSupplyItem = {
+  id: string;
+  planId: string;
+  name: string;
+  quantity: string;
+  estimatedCost: number;
+  purchased: boolean;
+  assignedTeamId: string;
+  notes: string;
+  sortOrder: number;
 };
 
 export type VbsMilestoneStatus = "not_started" | "in_progress" | "done";
@@ -430,21 +471,28 @@ export type VbsRegistrationClass = {
   id: string;
   organizationId: string;
   name: string;
+  rotationIndex: number | null;
+  sectionLabel: string;
+  stationName: string;
   minAge: number;
   maxAge: number;
   capacityMax: number;
   registrationClosed: boolean;
   sortOrder: number;
+  boardOrder: number;
   enrolledCount: number;
   leaders: string[];
   teachers: string[];
   helpers: string[];
+  studentIds: string[];
+  vbsSeasonYear: number;
 };
 
 export type VbsRegistrationStudent = {
   id: string;
   organizationId: string;
   childFullName: string;
+  childGender: "M" | "F" | "";
   birthMonth: number;
   birthYear: number;
   ageYears: number;
@@ -454,8 +502,10 @@ export type VbsRegistrationStudent = {
   specialRequests: string;
   contact1Name: string;
   contact1Phone: string;
+  contact1Email: string;
   contact2Name: string;
   contact2Phone: string;
+  contact2Email: string;
   attendMon: boolean;
   attendTue: boolean;
   attendWed: boolean;
@@ -465,6 +515,7 @@ export type VbsRegistrationStudent = {
   assignedTeamId: string;
   assignedTeamName: string;
   classId: string;
+  classIds: string[];
   className: string;
   paymentStatus: VbsRegistrationPaymentStatus;
   nametagImageKey: string;
@@ -472,12 +523,27 @@ export type VbsRegistrationStudent = {
   nametagExtraInstructions: string;
   createdBy: string;
   source: "staff" | "public";
+  vbsSeasonYear: number;
+  classRosterSort: number;
   createdAt: string;
   updatedAt: string;
 };
 
+export type VbsRegistrationStaffMember = {
+  username: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  role: OrgRole;
+};
+
 export type VbsRegistrationWorkspace = {
   students: VbsRegistrationStudent[];
+  staffMembers: VbsRegistrationStaffMember[];
+  activeVbsYear: number;
+  viewAllSeasons: boolean;
+  viewSeason: number | null;
+  registrationSeasons: number[];
   teams: { id: string; name: string }[];
   classes: VbsRegistrationClass[];
   summary: {
@@ -499,6 +565,7 @@ export type VbsRegistrationWorkspace = {
   publishers: Publisher[];
   programs: ShareProgram[];
   publicRegistration: { enabled: boolean; link: string } | null;
+  publicFamily: { enabled: boolean; link: string } | null;
 };
 
 export type PublicRegistrationForm = {
@@ -510,12 +577,25 @@ export type PublicRegistrationForm = {
   paymentNote: string;
 };
 
+export type PublicFamilyPage = {
+  organizationName: string;
+  programLabel: string;
+  location: string;
+  startDate: string;
+  endDate: string;
+  dailyStart: string;
+  dailyEnd: string;
+  familyNotes: string;
+  paymentNote: string;
+};
+
 export type VbsPlanWorkspace = {
   plan: VbsPlan | null;
   tasks: VbsTask[];
   stations: VbsStation[];
   schedule: VbsScheduleSlot[];
   checklist: VbsChecklistItem[];
+  supplies: VbsSupplyItem[];
   boardPosts: VbsBoardPost[];
   teams: OrgTeam[];
   canWrite: boolean;
@@ -530,6 +610,7 @@ export type VbsPlanWorkspace = {
   taskReimbursementStatuses: VbsReimbursementStatus[];
   milestoneCategories: string[];
   scheduleActivityLabels: string[];
+  scheduleRoleSuggestions: string[];
   canAdmin: boolean;
 };
 

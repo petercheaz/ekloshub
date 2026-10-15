@@ -8,6 +8,7 @@ import { vbsPublisherOptions } from "../vbs-cascade";
 import { applyVbsFilterDefault } from "../vbs-filters";
 import type { CurriculumPayload, Program, Review } from "../types";
 import AddReviewForm from "./AddReviewForm";
+import { expandableRowHeaderProps } from "../expandable-row";
 
 function previewText(text: string) {
   const trimmed = text.trim();
@@ -264,19 +265,22 @@ export default function ReviewsPage() {
                     const open = openReviewId === review.id;
                     return (
                       <li key={review.id} className={open ? "entry open" : "entry"}>
-                        <button
-                          type="button"
-                          className="entry-summary"
-                          aria-expanded={open}
-                          onClick={() => setOpenReviewId(open ? null : review.id)}
+                        <div
+                          {...expandableRowHeaderProps(
+                            open,
+                            () => setOpenReviewId(open ? null : review.id),
+                            "entry-row-header",
+                          )}
                         >
-                          <div className="entry-meta">
-                            <span className="author">{review.username}</span>
-                            {review.verified ? <span className="badge">Verified</span> : null}
-                            <ReviewRating review={review} compact />
+                          <div className="entry-summary">
+                            <div className="entry-meta">
+                              <span className="author">{review.username}</span>
+                              {review.verified ? <span className="badge">Verified</span> : null}
+                              <ReviewRating review={review} compact />
+                            </div>
+                            <p className="entry-preview">{previewText(review.whatPeopleSay)}</p>
                           </div>
-                          <p className="entry-preview">{previewText(review.whatPeopleSay)}</p>
-                        </button>
+                        </div>
                         {open ? <ReviewCard review={review} /> : null}
                       </li>
                     );

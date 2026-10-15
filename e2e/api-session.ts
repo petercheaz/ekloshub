@@ -7,6 +7,7 @@ type VbsPlanWorkspace = {
   stations: { id: string; name: string }[];
   schedule: { id: string; label: string }[];
   checklist: { id: string; label: string }[];
+  scheduleActivityLabels?: string[];
   board?: { posts: { id: string; title: string }[] };
 };
 
@@ -127,6 +128,15 @@ export async function purgeTestArtifacts(page: Page, orgId: string) {
     for (const slot of plan.schedule) {
       if (isTestArtifact(slot.label)) {
         await sessionCall(page, "DELETE", `/api/orgs/${orgId}/vbs-plan/schedule/${slot.id}`);
+      }
+    }
+    for (const label of plan.scheduleActivityLabels ?? []) {
+      if (isTestArtifact(label)) {
+        await sessionCall(
+          page,
+          "DELETE",
+          `/api/orgs/${orgId}/vbs-plan/schedule-activities/${encodeURIComponent(label)}`,
+        );
       }
     }
     const posts = plan.board?.posts ?? [];

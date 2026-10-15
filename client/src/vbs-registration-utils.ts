@@ -26,6 +26,11 @@ export function birthYearOptions(yearsBack = 18) {
   return options;
 }
 
+/** Mid–VBS week reference for class placement and roster age columns. */
+export function vbsSeasonAgeReferenceDate(seasonYear: number) {
+  return new Date(seasonYear, 6, 15);
+}
+
 export function ageFromBirthMonthYear(birthMonth: number, birthYear: number, asOf = new Date()) {
   let age = asOf.getFullYear() - birthYear;
   if (asOf.getMonth() + 1 < birthMonth) {

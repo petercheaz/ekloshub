@@ -4,6 +4,7 @@ import { api } from "../api";
 import { OrgWorkspacePage } from "../OrgWorkspacePage";
 import { orgPath, useOrgs } from "../orgs";
 import type { OrgNotificationSettings } from "../types";
+import { expandableRowHeaderProps } from "../expandable-row";
 
 export default function ProfilePage() {
   const { tenantId } = useOrgs();
@@ -148,15 +149,17 @@ export default function ProfilePage() {
           const open = expandedOrg === org.organizationId;
           return (
             <section key={org.organizationId} className="vbs-panel profile-org-panel">
-              <button
-                type="button"
-                className="profile-org-toggle"
-                aria-expanded={open}
-                onClick={() => setExpandedOrg(open ? null : org.organizationId)}
+              <div
+                {...expandableRowHeaderProps(
+                  open,
+                  () => setExpandedOrg(open ? null : org.organizationId),
+                  "profile-org-toggle",
+                  open ? `Collapse ${org.organizationName} settings` : `Expand ${org.organizationName} settings`,
+                )}
               >
                 <strong>{org.organizationName}</strong>
                 <span className="muted">{open ? "Hide" : "Edit"}</span>
-              </button>
+              </div>
               {open ? (
                 <form className="review-form profile-notify-form" onSubmit={(e) => void save(org, e)}>
                   <h2>Tasks &amp; assignments</h2>

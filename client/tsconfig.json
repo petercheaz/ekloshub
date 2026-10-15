@@ -14,7 +14,9 @@
       "@media-limits": ["../src/media-limits.ts"],
       "@org-permissions": ["../src/org-permissions.ts"],
       "@vbs-snacks-menu-days": ["../src/vbs-snacks-menu-days.ts"],
-      "@vbs-cooking-plan-types": ["../src/vbs-cooking-plan-types.ts"]
+      "@vbs-cooking-plan-types": ["../src/vbs-cooking-plan-types.ts"],
+      "@vbs-rotation-stations": ["../src/vbs-rotation-stations.ts"],
+      "@vbs-workbook-stations": ["../src/vbs-workbook-stations.ts"]
     }
   },
   "include": ["src"]

@@ -9,6 +9,7 @@ import { applyVbsFilterDefault } from "../vbs-filters";
 import { useAuth } from "../auth";
 import type { Publisher, ShareAttachment, ShareProgram, SetupPost } from "../types";
 import { attachmentTooLargeMessage, MAX_ATTACHMENT_BYTES } from "@media-limits";
+import { expandableRowHeaderProps } from "../expandable-row";
 
 const PREVIEW_CHARS = 180;
 const emptyDraft = {
@@ -455,29 +456,31 @@ export default function SetupPage() {
                   const open = !collapsedIds.has(post.id);
                   return (
                     <li key={post.id} className={open ? "entry open" : "entry"}>
-                      <button
-                        type="button"
-                        className="entry-summary"
-                        aria-expanded={open}
-                        onClick={() =>
-                          setCollapsedIds((current) => {
-                            const next = new Set(current);
-                            if (open) {
-                              next.add(post.id);
-                            } else {
-                              next.delete(post.id);
-                            }
-                            return next;
-                          })
-                        }
+                      <div
+                        {...expandableRowHeaderProps(
+                          open,
+                          () =>
+                            setCollapsedIds((current) => {
+                              const next = new Set(current);
+                              if (open) {
+                                next.add(post.id);
+                              } else {
+                                next.delete(post.id);
+                              }
+                              return next;
+                            }),
+                          "entry-row-header",
+                        )}
                       >
-                        <div className="entry-meta">
-                          <span className="author">{post.username}</span>
-                          {post.verified ? <span className="badge">Verified</span> : null}
-                          <span className="meta">{new Date(post.createdAt).toLocaleString()}</span>
+                        <div className="entry-summary">
+                          <div className="entry-meta">
+                            <span className="author">{post.username}</span>
+                            {post.verified ? <span className="badge">Verified</span> : null}
+                            <span className="meta">{new Date(post.createdAt).toLocaleString()}</span>
+                          </div>
+                          <p className="entry-preview">{previewText(post.body)}</p>
                         </div>
-                        <p className="entry-preview">{previewText(post.body)}</p>
-                      </button>
+                      </div>
                       {open ? (
                         <div className="entry-body">
                           <p>{post.body}</p>

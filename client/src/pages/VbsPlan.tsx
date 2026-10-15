@@ -3,6 +3,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type CSSProperties,
   type MouseEvent,
@@ -15,15 +16,18 @@ import { api } from "../api";
 import { useAuth } from "../auth";
 import { OrgUserTypeahead } from "../OrgUserTypeahead";
 import { VbsPlanCalendar } from "../VbsPlanCalendar";
-import { VbsPlanSpreadsheet } from "../VbsPlanSpreadsheet";
-import { useOrgs } from "../orgs";
+import { VbsPlanExcelExport } from "../VbsPlanExcelExport";
+import { VbsPlanWorkbookTab } from "../VbsPlanWorkbookTab";
+import { orgPath, useOrgs } from "../orgs";
 import type {
   VbsPlanWorkspace,
   VbsBoardPost,
   VbsChecklistItem,
   VbsScheduleSlot,
   VbsStation,
+  VbsSupplyItem,
   VbsTask,
+  OrgTeam,
   VbsTaskAttachment,
   VbsTaskCategory,
   VbsReimbursementStatus,
@@ -43,30 +47,38 @@ import type { VbsMilestoneStatus } from "../types";
 import { attachmentTooLargeMessage, MAX_ATTACHMENT_BYTES } from "@media-limits";
 import { VbsPlanReimbursementsTab } from "./VbsPlanReimbursements";
 import { VbsPlanAdherence } from "../VbsPlanAdherence";
+import {
+  AddActionButton,
+  CollapsibleFormActions,
+  CollapsibleFormPanel,
+  CollapsibleFormTrigger,
+} from "../CollapsibleForm";
+import { expandableRowHeaderProps } from "../expandable-row";
+import { VbsPlanPrepTab } from "../VbsPlanPrepTab";
+import { SeasonCopyPanel } from "../SeasonCopyPanel";
+import {
+  prepFocusMilestoneIdFromSearch,
+  prepFocusTaskIdFromSearch,
+  prepViewFromSearch,
+  type PrepNavigateFocus,
+  type PrepView,
+} from "../vbs-plan-prep";
+import { workbookSectionFromSearch, type WorkbookSectionId } from "../vbs-plan-workbook";
 
-type Tab =
-  | "overview"
-  | "adherence"
-  | "tasks"
-  | "reimbursements"
-  | "schedule"
-  | "stations"
-  | "checklist"
-  | "board";
+type Tab = "overview" | "prep" | "reimbursements" | "schedule" | "workbook" | "stations" | "board";
 
 const planSections: { id: Tab; label: string; hint: string }[] = [
-  { id: "overview", label: "Overview", hint: "Dates, budget, curriculum & notes" },
-  { id: "adherence", label: "Schedule health", hint: "Overdue work and gaps before VBS week" },
-  { id: "checklist", label: "Milestones Checklist", hint: "Due-date timeline of launch milestones" },
-  { id: "tasks", label: "Tasks", hint: "Assign and track work by team" },
+  { id: "overview", label: "Overview", hint: "Dates, budget, curriculum, and what needs attention" },
+  { id: "schedule", label: "VBS week schedule", hint: "Day-by-day program — build and review first" },
+  { id: "workbook", label: "Workbook", hint: "Prayer, placements, station needs, and rotation schedule" },
+  { id: "prep", label: "Prep work", hint: "Tasks and milestones — use the Tasks and Milestones tabs to add and edit" },
+  { id: "stations", label: "Stations", hint: "Rooms, rotations & default teams" },
+  { id: "board", label: "Message board", hint: "Team updates, replies & alerts" },
   {
     id: "reimbursements",
     label: "Reimbursements",
     hint: "Org admin — submitted receipts and payout tracking",
   },
-  { id: "schedule", label: "VBS daily schedule", hint: "Day-by-day program from overview dates & hours" },
-  { id: "stations", label: "Stations", hint: "Rooms, rotations & default teams" },
-  { id: "board", label: "Message board", hint: "Team updates, replies & alerts" },
 ];
 
 function formatPlanMoney(amount: number) {
@@ -85,6 +97,12 @@ function parseMoneyInput(raw: string) {
 
 function tabFromSearch(params: URLSearchParams, allowed: Set<string>): Tab {
   const raw = params.get("tab");
+  if (raw === "adherence") {
+    return "overview";
+  }
+  if (raw === "tasks" || raw === "checklist") {
+    return allowed.has("prep") ? "prep" : "overview";
+  }
   if (raw && allowed.has(raw)) {
     return raw as Tab;
   }
@@ -106,10 +124,54 @@ export default function VbsPlanPage() {
   const tabIds = useMemo(() => new Set(visibleSections.map((t) => t.id)), [visibleSections]);
 
   const [tab, setTab] = useState<Tab>("overview");
+  const [prepView, setPrepView] = useState<PrepView>("tasks");
+  const [prepFocusTaskId, setPrepFocusTaskId] = useState<string | null>(null);
+  const [prepFocusMilestoneId, setPrepFocusMilestoneId] = useState<string | null>(null);
+  const [workbookSection, setWorkbookSection] = useState<WorkbookSectionId>("prayer");
 
   useEffect(() => {
     setTab(tabFromSearch(searchParams, tabIds));
+    setPrepView(prepViewFromSearch(searchParams));
+    setPrepFocusTaskId(prepFocusTaskIdFromSearch(searchParams));
+    setPrepFocusMilestoneId(prepFocusMilestoneIdFromSearch(searchParams));
+    setWorkbookSection(workbookSectionFromSearch(searchParams));
   }, [searchParams, tabIds]);
+
+  function navigatePrep(view: PrepView, focus?: PrepNavigateFocus) {
+    setPrepView(view);
+    const nextTaskId = focus?.taskId !== undefined ? focus.taskId : prepFocusTaskId;
+    const nextMilestoneId =
+      focus?.milestoneId !== undefined ? focus.milestoneId : prepFocusMilestoneId;
+    setPrepFocusTaskId(view === "tasks" ? nextTaskId : null);
+    setPrepFocusMilestoneId(view === "milestones" ? nextMilestoneId : null);
+
+    const params = new URLSearchParams(searchParams);
+    params.set("tab", "prep");
+    params.delete("taskId");
+    params.delete("milestoneId");
+    params.delete("checklistId");
+    params.set("prep", view);
+    if (view === "tasks" && nextTaskId) {
+      params.set("taskId", nextTaskId);
+    }
+    if (view === "milestones" && nextMilestoneId) {
+      params.set("milestoneId", nextMilestoneId);
+    }
+    setSearchParams(params, { replace: true });
+  }
+
+  function setWorkbookSectionAndUrl(next: WorkbookSectionId) {
+    setWorkbookSection(next);
+    const params = new URLSearchParams(searchParams);
+    params.set("tab", "workbook");
+    if (next === "prayer") {
+      params.delete("workbook");
+    } else {
+      params.set("workbook", next);
+    }
+    setSearchParams(params, { replace: true });
+  }
+
   const [busy, setBusy] = useState(false);
 
   const reload = useCallback(async () => {
@@ -174,7 +236,12 @@ export default function VbsPlanPage() {
     <div className="reviews vbs-plan vbs-workspace">
       <header className="vbs-plan-masthead" aria-label="VBS plan summary">
         <div className="vbs-plan-masthead-main">
-          {org ? <p className="vbs-plan-masthead-org">{org.name}</p> : null}
+          {org ? (
+            <p className="vbs-plan-masthead-org">
+              <Link to={orgPath(orgId, "")}>{org.name}</Link>
+              <span className="muted"> · Director home</span>
+            </p>
+          ) : null}
           <h1 className="vbs-plan-masthead-title">{plan?.title || "VBS plan"}</h1>
           {plan ? (
             <dl className="vbs-plan-masthead-meta">
@@ -237,6 +304,17 @@ export default function VbsPlanPage() {
               <span>Board posts</span>
             </li>
           </ul>
+            {user ? (
+              <VbsPlanExcelExport
+                orgId={orgId}
+                data={data}
+                username={user.username}
+                seesAllTeams={seesAllTeams}
+                teamName={teamName}
+                busy={busy}
+                onRun={run}
+              />
+            ) : null}
           </div>
         ) : null}
       </header>
@@ -254,25 +332,13 @@ export default function VbsPlanPage() {
         />
       ) : null}
 
-      {user && data.plan ? (
-        <VbsPlanSpreadsheet
-          orgId={orgId}
-          data={data}
-          username={user.username}
-          seesAllTeams={seesAllTeams}
-          teamName={teamName}
-          busy={busy}
-          onRun={run}
-        />
-      ) : null}
-
       <section className="vbs-plan-sections" aria-labelledby="vbs-plan-sections-title">
         <h2 id="vbs-plan-sections-title" className="vbs-plan-sections-title">
-          Planning sections
+          Plan workspace
         </h2>
         <p className="vbs-plan-sections-lead muted">
-          These are the main areas of your plan. Pick a tab to view and edit — the team calendar above stays in
-          sync on every tab.
+          Start with <strong>VBS week schedule</strong>, then team tasks and prep milestones. The calendar above
+          stays in sync on every tab.
         </p>
         <div className="vbs-chrome-tabs">
           <nav className="vbs-chrome-tabs-bar" role="tablist" aria-label="VBS planning sections">
@@ -308,13 +374,35 @@ export default function VbsPlanPage() {
 
             {tab === "overview" ? (
               <>
-                <VbsPlanAdherence data={data} />
-                <OverviewTab data={data} busy={busy} onSave={(input) => run(() => api.saveVbsPlan(orgId, input))} />
+                {data.canAdmin ? (
+                  <SeasonCopyPanel orgId={orgId} onCopied={() => void reload()} />
+                ) : null}
+                <VbsPlanAdherence data={data} orgId={orgId} />
+                <OverviewTab
+                  orgId={orgId}
+                  data={data}
+                  busy={busy}
+                  onSave={(input) => run(() => api.saveVbsPlan(orgId, input))}
+                  onRefresh={() => void reload()}
+                />
               </>
             ) : null}
-            {tab === "adherence" ? <VbsPlanAdherence data={data} /> : null}
-            {tab === "tasks" ? (
-              <TasksTab data={data} orgId={orgId} busy={busy} teamName={teamName} onRun={run} />
+            {tab === "prep" && user ? (
+              <VbsPlanPrepTab
+                data={data}
+                orgId={orgId}
+                busy={busy}
+                username={user.username}
+                seesAllTeams={seesAllTeams}
+                teamName={teamName}
+                view={prepView}
+                focusTaskId={prepFocusTaskId}
+                focusMilestoneId={prepFocusMilestoneId}
+                onNavigatePrep={navigatePrep}
+                onRun={run}
+                TasksPanel={TasksTab}
+                MilestonesPanel={ChecklistTab}
+              />
             ) : null}
             {tab === "reimbursements" && data.canAdmin ? (
               <VbsPlanReimbursementsTab orgId={orgId} />
@@ -322,11 +410,20 @@ export default function VbsPlanPage() {
             {tab === "schedule" ? (
               <ScheduleTab data={data} orgId={orgId} busy={busy} teamName={teamName} onRun={run} />
             ) : null}
+            {tab === "workbook" ? (
+              <VbsPlanWorkbookTab
+                orgId={orgId}
+                data={data}
+                busy={busy}
+                canWrite={data.canWrite}
+                section={workbookSection}
+                onSectionChange={setWorkbookSectionAndUrl}
+                onRun={run}
+                onSaved={() => void reload()}
+              />
+            ) : null}
             {tab === "stations" ? (
               <StationsTab data={data} orgId={orgId} busy={busy} teamName={teamName} onRun={run} />
-            ) : null}
-            {tab === "checklist" ? (
-              <ChecklistTab data={data} orgId={orgId} busy={busy} teamName={teamName} onRun={run} />
             ) : null}
             {tab === "board" ? (
               <BoardTab data={data} orgId={orgId} busy={busy} onRun={run} teamName={teamName} />
@@ -339,13 +436,17 @@ export default function VbsPlanPage() {
 }
 
 function OverviewTab({
+  orgId,
   data,
   busy,
   onSave,
+  onRefresh,
 }: {
+  orgId: string;
   data: VbsPlanWorkspace;
   busy: boolean;
   onSave: (input: Record<string, unknown>) => void;
+  onRefresh: () => void;
 }) {
   const { filterDefault, prefsReady } = useOrgVbs();
   const plan = data.plan;
@@ -361,11 +462,11 @@ function OverviewTab({
   const [expectedKids, setExpectedKids] = useState(plan?.expectedKids ?? 0);
   const [budgetAmount, setBudgetAmount] = useState(plan?.budgetAmount ?? 0);
   const [coordinatorNotes, setCoordinatorNotes] = useState(plan?.coordinatorNotes ?? "");
+  const [familyPublicNotes, setFamilyPublicNotes] = useState(plan?.familyPublicNotes ?? "");
   const taskExpensesTotal = useMemo(
     () => data.tasks.reduce((sum, task) => sum + Math.max(0, task.expenseAmount ?? 0), 0),
     [data.tasks],
   );
-  const [seedSchedule, setSeedSchedule] = useState(!plan);
   const [curriculumBootstrapped, setCurriculumBootstrapped] = useState(Boolean(plan?.programTitle));
 
   useEffect(() => {
@@ -373,7 +474,8 @@ function OverviewTab({
       return;
     }
     setBudgetAmount(plan.budgetAmount ?? 0);
-  }, [plan?.id, plan?.budgetAmount]);
+    setFamilyPublicNotes(plan.familyPublicNotes ?? "");
+  }, [plan?.id, plan?.budgetAmount, plan?.familyPublicNotes]);
 
   useEffect(() => {
     if (!prefsReady || curriculumBootstrapped || plan?.programTitle) {
@@ -418,8 +520,8 @@ function OverviewTab({
       expectedKids,
       budgetAmount,
       coordinatorNotes,
+      familyPublicNotes,
       seedTemplate: !plan,
-      seedSchedule,
     });
   }
 
@@ -542,21 +644,32 @@ function OverviewTab({
             disabled={!data.canWrite}
           />
         </label>
-        {!plan ? (
-          <label className="checkbox-line">
-            <input type="checkbox" checked={seedSchedule} onChange={(e) => setSeedSchedule(e.target.checked)} />
-            Build VBS daily schedule from overview dates and daily hours
-          </label>
-        ) : null}
+        <label className="vbs-plan-field">
+          Notes for families (public page)
+          <textarea
+            value={familyPublicNotes}
+            onChange={(e) => setFamilyPublicNotes(e.target.value)}
+            rows={4}
+            disabled={!data.canWrite}
+            placeholder="Drop-off, parking, what to bring — shown on the optional family info link in Registration."
+          />
+        </label>
+        <p className="muted vbs-task-field-hint">
+          VBS start/end and daily hours drive the <strong>VBS week schedule</strong> tab — blocks are created when the
+          schedule is empty, and existing blocks move with the dates when you save.
+        </p>
       </div>
         {data.canWrite ? (
           <div className="vbs-plan-form-actions">
-            <button type="submit" className="vbs-plan-save" disabled={busy}>
-              {plan ? "Save plan" : "Create plan & starter checklist"}
-            </button>
+            <AddActionButton
+              type="submit"
+              label={plan ? "Save plan" : "Create plan & starter checklist"}
+              disabled={busy}
+            />
           </div>
         ) : null}
       </form>
+      {plan ? <PlanSuppliesSection orgId={orgId} data={data} busy={busy} onRefresh={onRefresh} /> : null}
     </section>
   );
 }
@@ -850,15 +963,39 @@ function TasksTab({
   busy,
   teamName,
   onRun,
+  expandedTaskId: expandedTaskIdProp,
+  onExpandedTaskIdChange,
 }: {
   data: VbsPlanWorkspace;
   orgId: string;
   busy: boolean;
   teamName: (id: string) => string;
   onRun: (action: () => Promise<unknown>) => void;
+  expandedTaskId?: string | null;
+  onExpandedTaskIdChange?: (id: string | null) => void;
 }) {
-  const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
+  const [expandedTaskIdLocal, setExpandedTaskIdLocal] = useState<string | null>(null);
+  const expandedTaskId = expandedTaskIdProp !== undefined ? expandedTaskIdProp : expandedTaskIdLocal;
+  function setExpandedTaskId(next: string | null) {
+    if (onExpandedTaskIdChange) {
+      onExpandedTaskIdChange(next);
+    } else {
+      setExpandedTaskIdLocal(next);
+    }
+  }
+  function toggleExpandedTask(taskId: string) {
+    setExpandedTaskId(expandedTaskId === taskId ? null : taskId);
+  }
+  const focusRef = useRef<HTMLDivElement>(null);
+  const focusedTask = expandedTaskId ? data.tasks.find((task) => task.id === expandedTaskId) : undefined;
   const [sectionUi, setSectionUi] = useState<Record<string, { status: string; sortDueAsc: boolean }>>({});
+
+  useEffect(() => {
+    if (!focusedTask || !focusRef.current) {
+      return;
+    }
+    focusRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [focusedTask?.id]);
 
   const sections = useMemo(() => buildTaskTeamSections(data.teams), [data.teams]);
 
@@ -881,12 +1018,35 @@ function TasksTab({
 
   return (
     <section className="vbs-panel vbs-tasks-panel">
+      <h2 className="sr-only">Tasks</h2>
+
+      {focusedTask ? (
+        <div ref={focusRef} className="vbs-prep-focus">
+          <p className="muted vbs-prep-focus-lead">Selected task — edit below, then browse the rest of the list.</p>
+          <ul className="vbs-task-list vbs-prep-focus-list">
+            <TaskRow
+              task={focusedTask}
+              data={data}
+              orgId={orgId}
+              busy={busy}
+              teamName={teamName}
+              omitTeamInSummary
+              expanded
+              onToggle={() => setExpandedTaskId(null)}
+              onRun={onRun}
+            />
+          </ul>
+        </div>
+      ) : null}
+
       {!hasAnyTasks ? <p className="muted vbs-task-empty">No tasks yet. Add one under a team below.</p> : null}
 
       <div className="vbs-task-team-sections">
         {sections.map((section) => {
           const { status, sortDueAsc } = sectionState(section.key);
-          const inSection = tasksForTeamSection(data.tasks, section.key);
+          const inSection = tasksForTeamSection(data.tasks, section.key).filter(
+            (task) => task.id !== expandedTaskId,
+          );
           const visibleTasks = sortTasksByDue(filterVbsTasksByStatus(inSection, status), sortDueAsc);
 
           return (
@@ -907,9 +1067,7 @@ function TasksTab({
               busy={busy}
               teamName={teamName}
               expandedTaskId={expandedTaskId}
-              onToggleTask={(taskId) =>
-                setExpandedTaskId((current) => (current === taskId ? null : taskId))
-              }
+              onToggleTask={toggleExpandedTask}
               onRun={onRun}
             />
           );
@@ -1031,20 +1189,19 @@ function TaskTeamSection({
             </button>
           </div>
           {data.canWrite ? (
-            <button
-              type="button"
-              className={adding ? "vbs-task-team-add-btn secondary" : "vbs-task-team-add-btn"}
-              aria-expanded={adding}
-              onClick={() => setAdding((open) => !open)}
-            >
-              {adding ? "Cancel" : "Add task"}
-            </button>
+            <CollapsibleFormTrigger
+              label="Add task"
+              ariaExpanded={adding}
+              disabled={adding}
+              onClick={() => setAdding(true)}
+            />
           ) : null}
         </div>
       </div>
 
       {adding && data.canWrite ? (
-        <form className="vbs-task-add-form vbs-task-team-add-form" onSubmit={addTask}>
+        <CollapsibleFormPanel title="Add task" className="vbs-task-team-add-form-panel">
+        <form className="vbs-collapsible-form vbs-task-team-add-form" onSubmit={addTask}>
           <label className="vbs-task-field">
             <span className="vbs-task-field-label">Title</span>
             <input value={title} onChange={(e) => setTitle(e.target.value)} required placeholder="Task title" />
@@ -1099,12 +1256,9 @@ function TaskTeamSection({
             <input type="checkbox" checked={notify} onChange={(e) => setNotify(e.target.checked)} />
             Notify assignees (app, email, SMS per their preferences)
           </label>
-          <div className="vbs-task-add-actions">
-            <button type="submit" className="vbs-plan-save" disabled={busy}>
-              Create task
-            </button>
-          </div>
+          <CollapsibleFormActions onCancel={resetAdd} saveLabel="Save" busy={busy} />
         </form>
+        </CollapsibleFormPanel>
       ) : null}
 
       {filteredEmpty ? (
@@ -1289,28 +1443,56 @@ function TaskRow({
     onRun(() => api.deleteVbsTask(orgId, task.id));
   }
 
+  function setStatus(status: VbsTaskStatus) {
+    if (status === draft.status) {
+      return;
+    }
+    save({ ...draft, status });
+  }
+
   return (
     <li className={expanded ? `vbs-task-card open status-${draft.status}` : `vbs-task-card status-${draft.status}`}>
-      <button type="button" className="vbs-task-summary" aria-expanded={expanded} onClick={onToggle}>
-        <span className="vbs-task-summary-main">
-          <span className="vbs-task-summary-title">{task.title}</span>
-          {task.assignedUsername ? (
-            <span className="vbs-task-assignee-pill" title="Assigned to">
-              {task.assignedUsername}
-            </span>
-          ) : null}
-          <span className={`vbs-task-status-pill mini active status-${task.status}`}>
-            {TASK_STATUS_LABEL[task.status]}
+      <div {...expandableRowHeaderProps(expanded, onToggle, "vbs-task-summary-header")}>
+        <div className="vbs-task-summary">
+          <span className="vbs-task-summary-main">
+            <span className="vbs-task-summary-title">{task.title}</span>
+            {task.assignedUsername ? (
+              <span className="vbs-task-assignee-pill" title="Assigned to">
+                {task.assignedUsername}
+              </span>
+            ) : null}
           </span>
-        </span>
-        <span className="vbs-task-summary-meta muted">{taskSummaryLine(task, teamName, omitTeamInSummary)}</span>
-        {task.notes.trim() && !expanded ? (
-          <span className="vbs-task-notes-preview muted">{task.notes.trim()}</span>
-        ) : null}
-        <span className="vbs-task-chevron" aria-hidden="true">
-          {expanded ? "▾" : "▸"}
-        </span>
-      </button>
+          <span className="vbs-task-summary-meta muted">{taskSummaryLine(task, teamName, omitTeamInSummary)}</span>
+          {task.notes.trim() && !expanded ? (
+            <span className="vbs-task-notes-preview muted">{task.notes.trim()}</span>
+          ) : null}
+          <span className="vbs-task-chevron" aria-hidden="true">
+            {expanded ? "▾" : "▸"}
+          </span>
+        </div>
+        <div className="vbs-task-quick-status" data-no-row-toggle>
+          {canEdit ? (
+            <select
+              className={`vbs-task-status-select status-${draft.status}`}
+              value={draft.status}
+              disabled={busy}
+              aria-label={`Status for ${task.title}`}
+              onClick={(e) => e.stopPropagation()}
+              onChange={(e) => setStatus(e.target.value as VbsTaskStatus)}
+            >
+              {data.taskStatuses.map((status) => (
+                <option key={status} value={status}>
+                  {TASK_STATUS_LABEL[status]}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <span className={`vbs-task-status-pill mini active status-${task.status}`}>
+              {TASK_STATUS_LABEL[task.status]}
+            </span>
+          )}
+        </div>
+      </div>
 
       {expanded ? (
         <div className="vbs-task-body">
@@ -1582,13 +1764,17 @@ function schedulePayload(slot: VbsScheduleSlot) {
     stationId: slot.stationId,
     teamId: slot.teamId,
     notes: slot.notes,
+    roleLabel: slot.roleLabel,
+    assignedUsername: slot.assignedUsername,
   };
 }
 
 function scheduleSummaryLine(slot: VbsScheduleSlot, teamName: (id: string) => string, stationLabel: string) {
   const team = slot.teamId ? teamName(slot.teamId) : "No team";
   const station = stationLabel ? ` · ${stationLabel}` : "";
-  return `${slot.dayDate} · ${slot.startsAt}–${slot.endsAt} · ${team}${station}`;
+  const role = slot.roleLabel ? ` · ${slot.roleLabel}` : "";
+  const person = slot.assignedUsername ? ` · ${slot.assignedUsername}` : "";
+  return `${slot.dayDate} · ${slot.startsAt}–${slot.endsAt} · ${team}${station}${role}${person}`;
 }
 
 function scheduleDayIndentPercent(dayIndex: number, totalDays: number) {
@@ -1676,19 +1862,6 @@ function ScheduleTab({
     }
   }
 
-  function generateFromOverview() {
-    const replace = data.schedule.length > 0;
-    if (replace) {
-      const ok = window.confirm(
-        "Replace all existing schedule blocks with a fresh VBS daily template from your Overview dates and daily hours?",
-      );
-      if (!ok) {
-        return;
-      }
-    }
-    onRun(() => api.generateVbsDailySchedule(orgId, replace));
-  }
-
   function confirmRemoveActivity(label: string) {
     const ok = window.confirm(
       `Remove “${label}” from the activity list? Existing schedule blocks will keep this label.`,
@@ -1705,125 +1878,26 @@ function ScheduleTab({
     plan.startDate && plan.endDate ? `${plan.startDate} – ${plan.endDate}` : "set dates on Overview";
 
   return (
-    <section className="vbs-panel vbs-daily-schedule-panel">
+    <section className="vbs-panel vbs-daily-schedule-panel vbs-schedule-print-root">
       <header className="vbs-daily-schedule-lead">
         <p className="muted">
           Program days from Overview: <strong>{dateHint}</strong>, each day <strong>{hoursHint}</strong> (plus staff
           setup before and debrief after).
         </p>
-        {data.canWrite ? (
-          <button type="button" className="vbs-daily-schedule-generate" disabled={busy} onClick={generateFromOverview}>
-            Build schedule from overview
-          </button>
-        ) : null}
+        <div className="vbs-daily-schedule-lead-actions">
+          {planDays.length > 0 && data.schedule.length > 0 ? (
+            <button type="button" className="ghost vbs-schedule-print-btn" onClick={() => window.print()}>
+              Print week schedule
+            </button>
+          ) : null}
+        </div>
       </header>
-
-      {activityLabels.length > 0 ? (
-        <div className="vbs-daily-schedule-labels" aria-label="Schedule activity types">
-          <span className="vbs-daily-schedule-labels-heading muted">Activities</span>
-          <ul className="vbs-daily-schedule-label-chips">
-            {activityLabels.map((label) => (
-              <li key={label}>
-                <span className="vbs-daily-schedule-label-chip">{label}</span>
-                {data.canAdmin ? (
-                  <button
-                    type="button"
-                    className="vbs-daily-schedule-label-remove"
-                    aria-label={`Remove ${label} from activity list`}
-                    title="Remove from list (org admin)"
-                    disabled={busy}
-                    onClick={() => confirmRemoveActivity(label)}
-                  >
-                    ×
-                  </button>
-                ) : null}
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
-
-      {data.canWrite ? (
-        <div className="vbs-task-add-wrap">
-          <h2 className="vbs-task-add-heading">Add to the day</h2>
-          <form className="vbs-task-add-form" onSubmit={addSlot}>
-            <div className="vbs-task-meta-grid">
-              <label className="vbs-task-field">
-                <span className="vbs-task-field-label">VBS day</span>
-                <select value={dayDate} onChange={(e) => setDayDate(e.target.value)} required>
-                  {planDays.map((day, index) => (
-                    <option key={day.iso} value={day.iso}>
-                      Day {index + 1} · {day.weekday}, {day.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="vbs-task-field">
-                <span className="vbs-task-field-label">Activity</span>
-                <select
-                  value={activityPick}
-                  onChange={(e) => setActivityPick(e.target.value)}
-                  required={activityPick !== "__custom__"}
-                >
-                  <option value="">Choose activity…</option>
-                  {activityLabels.map((name) => (
-                    <option key={name} value={name}>
-                      {name}
-                    </option>
-                  ))}
-                  <option value="__custom__">Add custom activity…</option>
-                </select>
-              </label>
-              {activityPick === "__custom__" ? (
-                <label className="vbs-task-field">
-                  <span className="vbs-task-field-label">Custom name</span>
-                  <input
-                    value={customActivity}
-                    onChange={(e) => setCustomActivity(e.target.value)}
-                    required
-                    placeholder="New activity (saved to list)"
-                  />
-                </label>
-              ) : null}
-              <label className="vbs-task-field">
-                <span className="vbs-task-field-label">Start</span>
-                <input type="time" value={startsAt} onChange={(e) => setStartsAt(e.target.value)} required />
-              </label>
-              <label className="vbs-task-field">
-                <span className="vbs-task-field-label">End</span>
-                <input type="time" value={endsAt} onChange={(e) => setEndsAt(e.target.value)} required />
-              </label>
-              <label className="vbs-task-field">
-                <span className="vbs-task-field-label">Station</span>
-                <select value={stationId} onChange={(e) => setStationId(e.target.value)}>
-                  <option value="">—</option>
-                  {data.stations.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="vbs-task-field">
-                <span className="vbs-task-field-label">Team</span>
-                <select value={teamId} onChange={(e) => setTeamId(e.target.value)}>
-                  <option value="">—</option>
-                  {data.teams.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-            <div className="vbs-task-add-actions">
-              <button type="submit" className="vbs-plan-save" disabled={busy || !resolvedActivity}>
-                Add block
-              </button>
-            </div>
-          </form>
-        </div>
-      ) : null}
+      <div className="vbs-schedule-print-only" aria-hidden="true">
+        <h1>{plan.title || "VBS week schedule"}</h1>
+        <p>
+          {dateHint} · Daily {hoursHint}
+        </p>
+      </div>
 
       {planDays.length === 0 ? (
         <p className="muted vbs-task-empty">Set VBS start and end dates on Overview to lay out daily boxes.</p>
@@ -1890,9 +1964,123 @@ function ScheduleTab({
 
       {data.schedule.length === 0 && planDays.length > 0 ? (
         <p className="muted vbs-task-empty">
-          No schedule yet. Use <strong>Build schedule from overview</strong> for a full multi-day template, or add
-          blocks above.
+          No schedule blocks yet. Save the plan on <strong>Overview</strong> with these dates to generate the default
+          week template, or add blocks below.
         </p>
+      ) : null}
+
+      {data.canWrite || activityLabels.length > 0 ? (
+        <details className="vbs-schedule-editor-drawer">
+          <summary>Manage activities &amp; add blocks</summary>
+          {activityLabels.length > 0 ? (
+            <div className="vbs-daily-schedule-labels" aria-label="Schedule activity types">
+              <span className="vbs-daily-schedule-labels-heading muted">Activity names</span>
+              <ul className="vbs-daily-schedule-label-chips">
+                {activityLabels.map((label) => (
+                  <li key={label}>
+                    <span className="vbs-daily-schedule-label-chip">{label}</span>
+                    {data.canAdmin ? (
+                      <button
+                        type="button"
+                        className="vbs-daily-schedule-label-remove"
+                        aria-label={`Remove ${label} from activity list`}
+                        title="Remove from list (org admin)"
+                        disabled={busy}
+                        onClick={() => confirmRemoveActivity(label)}
+                      >
+                        ×
+                      </button>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+
+          {data.canWrite ? (
+            <div className="vbs-task-add-wrap">
+              <h2 className="vbs-task-add-heading">Add to the day</h2>
+              <form className="vbs-task-add-form" onSubmit={addSlot}>
+                <div className="vbs-task-meta-grid">
+                  <label className="vbs-task-field">
+                    <span className="vbs-task-field-label">VBS day</span>
+                    <select value={dayDate} onChange={(e) => setDayDate(e.target.value)} required>
+                      {planDays.map((day, index) => (
+                        <option key={day.iso} value={day.iso}>
+                          Day {index + 1} · {day.weekday}, {day.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="vbs-task-field">
+                    <span className="vbs-task-field-label">Activity</span>
+                    <select
+                      value={activityPick}
+                      onChange={(e) => setActivityPick(e.target.value)}
+                      required={activityPick !== "__custom__"}
+                    >
+                      <option value="">Choose activity…</option>
+                      {activityLabels.map((name) => (
+                        <option key={name} value={name}>
+                          {name}
+                        </option>
+                      ))}
+                      <option value="__custom__">Add custom activity…</option>
+                    </select>
+                  </label>
+                  {activityPick === "__custom__" ? (
+                    <label className="vbs-task-field">
+                      <span className="vbs-task-field-label">Custom name</span>
+                      <input
+                        value={customActivity}
+                        onChange={(e) => setCustomActivity(e.target.value)}
+                        required
+                        placeholder="New activity (saved to list)"
+                      />
+                    </label>
+                  ) : null}
+                  <label className="vbs-task-field">
+                    <span className="vbs-task-field-label">Start</span>
+                    <input type="time" value={startsAt} onChange={(e) => setStartsAt(e.target.value)} required />
+                  </label>
+                  <label className="vbs-task-field">
+                    <span className="vbs-task-field-label">End</span>
+                    <input type="time" value={endsAt} onChange={(e) => setEndsAt(e.target.value)} required />
+                  </label>
+                  <label className="vbs-task-field">
+                    <span className="vbs-task-field-label">Station</span>
+                    <select value={stationId} onChange={(e) => setStationId(e.target.value)}>
+                      <option value="">—</option>
+                      {data.stations.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="vbs-task-field">
+                    <span className="vbs-task-field-label">Team</span>
+                    <select value={teamId} onChange={(e) => setTeamId(e.target.value)}>
+                      <option value="">—</option>
+                      {data.teams.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                <div className="vbs-task-add-actions">
+                  <AddActionButton
+                    type="submit"
+                    label="Add block"
+                    disabled={busy || !resolvedActivity}
+                  />
+                </div>
+              </form>
+            </div>
+          ) : null}
+        </details>
       ) : null}
     </section>
   );
@@ -1960,39 +2148,38 @@ function ScheduleRow({
             : "vbs-task-card"
       }
     >
-      <button
-        type="button"
-        className={variant === "day" ? "vbs-daily-schedule-slot-summary" : "vbs-task-summary"}
-        aria-expanded={expanded}
-        onClick={onToggle}
-      >
-        {variant === "day" ? (
-          <>
-            <span className="vbs-daily-schedule-slot-time">
-              {slot.startsAt}–{slot.endsAt}
-            </span>
-            <span className="vbs-daily-schedule-slot-label">{slot.label}</span>
-            {(slot.teamId || stationLabel) && !expanded ? (
-              <span className="vbs-daily-schedule-slot-meta muted">
-                {slot.teamId ? teamName(slot.teamId) : ""}
-                {stationLabel ? `${slot.teamId ? " · " : ""}${stationLabel}` : ""}
+      <div {...expandableRowHeaderProps(expanded, onToggle, variant === "day" ? "vbs-daily-schedule-slot-header" : "vbs-task-summary-header")}>
+        <div className={variant === "day" ? "vbs-daily-schedule-slot-summary" : "vbs-task-summary"}>
+          {variant === "day" ? (
+            <>
+              <span className="vbs-daily-schedule-slot-time">
+                {slot.startsAt}–{slot.endsAt}
               </span>
-            ) : null}
-          </>
-        ) : (
-          <>
-            <span className="vbs-task-summary-main">
-              <span className="vbs-task-summary-title">{slot.label}</span>
-            </span>
-            <span className="vbs-task-summary-meta muted">
-              {scheduleSummaryLine(slot, teamName, stationLabel)}
-            </span>
-          </>
-        )}
-        <span className="vbs-task-chevron" aria-hidden="true">
-          {expanded ? "▾" : "▸"}
-        </span>
-      </button>
+              <span className="vbs-daily-schedule-slot-label">{slot.label}</span>
+              {(slot.teamId || stationLabel || slot.roleLabel || slot.assignedUsername) && !expanded ? (
+                <span className="vbs-daily-schedule-slot-meta muted">
+                  {slot.teamId ? teamName(slot.teamId) : ""}
+                  {stationLabel ? `${slot.teamId ? " · " : ""}${stationLabel}` : ""}
+                  {slot.roleLabel ? `${slot.teamId || stationLabel ? " · " : ""}${slot.roleLabel}` : ""}
+                  {slot.assignedUsername ? ` · ${slot.assignedUsername}` : ""}
+                </span>
+              ) : null}
+            </>
+          ) : (
+            <>
+              <span className="vbs-task-summary-main">
+                <span className="vbs-task-summary-title">{slot.label}</span>
+              </span>
+              <span className="vbs-task-summary-meta muted">
+                {scheduleSummaryLine(slot, teamName, stationLabel)}
+              </span>
+            </>
+          )}
+          <span className="vbs-task-chevron" aria-hidden="true">
+            {expanded ? "▾" : "▸"}
+          </span>
+        </div>
+      </div>
 
       {expanded ? (
         <div className="vbs-task-body">
@@ -2117,6 +2304,50 @@ function ScheduleRow({
                 <span>{stationLabel || "—"}</span>
               )}
             </label>
+            <label className="vbs-task-field">
+              <span className="vbs-task-field-label">Week-of role</span>
+              {canEdit ? (
+                <>
+                  <input
+                    list={`vbs-schedule-roles-${slot.id}`}
+                    value={draft.roleLabel}
+                    disabled={busy}
+                    onChange={(e) => setDraft({ ...draft, roleLabel: e.target.value })}
+                    onBlur={() => {
+                      if (draft.roleLabel !== slot.roleLabel) {
+                        save({ ...draft, roleLabel: draft.roleLabel.trim() });
+                      }
+                    }}
+                    placeholder="e.g. Welcome desk"
+                  />
+                  <datalist id={`vbs-schedule-roles-${slot.id}`}>
+                    {(data.scheduleRoleSuggestions ?? []).map((role) => (
+                      <option key={role} value={role} />
+                    ))}
+                  </datalist>
+                </>
+              ) : (
+                <span>{slot.roleLabel || "—"}</span>
+              )}
+            </label>
+            <label className="vbs-task-field">
+              <span className="vbs-task-field-label">Assigned person</span>
+              {canEdit ? (
+                <OrgUserTypeahead
+                  orgId={orgId}
+                  value={draft.assignedUsername}
+                  disabled={busy}
+                  onChange={(assignedUsername) => setDraft({ ...draft, assignedUsername })}
+                  onCommit={(nextUsername) => {
+                    if (nextUsername !== slot.assignedUsername) {
+                      save({ ...draft, assignedUsername: nextUsername });
+                    }
+                  }}
+                />
+              ) : (
+                <span>{slot.assignedUsername || "—"}</span>
+              )}
+            </label>
           </div>
 
           {canEdit || slot.notes ? (
@@ -2170,6 +2401,7 @@ function StationsTab({
 }) {
   const [name, setName] = useState("");
   const [defaultTeamId, setDefaultTeamId] = useState("");
+  const [addingStation, setAddingStation] = useState(false);
   const [expandedStationId, setExpandedStationId] = useState<string | null>(null);
   const [filterTeamId, setFilterTeamId] = useState("");
   const [sortNameAsc, setSortNameAsc] = useState(true);
@@ -2183,42 +2415,20 @@ function StationsTab({
     return <p className="muted">Create your plan on the Overview tab first.</p>;
   }
 
+  function closeAddStation() {
+    setName("");
+    setDefaultTeamId("");
+    setAddingStation(false);
+  }
+
   function addStation(event: FormEvent) {
     event.preventDefault();
     onRun(() => api.saveVbsStation(orgId, { name, description: "", defaultTeamId }));
-    setName("");
+    closeAddStation();
   }
 
   return (
     <section className="vbs-panel vbs-tasks-panel">
-      {data.canWrite ? (
-        <div className="vbs-task-add-wrap">
-          <h2 className="vbs-task-add-heading">Add station</h2>
-          <form className="vbs-task-add-form" onSubmit={addStation}>
-            <label className="vbs-task-field">
-              <span className="vbs-task-field-label">Station name</span>
-              <input value={name} onChange={(e) => setName(e.target.value)} required placeholder="Station name" />
-            </label>
-            <label className="vbs-task-field">
-              <span className="vbs-task-field-label">Default team</span>
-              <select value={defaultTeamId} onChange={(e) => setDefaultTeamId(e.target.value)}>
-                <option value="">—</option>
-                {data.teams.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <div className="vbs-task-add-actions">
-              <button type="submit" className="vbs-plan-save" disabled={busy}>
-                Add station
-              </button>
-            </div>
-          </form>
-        </div>
-      ) : null}
-
       <div className="vbs-task-toolbar">
         <div className="vbs-task-filters">
           <label className="vbs-task-filter">
@@ -2252,7 +2462,38 @@ function StationsTab({
             <span aria-hidden="true">{sortNameAsc ? " ↑" : " ↓"}</span>
           </button>
         </div>
+        {data.canWrite ? (
+          <CollapsibleFormTrigger
+            label="Add station"
+            ariaExpanded={addingStation}
+            disabled={addingStation}
+            onClick={() => setAddingStation(true)}
+          />
+        ) : null}
       </div>
+
+      {addingStation && data.canWrite ? (
+        <CollapsibleFormPanel title="Add station">
+          <form className="vbs-collapsible-form" onSubmit={addStation}>
+            <label className="vbs-task-field">
+              <span className="vbs-task-field-label">Station name</span>
+              <input value={name} onChange={(e) => setName(e.target.value)} required placeholder="Station name" />
+            </label>
+            <label className="vbs-task-field">
+              <span className="vbs-task-field-label">Default team</span>
+              <select value={defaultTeamId} onChange={(e) => setDefaultTeamId(e.target.value)}>
+                <option value="">—</option>
+                {data.teams.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <CollapsibleFormActions onCancel={closeAddStation} saveLabel="Save" busy={busy} />
+          </form>
+        </CollapsibleFormPanel>
+      ) : null}
 
       {data.stations.length === 0 ? <p className="muted vbs-task-empty">No stations yet.</p> : null}
       {data.stations.length > 0 && visibleStations.length === 0 ? (
@@ -2327,15 +2568,17 @@ function StationRow({
 
   return (
     <li className={expanded ? "vbs-task-card open" : "vbs-task-card"}>
-      <button type="button" className="vbs-task-summary" aria-expanded={expanded} onClick={onToggle}>
-        <span className="vbs-task-summary-main">
-          <span className="vbs-task-summary-title">{station.name}</span>
-        </span>
-        <span className="vbs-task-summary-meta muted">{teamLabel}</span>
-        <span className="vbs-task-chevron" aria-hidden="true">
-          {expanded ? "▾" : "▸"}
-        </span>
-      </button>
+      <div {...expandableRowHeaderProps(expanded, onToggle, "vbs-task-summary-header")}>
+        <div className="vbs-task-summary">
+          <span className="vbs-task-summary-main">
+            <span className="vbs-task-summary-title">{station.name}</span>
+          </span>
+          <span className="vbs-task-summary-meta muted">{teamLabel}</span>
+          <span className="vbs-task-chevron" aria-hidden="true">
+            {expanded ? "▾" : "▸"}
+          </span>
+        </div>
+      </div>
 
       {expanded ? (
         <div className="vbs-task-body">
@@ -2436,22 +2679,38 @@ function ChecklistTab({
   busy,
   teamName,
   onRun,
+  expandedItemId: expandedItemIdProp,
+  onExpandedItemIdChange,
 }: {
   data: VbsPlanWorkspace;
   orgId: string;
   busy: boolean;
   teamName: (id: string) => string;
   onRun: (action: () => Promise<unknown>) => void;
+  expandedItemId?: string | null;
+  onExpandedItemIdChange?: (id: string | null) => void;
 }) {
   const milestoneCategories = data.milestoneCategories?.length
     ? data.milestoneCategories
     : ["Before VBS"];
+  const [addingMilestone, setAddingMilestone] = useState(false);
   const [category, setCategory] = useState(milestoneCategories[0] ?? "Before VBS");
   const [label, setLabel] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [assignedTeamId, setAssignedTeamId] = useState("");
   const [notes, setNotes] = useState("");
-  const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
+  const [expandedItemIdLocal, setExpandedItemIdLocal] = useState<string | null>(null);
+  const expandedItemId = expandedItemIdProp !== undefined ? expandedItemIdProp : expandedItemIdLocal;
+  function setExpandedItemId(next: string | null) {
+    if (onExpandedItemIdChange) {
+      onExpandedItemIdChange(next);
+    } else {
+      setExpandedItemIdLocal(next);
+    }
+  }
+  function toggleExpandedItem(itemId: string) {
+    setExpandedItemId(expandedItemId === itemId ? null : itemId);
+  }
   const [filterCategory, setFilterCategory] = useState("");
   const [filterDone, setFilterDone] = useState("");
   const today = localTodayIso();
@@ -2460,6 +2719,22 @@ function ChecklistTab({
     const filtered = filterChecklistItems(data.checklist, filterCategory, "", filterDone);
     return sortMilestonesByDueDate(filtered);
   }, [data.checklist, filterCategory, filterDone]);
+
+  const focusRef = useRef<HTMLDivElement>(null);
+  const focusedItem = expandedItemId
+    ? data.checklist.find((item) => item.id === expandedItemId)
+    : undefined;
+  const timelineItems = useMemo(
+    () => (expandedItemId ? visibleItems.filter((item) => item.id !== expandedItemId) : visibleItems),
+    [visibleItems, expandedItemId],
+  );
+
+  useEffect(() => {
+    if (!focusedItem || !focusRef.current) {
+      return;
+    }
+    focusRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [focusedItem?.id]);
 
   const dateRange = useMemo(() => milestoneDueDateRange(visibleItems), [visibleItems]);
   const todayLinePercent = useMemo(() => {
@@ -2473,6 +2748,14 @@ function ChecklistTab({
     return <p className="muted">Create your plan on the Overview tab first.</p>;
   }
 
+  function closeAddMilestone() {
+    setLabel("");
+    setDueDate("");
+    setNotes("");
+    setAssignedTeamId("");
+    setAddingMilestone(false);
+  }
+
   function addItem(event: FormEvent) {
     event.preventDefault();
     onRun(() =>
@@ -2484,22 +2767,93 @@ function ChecklistTab({
         notes,
       }),
     );
-    setLabel("");
-    setDueDate("");
-    setNotes("");
+    closeAddMilestone();
   }
+
+  const focusedDatePercent =
+    focusedItem?.dueDate && dateRange
+      ? milestoneDatePercent(focusedItem.dueDate, dateRange.minMs, dateRange.maxMs)
+      : null;
+  const focusedTone = focusedItem ? milestoneTone(focusedItem, today) : ("upcoming" as MilestoneTone);
 
   return (
     <section className="vbs-panel vbs-tasks-panel vbs-milestones-panel">
+      <h2 className="sr-only">Milestones</h2>
+
+      {focusedItem ? (
+        <div ref={focusRef} className="vbs-prep-focus vbs-prep-focus-milestone">
+          <p className="muted vbs-prep-focus-lead">Selected milestone — edit below, then browse the timeline.</p>
+          <ol className="vbs-milestone-timeline vbs-prep-focus-milestone-list">
+            <ChecklistRow
+              item={focusedItem}
+              data={data}
+              orgId={orgId}
+              busy={busy}
+              teamName={teamName}
+              datePercent={focusedDatePercent}
+              tone={focusedTone}
+              milestoneCategories={milestoneCategories}
+              expanded
+              onToggle={() => setExpandedItemId(null)}
+              onRun={onRun}
+            />
+          </ol>
+        </div>
+      ) : null}
+
       <p className="vbs-milestones-lead muted">
         Milestones in due-date order. Past-due open items show in red; completed items in green. The vertical dotted
         line shows where today falls between the earliest and latest due dates.
       </p>
 
-      {data.canWrite ? (
-        <div className="vbs-task-add-wrap">
-          <h2 className="vbs-task-add-heading">Add milestone</h2>
-          <form className="vbs-task-add-form" onSubmit={addItem}>
+      <div className="vbs-task-toolbar">
+        <div className="vbs-task-filters">
+          <label className="vbs-task-filter">
+            <span className="vbs-task-field-label">Status</span>
+            <select
+              value={filterDone}
+              onChange={(e) => {
+                setFilterDone(e.target.value);
+                setExpandedItemId(null);
+              }}
+            >
+              <option value="">All milestones</option>
+              <option value="not_started">Not started</option>
+              <option value="in_progress">In progress</option>
+              <option value="done">Done</option>
+            </select>
+          </label>
+          <label className="vbs-task-filter">
+            <span className="vbs-task-field-label">Category</span>
+            <select
+              value={filterCategory}
+              onChange={(e) => {
+                setFilterCategory(e.target.value);
+                setExpandedItemId(null);
+              }}
+            >
+              <option value="">All categories</option>
+              {milestoneCategories.map((cat) => (
+                <option key={cat} value={cat}>
+                  {cat}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+        {data.canWrite ? (
+          <CollapsibleFormTrigger
+            label="Add milestone"
+            ariaExpanded={addingMilestone}
+            disabled={addingMilestone}
+            onClick={() => setAddingMilestone(true)}
+          />
+        ) : null}
+      </div>
+
+      {addingMilestone && data.canWrite ? (
+        <CollapsibleFormPanel title="Add milestone">
+          <form className="vbs-collapsible-form" onSubmit={addItem}>
             <label className="vbs-task-field">
               <span className="vbs-task-field-label">Milestone</span>
               <input value={label} onChange={(e) => setLabel(e.target.value)} required placeholder="What must be ready?" />
@@ -2541,58 +2895,17 @@ function ChecklistTab({
                 placeholder="Tracking numbers, contacts, or reminders…"
               />
             </label>
-            <div className="vbs-task-add-actions">
-              <button type="submit" className="vbs-plan-save" disabled={busy}>
-                Add milestone
-              </button>
-            </div>
+            <CollapsibleFormActions onCancel={closeAddMilestone} saveLabel="Save" busy={busy} />
           </form>
-        </div>
+        </CollapsibleFormPanel>
       ) : null}
-
-      <div className="vbs-task-toolbar">
-        <div className="vbs-task-filters">
-          <label className="vbs-task-filter">
-            <span className="vbs-task-field-label">Status</span>
-            <select
-              value={filterDone}
-              onChange={(e) => {
-                setFilterDone(e.target.value);
-                setExpandedItemId(null);
-              }}
-            >
-              <option value="">All milestones</option>
-              <option value="not_started">Not started</option>
-              <option value="in_progress">In progress</option>
-              <option value="done">Done</option>
-            </select>
-          </label>
-          <label className="vbs-task-filter">
-            <span className="vbs-task-field-label">Category</span>
-            <select
-              value={filterCategory}
-              onChange={(e) => {
-                setFilterCategory(e.target.value);
-                setExpandedItemId(null);
-              }}
-            >
-              <option value="">All categories</option>
-              {milestoneCategories.map((cat) => (
-                <option key={cat} value={cat}>
-                  {cat}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-      </div>
 
       {data.checklist.length === 0 ? <p className="muted vbs-task-empty">No milestones yet.</p> : null}
       {data.checklist.length > 0 && visibleItems.length === 0 ? (
         <p className="muted vbs-task-empty">No milestones match these filters.</p>
       ) : null}
 
-      {visibleItems.length > 0 ? (
+      {timelineItems.length > 0 ? (
         <div
           className="vbs-milestone-timeline-wrap"
           style={{ ["--milestone-date-shift" as string]: `${MILESTONE_DATE_SHIFT_PCT}%` }}
@@ -2614,7 +2927,7 @@ function ChecklistTab({
             </div>
           ) : null}
           <ol className="vbs-milestone-timeline" start={1}>
-            {visibleItems.map((item, index) => {
+            {timelineItems.map((item, index) => {
               const datePercent =
                 item.dueDate && dateRange
                   ? milestoneDatePercent(item.dueDate, dateRange.minMs, dateRange.maxMs)
@@ -2631,7 +2944,7 @@ function ChecklistTab({
                   tone={milestoneTone(item, today)}
                   milestoneCategories={milestoneCategories}
                   expanded={expandedItemId === item.id}
-                  onToggle={() => setExpandedItemId((current) => (current === item.id ? null : item.id))}
+                  onToggle={() => toggleExpandedItem(item.id)}
                   onRun={onRun}
                 />
               );
@@ -2727,35 +3040,36 @@ function ChecklistRow({
   return (
     <li className={`vbs-milestone-node tone-${tone}${expanded ? " open" : ""}`} style={nodeStyle}>
       <div className="vbs-milestone-node-body">
-          <button type="button" className="vbs-milestone-summary" aria-expanded={expanded} onClick={onToggle}>
-            <div className={`vbs-milestone-due-badge tone-${tone}`}>
-              <span className="vbs-milestone-due-label">Due</span>
-              {item.dueDate ? (
-                <>
-                  <time className="vbs-milestone-due-date" dateTime={item.dueDate}>
-                    {dueLabel}
-                  </time>
-                  <span className="vbs-milestone-due-iso">{item.dueDate}</span>
-                </>
-              ) : (
-                <span className="vbs-milestone-due-missing">Not set</span>
-              )}
+          <div {...expandableRowHeaderProps(expanded, onToggle, "vbs-milestone-summary-header")}>
+            <div className="vbs-milestone-summary">
+              <div className={`vbs-milestone-due-badge tone-${tone}`}>
+                <span className="vbs-milestone-due-label">Due</span>
+                {item.dueDate ? (
+                  <>
+                    <time className="vbs-milestone-due-date" dateTime={item.dueDate}>
+                      {dueLabel}
+                    </time>
+                    <span className="vbs-milestone-due-iso">{item.dueDate}</span>
+                  </>
+                ) : (
+                  <span className="vbs-milestone-due-missing">Not set</span>
+                )}
+              </div>
+              <span className="vbs-milestone-summary-main">
+                <span className="vbs-milestone-title">{item.label}</span>
+              </span>
+              <span className="vbs-milestone-meta muted">
+                {item.category}
+                {teamLabel !== "Unassigned" ? ` · ${teamLabel}` : ""}
+              </span>
+              {item.notes.trim() && !expanded ? (
+                <span className="vbs-milestone-notes-preview muted">{item.notes.trim()}</span>
+              ) : null}
+              <span className="vbs-milestone-expand" aria-hidden="true">
+                <MilestoneExpandIcon open={expanded} />
+              </span>
             </div>
-            <span className="vbs-milestone-summary-main">
-              <span className="vbs-milestone-title">{item.label}</span>
-            </span>
-            <span className="vbs-milestone-meta muted">
-              {item.category}
-              {teamLabel !== "Unassigned" ? ` · ${teamLabel}` : ""}
-            </span>
-            {item.notes.trim() && !expanded ? (
-              <span className="vbs-milestone-notes-preview muted">{item.notes.trim()}</span>
-            ) : null}
-            <span className="vbs-milestone-expand" aria-hidden="true">
-              <MilestoneExpandIcon open={expanded} />
-            </span>
-          </button>
-          <div className="vbs-milestone-quick-status" role="group" aria-label="Milestone status">
+            <div className="vbs-milestone-quick-status" role="group" aria-label="Milestone status" data-no-row-toggle>
             {canEdit ? (
               <select
                 className="vbs-milestone-status-select"
@@ -2773,6 +3087,7 @@ function ChecklistRow({
             ) : (
               <span className="vbs-milestone-status-read">{MILESTONE_STATUS_LABELS[normalizeMilestoneStatus(item)]}</span>
             )}
+            </div>
           </div>
 
       {expanded ? (
@@ -2929,6 +3244,7 @@ function BoardTab({
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [teamId, setTeamId] = useState("");
+  const [composingPost, setComposingPost] = useState(false);
   const [replyDrafts, setReplyDrafts] = useState<Record<string, string>>({});
   const [filterTeamId, setFilterTeamId] = useState("");
   const [sortNewestFirst, setSortNewestFirst] = useState(true);
@@ -2950,11 +3266,17 @@ function BoardTab({
   const canPostTeam = data.canWrite || myTeamIds.size > 0;
   const postableTeams = data.canWrite ? data.teams : data.teams.filter((t) => myTeamIds.has(t.id));
 
+  function closeComposePost() {
+    setTitle("");
+    setBody("");
+    setTeamId("");
+    setComposingPost(false);
+  }
+
   function submitPost(event: FormEvent) {
     event.preventDefault();
     onRun(() => api.createVbsBoardPost(orgId, { title, body, teamId }));
-    setTitle("");
-    setBody("");
+    closeComposePost();
   }
 
   function submitReply(postId: string, event: FormEvent) {
@@ -2976,49 +3298,9 @@ function BoardTab({
         <Link to="/profile">your notification profile</Link>.
       </p>
 
-      {canPostTeam ? (
-        <div className="vbs-task-add-wrap">
-          <h2 className="vbs-task-add-heading">New post</h2>
-          <form className="vbs-task-add-form" onSubmit={submitPost}>
-            <label className="vbs-task-field">
-              <span className="vbs-task-field-label">Subject</span>
-              <input value={title} onChange={(e) => setTitle(e.target.value)} required placeholder="Subject" />
-            </label>
-            <label className="vbs-task-field">
-              <span className="vbs-task-field-label">Message</span>
-              <textarea
-                className="vbs-task-details"
-                value={body}
-                onChange={(e) => setBody(e.target.value)}
-                rows={4}
-                required
-                placeholder="Write your update…"
-              />
-            </label>
-            <label className="vbs-task-field">
-              <span className="vbs-task-field-label">Audience</span>
-              <select value={teamId} onChange={(e) => setTeamId(e.target.value)}>
-                {canPostOrg ? <option value="">Whole organization</option> : null}
-                {postableTeams.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    Team: {t.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            {!canPostOrg && canPostTeam ? (
-              <p className="muted">Organization-wide posts require coordinator write access.</p>
-            ) : null}
-            <div className="vbs-task-add-actions">
-              <button type="submit" className="vbs-plan-save" disabled={busy}>
-                Post to board
-              </button>
-            </div>
-          </form>
-        </div>
-      ) : (
+      {!canPostTeam ? (
         <p className="muted">Join a team to post, or ask a coordinator for write access.</p>
-      )}
+      ) : null}
 
       <div className="vbs-task-toolbar">
         <div className="vbs-task-filters">
@@ -3053,7 +3335,52 @@ function BoardTab({
             <span aria-hidden="true">{sortNewestFirst ? " ↓" : " ↑"}</span>
           </button>
         </div>
+        {canPostTeam ? (
+          <CollapsibleFormTrigger
+            label="New post"
+            ariaExpanded={composingPost}
+            disabled={composingPost}
+            onClick={() => setComposingPost(true)}
+          />
+        ) : null}
       </div>
+
+      {composingPost && canPostTeam ? (
+        <CollapsibleFormPanel title="New post">
+          <form className="vbs-collapsible-form" onSubmit={submitPost}>
+            <label className="vbs-task-field">
+              <span className="vbs-task-field-label">Subject</span>
+              <input value={title} onChange={(e) => setTitle(e.target.value)} required placeholder="Subject" />
+            </label>
+            <label className="vbs-task-field">
+              <span className="vbs-task-field-label">Message</span>
+              <textarea
+                className="vbs-task-details"
+                value={body}
+                onChange={(e) => setBody(e.target.value)}
+                rows={4}
+                required
+                placeholder="Write your update…"
+              />
+            </label>
+            <label className="vbs-task-field">
+              <span className="vbs-task-field-label">Audience</span>
+              <select value={teamId} onChange={(e) => setTeamId(e.target.value)}>
+                {canPostOrg ? <option value="">Whole organization</option> : null}
+                {postableTeams.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    Team: {t.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {!canPostOrg && canPostTeam ? (
+              <p className="muted">Organization-wide posts require coordinator write access.</p>
+            ) : null}
+            <CollapsibleFormActions onCancel={closeComposePost} saveLabel="Save" busy={busy} />
+          </form>
+        </CollapsibleFormPanel>
+      ) : null}
 
       {data.boardPosts.length === 0 ? <p className="muted vbs-task-empty">No posts yet.</p> : null}
       {data.boardPosts.length > 0 && visiblePosts.length === 0 ? (
@@ -3106,20 +3433,22 @@ function BoardPostCard({
 
   return (
     <li className={expanded ? "vbs-task-card open vbs-board-post" : "vbs-task-card vbs-board-post"}>
-      <button type="button" className="vbs-task-summary" aria-expanded={expanded} onClick={onToggle}>
-        <span className="vbs-task-summary-main">
-          <span className="vbs-task-summary-title">{post.title}</span>
-          {replyCount > 0 ? (
-            <span className="vbs-task-status-pill mini active status-in_progress">{replyCount} repl{replyCount === 1 ? "y" : "ies"}</span>
-          ) : null}
-        </span>
-        <span className="vbs-task-summary-meta muted">
-          {audience} · {posted} · {post.createdBy}
-        </span>
-        <span className="vbs-task-chevron" aria-hidden="true">
-          {expanded ? "▾" : "▸"}
-        </span>
-      </button>
+      <div {...expandableRowHeaderProps(expanded, onToggle, "vbs-task-summary-header")}>
+        <div className="vbs-task-summary">
+          <span className="vbs-task-summary-main">
+            <span className="vbs-task-summary-title">{post.title}</span>
+            {replyCount > 0 ? (
+              <span className="vbs-task-status-pill mini active status-in_progress">{replyCount} repl{replyCount === 1 ? "y" : "ies"}</span>
+            ) : null}
+          </span>
+          <span className="vbs-task-summary-meta muted">
+            {audience} · {posted} · {post.createdBy}
+          </span>
+          <span className="vbs-task-chevron" aria-hidden="true">
+            {expanded ? "▾" : "▸"}
+          </span>
+        </div>
+      </div>
 
       {expanded ? (
         <div className="vbs-task-body">
@@ -3148,14 +3477,195 @@ function BoardPostCard({
                 placeholder="Write a reply…"
               />
             </label>
-            <button type="submit" className="ghost" disabled={busy || !replyBody.trim()}>
-              Reply
-            </button>
+            <AddActionButton type="submit" label="Reply" disabled={busy || !replyBody.trim()} />
           </form>
         </div>
       ) : (
         <p className="vbs-board-post-preview muted">{preview}</p>
       )}
+    </li>
+  );
+}
+
+type SupplyDraft = {
+  name: string;
+  quantity: string;
+  estimatedCost: number;
+  purchased: boolean;
+  assignedTeamId: string;
+  notes: string;
+};
+
+function emptySupplyDraft(): SupplyDraft {
+  return { name: "", quantity: "", estimatedCost: 0, purchased: false, assignedTeamId: "", notes: "" };
+}
+
+function PlanSuppliesSection({
+  orgId,
+  data,
+  busy,
+  onRefresh,
+}: {
+  orgId: string;
+  data: VbsPlanWorkspace;
+  busy: boolean;
+  onRefresh: () => void;
+}) {
+  const canEdit = data.canWrite;
+  const [draft, setDraft] = useState<SupplyDraft>(emptySupplyDraft);
+  const [status, setStatus] = useState("");
+  const items = data.supplies ?? [];
+  const totalEstimate = items.reduce((sum, item) => sum + Math.max(0, item.estimatedCost), 0);
+  const unpurchased = items.filter((item) => !item.purchased);
+
+  async function runSave(input: Record<string, unknown>) {
+    setStatus("");
+    try {
+      await api.saveVbsSupplyItem(orgId, input);
+      onRefresh();
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : "Could not save item");
+    }
+  }
+
+  async function addItem(event: FormEvent) {
+    event.preventDefault();
+    if (!draft.name.trim()) {
+      return;
+    }
+    await runSave({ ...draft, name: draft.name.trim() });
+    setDraft(emptySupplyDraft());
+    setStatus("Item added.");
+  }
+
+  return (
+    <div className="vbs-plan-overview-block">
+      <h2 className="vbs-plan-section-title">Supply list</h2>
+      <p className="muted vbs-plan-section-lead">
+        Track purchases for directors and team leads. Estimates roll up here; task expenses still count in the budget
+        block above.
+      </p>
+      <p className="vbs-plan-supply-totals">
+        <strong>{items.length}</strong> items · <strong>${totalEstimate.toFixed(2)}</strong> estimated ·{" "}
+        <strong>{unpurchased.length}</strong> still to buy
+      </p>
+      {items.length > 0 ? (
+        <ul className="vbs-supply-list">
+          {items.map((item) => (
+            <PlanSupplyRow
+              key={item.id}
+              item={item}
+              teams={data.teams}
+              canEdit={canEdit}
+              busy={busy}
+              onToggle={() =>
+                void runSave({
+                  id: item.id,
+                  name: item.name,
+                  quantity: item.quantity,
+                  estimatedCost: item.estimatedCost,
+                  purchased: !item.purchased,
+                  assignedTeamId: item.assignedTeamId,
+                  notes: item.notes,
+                })
+              }
+              onDelete={() => {
+                if (!window.confirm(`Remove “${item.name}” from the supply list?`)) {
+                  return;
+                }
+                void api.deleteVbsSupplyItem(orgId, item.id).then(onRefresh).catch((err) => {
+                  setStatus(err instanceof Error ? err.message : "Could not delete item");
+                });
+              }}
+            />
+          ))}
+        </ul>
+      ) : (
+        <p className="muted">No supply items yet.</p>
+      )}
+      {canEdit ? (
+        <form className="vbs-supply-add" onSubmit={(e) => void addItem(e)}>
+          <label className="vbs-task-field">
+            <span className="vbs-task-field-label">Item</span>
+            <input
+              value={draft.name}
+              onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+              disabled={busy}
+              required
+            />
+          </label>
+          <label className="vbs-task-field">
+            <span className="vbs-task-field-label">Qty</span>
+            <input
+              value={draft.quantity}
+              onChange={(e) => setDraft({ ...draft, quantity: e.target.value })}
+              disabled={busy}
+            />
+          </label>
+          <label className="vbs-task-field">
+            <span className="vbs-task-field-label">Est. cost</span>
+            <input
+              type="number"
+              min={0}
+              step={0.01}
+              value={draft.estimatedCost || ""}
+              onChange={(e) => setDraft({ ...draft, estimatedCost: Number(e.target.value) || 0 })}
+              disabled={busy}
+            />
+          </label>
+          <label className="vbs-task-field">
+            <span className="vbs-task-field-label">Team</span>
+            <select
+              value={draft.assignedTeamId}
+              onChange={(e) => setDraft({ ...draft, assignedTeamId: e.target.value })}
+              disabled={busy}
+            >
+              <option value="">Any / director</option>
+              {data.teams.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <AddActionButton type="submit" label="Add item" disabled={busy || !draft.name.trim()} />
+        </form>
+      ) : null}
+      {status ? <p className="status">{status}</p> : null}
+    </div>
+  );
+}
+
+function PlanSupplyRow({
+  item,
+  teams,
+  canEdit,
+  busy,
+  onToggle,
+  onDelete,
+}: {
+  item: VbsSupplyItem;
+  teams: OrgTeam[];
+  canEdit: boolean;
+  busy: boolean;
+  onToggle: () => void;
+  onDelete: () => void;
+}) {
+  const teamLabel = item.assignedTeamId ? (teams.find((t) => t.id === item.assignedTeamId)?.name ?? "Team") : "—";
+  return (
+    <li className={item.purchased ? "vbs-supply-row purchased" : "vbs-supply-row"}>
+      <label className="vbs-supply-check">
+        <input type="checkbox" checked={item.purchased} disabled={!canEdit || busy} onChange={onToggle} />
+        <span className="vbs-supply-name">{item.name}</span>
+      </label>
+      <span className="muted">{item.quantity || "—"}</span>
+      <span>${item.estimatedCost.toFixed(2)}</span>
+      <span className="muted">{teamLabel}</span>
+      {canEdit ? (
+        <button type="button" className="ghost vbs-task-remove" aria-label={`Remove ${item.name}`} onClick={onDelete}>
+          ×
+        </button>
+      ) : null}
     </li>
   );
 }

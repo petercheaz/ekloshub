@@ -1,5 +1,7 @@
-import { FormEvent, useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { FormEvent, useCallback, useEffect, useState } from "react";
+import { orgMemberFocusElementId, scrollDetailIntoView } from "../scroll-detail-into-view";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { orgPath } from "../orgs";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { OrgUserListInput } from "../OrgUserListInput";
@@ -8,6 +10,8 @@ import { useOrgs } from "../orgs";
 import { defaultVbsPassword } from "../vbs-password";
 import { inviteableRoles, orgRoleLabels } from "@org-permissions";
 import type { OrgDetail, OrgMember, OrgRole } from "../types";
+import { CollapsibleForm, CollapsibleFormTrigger } from "../CollapsibleForm";
+import { expandableRowHeaderProps } from "../expandable-row";
 
 const roles: { id: OrgRole; label: string }[] = (
   Object.entries(orgRoleLabels) as [OrgRole, string][]
@@ -18,7 +22,7 @@ function memberDisplayName(member: OrgMember) {
   return name || member.username;
 }
 
-function memberSubtitle(member: OrgMember) {
+function memberSubtitle(member: OrgMember, activeVbsYear: number) {
   const parts = [member.username];
   if (member.email && member.email.toLowerCase() !== member.username.toLowerCase()) {
     parts.push(member.email);
@@ -26,12 +30,19 @@ function memberSubtitle(member: OrgMember) {
   if (member.phone) {
     parts.push(member.phone);
   }
+  parts.push(`VBS ${member.vbsSeasonYear}`);
+  if (member.removedAt) {
+    parts.push("Past member");
+  } else if (member.vbsSeasonYear !== activeVbsYear) {
+    parts.push("Prior season");
+  }
   return parts.join(" · ");
 }
 
 export default function OrgHomePage() {
   const { orgId = "" } = useParams();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
   const { canAdmin, canManageMembers, refreshOrgs } = useOrgs();
   const [detail, setDetail] = useState<OrgDetail | null>(null);
@@ -42,6 +53,7 @@ export default function OrgHomePage() {
   const [inviteRole, setInviteRole] = useState<OrgRole>("org_read");
   const [inviteStatus, setInviteStatus] = useState("");
   const [expandedMember, setExpandedMember] = useState<string | null>(null);
+  const [memberForm, setMemberForm] = useState<"invite" | "add" | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -63,12 +75,54 @@ export default function OrgHomePage() {
     };
   }, [orgId]);
 
+  const focusMember = useCallback(
+    (username: string | null, options?: { syncUrl?: boolean }) => {
+      setExpandedMember(username);
+      if (username) {
+        setMemberForm(null);
+      }
+      if (options?.syncUrl === false) {
+        return;
+      }
+      const params = new URLSearchParams(searchParams);
+      if (username) {
+        params.set("member", username);
+      } else {
+        params.delete("member");
+      }
+      setSearchParams(params, { replace: true });
+    },
+    [searchParams, setSearchParams],
+  );
+
+  useEffect(() => {
+    if (!detail) {
+      return;
+    }
+    const username = searchParams.get("member")?.trim();
+    if (!username) {
+      return;
+    }
+    if (!detail.members.some((member) => member.username === username)) {
+      return;
+    }
+    focusMember(username, { syncUrl: false });
+  }, [searchParams, detail, focusMember]);
+
+  useEffect(() => {
+    if (!expandedMember) {
+      return;
+    }
+    scrollDetailIntoView(document.getElementById(orgMemberFocusElementId(expandedMember)));
+  }, [expandedMember]);
+
   async function sendInvites(event: FormEvent) {
     event.preventDefault();
     try {
       const result = await api.inviteToOrganization(orgId, emails, inviteRole);
       setDetail(await api.organization(orgId));
       setEmails("");
+      setMemberForm(null);
       setInviteStatus(
         result.invites
           .map((invite) => `${invite.email}: keyword ${invite.keyword}`)
@@ -85,6 +139,7 @@ export default function OrgHomePage() {
     try {
       setDetail(await api.addOrganizationMember(orgId, username, role));
       setUsername("");
+      setMemberForm(null);
       setError("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not add member");
@@ -95,7 +150,7 @@ export default function OrgHomePage() {
     try {
       setDetail(await api.removeOrganizationMember(orgId, name));
       if (expandedMember === name) {
-        setExpandedMember(null);
+        focusMember(null);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not remove member");
@@ -152,9 +207,12 @@ export default function OrgHomePage() {
       <section className="vbs-panel org-members">
         <h2 className="vbs-task-team-section-title">Members</h2>
         <p className="muted vbs-task-field-hint">
-          Expand a member to edit profile, access, and password. Default password for unset accounts:{" "}
-          <strong>{defaultPasswordLabel}</strong> (VBS year: before September = this calendar year, September onward =
-          next year).
+          Volunteers and staff from your planning workbook belong here — not on the student registration roster.
+          Assign them to <Link to={orgPath(orgId, "/teams")}>teams</Link>, then place them in roles on the{" "}
+          <Link to={orgPath(orgId, "/vbs-plan?tab=workbook&workbook=placements")}>plan workbook · Placements</Link>{" "}
+          tab.
+          Active season: <strong>VBS {detail.activeVbsYear}</strong>. Default password for unset accounts:{" "}
+          <strong>{defaultPasswordLabel}</strong>.
         </p>
         <ul className="vbs-task-list org-member-list">
           {detail.members.map((member) => (
@@ -163,14 +221,19 @@ export default function OrgHomePage() {
               member={member}
               orgId={orgId}
               teams={detail.teams ?? []}
+              activeVbsYear={detail.activeVbsYear}
+              canEditSeason={
+                Boolean(user?.platformAdmin) || detail.organization.role === "org_admin"
+              }
               defaultPasswordLabel={defaultPasswordLabel}
               canRemove={canManageMembers && member.username !== user?.username}
               expanded={expandedMember === member.username}
               onToggle={() =>
-                setExpandedMember((current) => (current === member.username ? null : member.username))
+                focusMember(expandedMember === member.username ? null : member.username)
               }
               onSaved={(next) => {
                 setDetail(next);
+                focusMember(null);
                 setError("");
               }}
               onError={(message) => setError(message)}
@@ -181,11 +244,32 @@ export default function OrgHomePage() {
       </section>
 
       {canManageMembers ? (
-        <form
-          className="review-form share-form vbs-form-panel"
+        <div className="vbs-registration-form-head org-members-form-triggers">
+          <CollapsibleFormTrigger
+            label="Send invite"
+            ariaExpanded={memberForm === "invite"}
+            disabled={memberForm !== null && memberForm !== "invite"}
+            onClick={() => setMemberForm("invite")}
+          />
+          <CollapsibleFormTrigger
+            label="Add member"
+            ariaExpanded={memberForm === "add"}
+            disabled={memberForm !== null && memberForm !== "add"}
+            onClick={() => setMemberForm("add")}
+          />
+        </div>
+      ) : null}
+      {memberForm === "invite" && canManageMembers ? (
+        <CollapsibleForm
+          title="Invite by email"
+          busy={false}
+          saveLabel="Save"
+          onCancel={() => {
+            setMemberForm(null);
+            setEmails("");
+          }}
           onSubmit={(event) => void sendInvites(event)}
         >
-          <h3>Invite by email</h3>
           <p className="muted vbs-task-field-hint">
             New invites default to viewer or coordinator. Promote to registration admin or org admin from Add
             member after they join.
@@ -212,34 +296,36 @@ export default function OrgHomePage() {
               </option>
             ))}
           </select>
-          <div className="vbs-form-actions">
-            <button type="submit" className="vbs-plan-save">
-              Send invite
-            </button>
-          </div>
           {inviteStatus ? <p className="tagline">{inviteStatus}</p> : null}
-          {(detail.invitations ?? []).length > 0 ? (
-            <ul className="entry-list">
-              {detail.invitations.map((invite) => (
-                <li key={invite.id} className="entry">
-                  <div className="entry-meta">
-                    <span className="author">{invite.email}</span>
-                    <span className="badge">{invite.acceptedAt ? "Joined" : "Pending"}</span>
-                  </div>
-                  {invite.acceptedAt ? null : (
-                    <p className="entry-preview">
-                      Keyword {invite.keyword} · <a href={invite.link}>Invite link</a>
-                    </p>
-                  )}
-                </li>
-              ))}
-            </ul>
-          ) : null}
-        </form>
+        </CollapsibleForm>
       ) : null}
-      {canManageMembers ? (
-        <form className="review-form share-form vbs-form-panel" onSubmit={(event) => void addMember(event)}>
-          <h3>Add existing user</h3>
+      {canManageMembers && (detail.invitations ?? []).length > 0 ? (
+        <ul className="entry-list">
+          {detail.invitations.map((invite) => (
+            <li key={invite.id} className="entry">
+              <div className="entry-meta">
+                <span className="author">{invite.email}</span>
+                <span className="badge">{invite.acceptedAt ? "Joined" : "Pending"}</span>
+              </div>
+              {invite.acceptedAt ? null : (
+                <p className="entry-preview">
+                  Keyword {invite.keyword} · <a href={invite.link}>Invite link</a>
+                </p>
+              )}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {memberForm === "add" && canManageMembers ? (
+        <CollapsibleForm
+          title="Add existing user"
+          saveLabel="Save"
+          onCancel={() => {
+            setMemberForm(null);
+            setUsername("");
+          }}
+          onSubmit={(event) => void addMember(event)}
+        >
           <label htmlFor="member-username">Users (comma or semicolon separated)</label>
           <OrgUserListInput
             id="member-username"
@@ -256,12 +342,7 @@ export default function OrgHomePage() {
               </option>
             ))}
           </select>
-          <div className="vbs-form-actions">
-            <button type="submit" className="vbs-plan-save">
-              Add member
-            </button>
-          </div>
-        </form>
+        </CollapsibleForm>
       ) : null}
 
       {canAdmin ? (
@@ -278,6 +359,8 @@ function OrgMemberRow({
   member,
   orgId,
   teams,
+  activeVbsYear,
+  canEditSeason,
   defaultPasswordLabel,
   canRemove,
   expanded,
@@ -289,6 +372,8 @@ function OrgMemberRow({
   member: OrgMember;
   orgId: string;
   teams: OrgDetail["teams"];
+  activeVbsYear: number;
+  canEditSeason: boolean;
   defaultPasswordLabel: string;
   canRemove: boolean;
   expanded: boolean;
@@ -322,6 +407,8 @@ function OrgMemberRow({
         newPassword: resetPasswordToDefault ? "" : newPassword,
         resetPasswordToDefault,
         teamAdminTeamIds: draft.teamAdminTeamIds,
+        vbsSeasonYear: canEditSeason ? draft.vbsSeasonYear : undefined,
+        restoreMember: canEditSeason && Boolean(member.removedAt) ? true : undefined,
       });
       onSaved(next);
       setNewPassword("");
@@ -334,23 +421,32 @@ function OrgMemberRow({
   }
 
   return (
-    <li className={expanded ? "vbs-task-card open" : "vbs-task-card"}>
-      <button type="button" className="vbs-task-summary" aria-expanded={expanded} onClick={onToggle}>
-        <span className="vbs-task-summary-main">
-          <span className="vbs-task-summary-title">{memberDisplayName(member)}</span>
-          <span className="vbs-task-assignee-pill">{member.role}</span>
-          {member.verified ? <span className="badge verified">Verified</span> : null}
-          {member.usesDefaultPassword ? (
-            <span className="vbs-task-assignee-pill" title="Default VBS password">
-              {defaultPasswordLabel}
-            </span>
-          ) : null}
-        </span>
-        <span className="vbs-task-summary-meta muted">{memberSubtitle(member)}</span>
-        <span className="vbs-task-chevron" aria-hidden="true">
-          {expanded ? "▾" : "▸"}
-        </span>
-      </button>
+    <li
+      id={orgMemberFocusElementId(member.username)}
+      className={expanded ? "vbs-task-card open" : "vbs-task-card"}
+    >
+      <div {...expandableRowHeaderProps(expanded, onToggle, "vbs-task-summary-header")}>
+        <div className="vbs-task-summary">
+          <span className="vbs-task-summary-main">
+            <span className="vbs-task-summary-title">{memberDisplayName(member)}</span>
+            <span className="vbs-task-assignee-pill">{member.role}</span>
+            {member.verified ? <span className="badge verified">Verified</span> : null}
+            {member.usesDefaultPassword ? (
+              <span className="vbs-task-assignee-pill" title="Default VBS password">
+                {defaultPasswordLabel}
+              </span>
+            ) : null}
+            {member.removedAt ? <span className="vbs-task-assignee-pill">Past</span> : null}
+            {!member.removedAt && member.vbsSeasonYear !== activeVbsYear ? (
+              <span className="vbs-task-assignee-pill">VBS {member.vbsSeasonYear}</span>
+            ) : null}
+          </span>
+          <span className="vbs-task-summary-meta muted">{memberSubtitle(member, activeVbsYear)}</span>
+          <span className="vbs-task-chevron" aria-hidden="true">
+            {expanded ? "▾" : "▸"}
+          </span>
+        </div>
+      </div>
 
       {expanded ? (
         <div className="vbs-task-body">
@@ -425,7 +521,30 @@ function OrgMemberRow({
                   Team admins can contact assigned teams only. Write/read cannot use org contact.
                 </span>
               </label>
+              {canEditSeason ? (
+                <label className="vbs-task-field">
+                  <span className="vbs-task-field-label">VBS season access</span>
+                  <input
+                    type="number"
+                    min={2000}
+                    max={2100}
+                    value={draft.vbsSeasonYear}
+                    onChange={(e) =>
+                      setDraft({ ...draft, vbsSeasonYear: Number(e.target.value) || draft.vbsSeasonYear })
+                    }
+                    disabled={busy}
+                  />
+                  <span className="muted vbs-task-field-hint">
+                    Which VBS year this person can view (non-admins). Active org season: VBS {activeVbsYear}.
+                  </span>
+                </label>
+              ) : null}
             </div>
+            {member.removedAt && canEditSeason ? (
+              <p className="vbs-plan-callout vbs-plan-callout-readonly">
+                Past member — save to restore access for VBS {draft.vbsSeasonYear}.
+              </p>
+            ) : null}
             {draft.role === "org_team_admin" ? (
               <fieldset className="share-targets vbs-task-field">
                 <legend>Teams this admin can contact</legend>
@@ -499,14 +618,17 @@ function OrgMemberRow({
               />
               Reset password to default ({defaultPasswordLabel})
             </label>
-            <div className="vbs-task-add-actions org-member-form-actions">
+            <div className="vbs-collapsible-form-actions org-member-form-actions">
+              <button type="button" className="ghost" disabled={busy} onClick={onToggle}>
+                Cancel
+              </button>
               <button type="submit" className="vbs-plan-save" disabled={busy}>
-                {busy ? "Saving…" : "Save member"}
+                {busy ? "Saving…" : "Save"}
               </button>
               {canRemove ? (
                 <button
                   type="button"
-                  className="vbs-plan-save vbs-plan-save-danger"
+                  className="ghost danger"
                   disabled={busy}
                   onClick={() => {
                     if (window.confirm(`Remove ${memberDisplayName(member)} from this organization?`)) {

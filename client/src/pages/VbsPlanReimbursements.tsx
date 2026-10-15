@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
+import { AddActionButton, SectionAddActions } from "../CollapsibleForm";
 import type { VbsTaskAttachment } from "../types";
 
 type QueueItem = {
@@ -84,7 +85,8 @@ export function VbsPlanReimbursementsTab({ orgId }: { orgId: string }) {
       <h2 className="vbs-plan-section-title">Submitted receipts</h2>
       <p className="muted vbs-registration-view-lead">
         Tasks with reimbursement status <strong>Submitted</strong> appear here. Volunteers attach receipts on the{" "}
-        <Link to={`/org/${orgId}/vbs-plan?tab=tasks`}>Tasks</Link> tab and set status to Submitted when ready for
+        <Link to={`/org/${orgId}/vbs-plan?tab=prep&prep=tasks`}>Prep work → Tasks</Link> and set status to
+        Submitted when ready for
         payout.
       </p>
 
@@ -147,14 +149,12 @@ export function VbsPlanReimbursementsTab({ orgId }: { orgId: string }) {
                     )}
                   </td>
                   <td>
-                    <button
-                      type="button"
-                      className="vbs-plan-save"
+                    <AddActionButton
+                      compact
+                      label="Mark reimbursed"
                       disabled={busy}
                       onClick={() => void markReimbursed(item.taskId)}
-                    >
-                      Mark reimbursed
-                    </button>
+                    />
                   </td>
                 </tr>
               ))}
@@ -163,21 +163,20 @@ export function VbsPlanReimbursementsTab({ orgId }: { orgId: string }) {
         </div>
       )}
 
-      <div className="vbs-plan-form-actions vbs-reimbursements-actions">
-        <button
-          type="button"
-          className="ghost"
-          disabled={busy || queue.length > 0 || reimbursedAwaitingArchive === 0}
-          onClick={() => void closeCycle()}
-        >
-          Close VBS reimbursement cycle
-        </button>
+      <div className="vbs-reimbursements-actions">
+        <SectionAddActions>
+          <AddActionButton
+            label="Close VBS reimbursement cycle"
+            disabled={busy || queue.length > 0 || reimbursedAwaitingArchive === 0}
+            onClick={() => void closeCycle()}
+          />
+        </SectionAddActions>
         <p className="muted vbs-reimbursements-close-hint">
           Available when the queue is empty. Archives {reimbursedAwaitingArchive} reimbursed item(s) so you start
           clean next cycle.
         </p>
       </div>
-      {status ? <p className="tagline">{status}</p> : null}
+      {status ? <p className="status">{status}</p> : null}
     </section>
   );
 }

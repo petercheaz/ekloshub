@@ -1,4 +1,6 @@
 import { useMemo } from "react";
+import { Link } from "react-router-dom";
+import { orgPath } from "./orgs";
 import type { VbsPlanWorkspace } from "./types";
 import { enumeratePlanDays } from "./vbs-plan-worksheet-views";
 import { milestoneIsDone } from "./vbs-milestone-status";
@@ -10,9 +12,10 @@ function todayIso() {
 
 type Props = {
   data: VbsPlanWorkspace;
+  orgId?: string;
 };
 
-export function VbsPlanAdherence({ data }: Props) {
+export function VbsPlanAdherence({ data, orgId = "" }: Props) {
   const today = todayIso();
   const planDays = useMemo(() => enumeratePlanDays(data.plan), [data.plan]);
 
@@ -56,16 +59,27 @@ export function VbsPlanAdherence({ data }: Props) {
   }
 
   return (
-    <section className="vbs-panel vbs-plan-adherence" aria-label="Schedule health">
+    <section className="vbs-panel vbs-plan-adherence" aria-label="Needs attention">
       <header className="vbs-plan-adherence-head">
-        <strong>Schedule health</strong>
+        <strong>Needs attention</strong>
         <span className={issueCount === 0 ? "vbs-plan-adherence-ok" : "vbs-plan-adherence-warn"}>
-          {issueCount === 0 ? "On track" : `${issueCount} attention item${issueCount === 1 ? "" : "s"}`}
+          {issueCount === 0 ? "On track" : `${issueCount} item${issueCount === 1 ? "" : "s"}`}
         </span>
       </header>
       <p className="muted">
-        Overdue work, milestones past due, and VBS week days without schedule blocks. Fix these before week-of.
+        Overdue prep, milestones past due, and program days missing schedule blocks. Tackle these before VBS week.
       </p>
+      {orgId && issueCount > 0 ? (
+        <p className="vbs-plan-adherence-actions">
+          <Link to={orgPath(orgId, "/vbs-plan?tab=prep")}>Prep work</Link>
+          <span className="muted"> · </span>
+          <Link to={orgPath(orgId, "/vbs-plan?tab=prep&prep=tasks")}>Tasks</Link>
+          <span className="muted"> · </span>
+          <Link to={orgPath(orgId, "/vbs-plan?tab=prep&prep=milestones")}>Milestones</Link>
+          <span className="muted"> · </span>
+          <Link to={orgPath(orgId, "/vbs-plan?tab=schedule")}>VBS week schedule</Link>
+        </p>
+      ) : null}
       <div className="vbs-plan-adherence-grid">
         <div>
           <h3>Overdue tasks ({overdueTasks.length})</h3>

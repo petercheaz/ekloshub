@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useMemo, useState, type MouseEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { api } from "./api";
+import { expandableRowHeaderProps } from "./expandable-row";
 import type {
   VbsCalendarReminder,
   VbsChecklistItem,
@@ -269,7 +270,15 @@ export function VbsPlanCalendar({ orgId, username, data, seesAllTeams, onReload,
       className={expanded ? "vbs-plan-calendar expanded" : "vbs-plan-calendar compact"}
       aria-label="Team calendar"
     >
-      <div className="vbs-plan-calendar-strip">
+      <div
+        {...expandableRowHeaderProps(
+          expanded,
+          () => setExpanded((v) => !v),
+          "vbs-plan-calendar-strip",
+          expanded ? "Collapse calendar" : "Expand calendar",
+        )}
+        title={expanded ? "Collapse calendar" : "Expand calendar"}
+      >
         <div className="vbs-plan-calendar-brand">
           <CalendarGlyph />
           <div className="vbs-plan-calendar-brand-text">
@@ -277,16 +286,9 @@ export function VbsPlanCalendar({ orgId, username, data, seesAllTeams, onReload,
             <span className="muted">{expanded ? headerLabel : compactSummary}</span>
           </div>
         </div>
-        <button
-          type="button"
-          className="vbs-plan-calendar-toggle"
-          aria-expanded={expanded}
-          aria-label={expanded ? "Collapse calendar" : "Expand calendar"}
-          title={expanded ? "Collapse calendar" : "Expand calendar"}
-          onClick={() => setExpanded((v) => !v)}
-        >
+        <span className="vbs-plan-calendar-toggle" aria-hidden="true">
           <ChevronIcon direction={expanded ? "up" : "down"} />
-        </button>
+        </span>
       </div>
 
       {expanded ? (

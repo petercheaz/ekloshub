@@ -4,30 +4,33 @@ import { api } from "../api";
 import { useOrgs } from "../orgs";
 import { useOrgVbs } from "../org-vbs";
 import { vbsProgramsMatching, vbsYearOptions } from "../vbs-cascade";
-import type {
-  ShareProgram,
-  VbsRegistrationPaymentStatus,
-  VbsRegistrationStudent,
-  VbsRegistrationWorkspace,
-} from "../types";
+import type { ShareProgram, VbsRegistrationStudent, VbsRegistrationWorkspace } from "../types";
 import { VbsRegistrationAllergiesPanel } from "./VbsRegistrationAllergiesPanel";
 import { VbsRegistrationContactsPanel } from "./VbsRegistrationContactsPanel";
-import { VbsRegistrationRosterPlanning } from "./VbsRegistrationRosterPlanning";
+import { VbsRegistrationClassesBoard } from "./VbsRegistrationClassesBoard";
+import { CollapsibleForm } from "../CollapsibleForm";
+import { RegistrationStudentFields } from "../RegistrationStudentFields";
+import { RegistrationStudentRoster } from "../RegistrationStudentRoster";
 import {
-  ageFromBirthMonthYear,
-  allergiesLabel,
-  attendanceSummary,
-  birthMonthOptions,
-  birthYearOptions,
-} from "../vbs-registration-utils";
+  emptyRegistrationStudentDraft,
+  toggleRegistrationAllergy,
+  type RegistrationStudentDraft,
+} from "../registration-student-draft";
+import { studentPlainName } from "../StudentName";
+import { ageFromBirthMonthYear, allergiesLabel, vbsSeasonAgeReferenceDate } from "../vbs-registration-utils";
 
 type Tab = "classes" | "contacts" | "allergies" | "register" | "nametags";
 
 const allSections: { id: Tab; label: string; hint: string }[] = [
   {
+    id: "register",
+    label: "Students",
+    hint: "Register each child with parent/guardian contact, allergies, and attendance",
+  },
+  {
     id: "classes",
-    label: "Roster planning",
-    hint: "Board or zoomable tree — classes, leaders, teachers, and students",
+    label: "Classes & roster",
+    hint: "Drag students onto rotation station classes; assign volunteers as leaders, teachers, or helpers",
   },
   {
     id: "contacts",
@@ -40,11 +43,6 @@ const allSections: { id: Tab; label: string; hint: string }[] = [
     hint: "Allergy summary — shared with the cooking team",
   },
   {
-    id: "register",
-    label: "Student registration",
-    hint: "Add children, contacts, attendance, allergies, and T-shirt size",
-  },
-  {
     id: "nametags",
     label: "Nametags",
     hint: "Generate themed printable nametags with allergies and assigned team",
@@ -54,7 +52,7 @@ const allSections: { id: Tab; label: string; hint: string }[] = [
 function sectionsForWorkspace(data: VbsRegistrationWorkspace) {
   return allSections.filter((item) => {
     if (item.id === "contacts") {
-      return data.canViewContacts;
+      return data.canViewContacts && !data.canWrite;
     }
     if (item.id === "allergies") {
       return data.canViewAllergies;
@@ -71,90 +69,13 @@ function tabFromSearch(params: URLSearchParams, allowed: Tab[]): Tab {
   if (raw && allowed.includes(raw)) {
     return raw;
   }
+  if (allowed.includes("register")) {
+    return "register";
+  }
   if (allowed.includes("classes")) {
     return "classes";
   }
   return allowed[0] ?? "allergies";
-}
-
-type Draft = {
-  id: string;
-  childFullName: string;
-  birthMonth: number;
-  birthYear: number;
-  allergiesCommon: string[];
-  allergiesOther: string;
-  comments: string;
-  specialRequests: string;
-  contact1Name: string;
-  contact1Phone: string;
-  contact2Name: string;
-  contact2Phone: string;
-  attendMon: boolean;
-  attendTue: boolean;
-  attendWed: boolean;
-  attendThu: boolean;
-  attendFri: boolean;
-  tshirtSize: string;
-  assignedTeamId: string;
-  classId: string;
-  paymentStatus: VbsRegistrationPaymentStatus;
-  nametagExtraInstructions: string;
-};
-
-function emptyDraft(): Draft {
-  const now = new Date();
-  return {
-    id: "",
-    childFullName: "",
-    birthMonth: now.getMonth() + 1,
-    birthYear: now.getFullYear() - 6,
-    allergiesCommon: [],
-    allergiesOther: "",
-    comments: "",
-    specialRequests: "",
-    contact1Name: "",
-    contact1Phone: "",
-    contact2Name: "",
-    contact2Phone: "",
-    attendMon: true,
-    attendTue: true,
-    attendWed: true,
-    attendThu: true,
-    attendFri: true,
-    tshirtSize: "",
-    assignedTeamId: "",
-    classId: "",
-    paymentStatus: "pending",
-    nametagExtraInstructions: "",
-  };
-}
-
-function draftFromStudent(student: VbsRegistrationStudent): Draft {
-  return {
-    id: student.id,
-    childFullName: student.childFullName,
-    birthMonth: student.birthMonth,
-    birthYear: student.birthYear,
-    allergiesCommon: [...student.allergiesCommon],
-    allergiesOther: student.allergiesOther,
-    comments: student.comments,
-    specialRequests: student.specialRequests,
-    contact1Name: student.contact1Name,
-    contact1Phone: student.contact1Phone,
-    contact2Name: student.contact2Name,
-    contact2Phone: student.contact2Phone,
-    attendMon: student.attendMon,
-    attendTue: student.attendTue,
-    attendWed: student.attendWed,
-    attendThu: student.attendThu,
-    attendFri: student.attendFri,
-    tshirtSize: student.tshirtSize,
-    assignedTeamId: student.assignedTeamId,
-    classId: student.classId,
-    paymentStatus: student.paymentStatus,
-    nametagExtraInstructions: student.nametagExtraInstructions,
-  };
 }
 
 export default function VbsRegistrationPage() {
@@ -164,7 +85,9 @@ export default function VbsRegistrationPage() {
   const [data, setData] = useState<VbsRegistrationWorkspace | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [draft, setDraft] = useState<Draft>(() => emptyDraft());
+  const [draft, setDraft] = useState<RegistrationStudentDraft>(() => emptyRegistrationStudentDraft());
+  const [expandedStudentId, setExpandedStudentId] = useState<string | null>(null);
+  const [showAddStudentForm, setShowAddStudentForm] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
   const [tab, setTab] = useState<Tab>("classes");
   const [nametagStudentId, setNametagStudentId] = useState("");
@@ -174,8 +97,79 @@ export default function VbsRegistrationPage() {
   const [nametagTeamId, setNametagTeamId] = useState("");
   const [nametagInstructions, setNametagInstructions] = useState("");
   const [nametagStatus, setNametagStatus] = useState("");
+  const [seasonFilter, setSeasonFilter] = useState<number | "all">("all");
 
   const sections = useMemo(() => (data ? sectionsForWorkspace(data) : allSections), [data]);
+
+  useEffect(() => {
+    if (!data) {
+      return;
+    }
+    if (data.viewAllSeasons) {
+      setSeasonFilter("all");
+    } else if (data.viewSeason !== null) {
+      setSeasonFilter(data.viewSeason);
+    }
+  }, [data?.viewAllSeasons, data?.viewSeason]);
+
+  const displayStudents = useMemo(() => {
+    if (!data) {
+      return [];
+    }
+    if (seasonFilter === "all") {
+      return data.students;
+    }
+    return data.students.filter((student) => student.vbsSeasonYear === seasonFilter);
+  }, [data, seasonFilter]);
+
+  const displaySummary = useMemo(() => {
+    return {
+      total: displayStudents.length,
+      parentOnline: displayStudents.filter((s) => s.source === "public").length,
+      staffEntered: displayStudents.filter((s) => s.source === "staff").length,
+      unassigned: displayStudents.filter((s) => s.classIds.length === 0).length,
+      paymentPending: displayStudents.filter((s) => s.paymentStatus === "pending").length,
+    };
+  }, [displayStudents]);
+
+  const displayClasses = useMemo(() => {
+    if (!data) {
+      return [];
+    }
+    if (seasonFilter === "all") {
+      return data.classes;
+    }
+    return data.classes.filter((cls) => cls.vbsSeasonYear === seasonFilter);
+  }, [data, seasonFilter]);
+
+  const rosterData = useMemo(() => {
+    if (!data) {
+      return null;
+    }
+    return { ...data, students: displayStudents, classes: displayClasses, summary: displaySummary };
+  }, [data, displayStudents, displayClasses, displaySummary]);
+
+  const focusStudent = useCallback(
+    (studentId: string | null, options?: { syncUrl?: boolean }) => {
+      setExpandedStudentId(studentId);
+      setShowAddStudentForm(false);
+      if (studentId) {
+        setTab("register");
+      }
+      if (options?.syncUrl === false) {
+        return;
+      }
+      const params = new URLSearchParams(searchParams);
+      if (studentId) {
+        params.set("student", studentId);
+        params.delete("tab");
+      } else {
+        params.delete("student");
+      }
+      setSearchParams(params, { replace: true });
+    },
+    [searchParams, setSearchParams],
+  );
 
   useEffect(() => {
     if (!data) {
@@ -184,6 +178,28 @@ export default function VbsRegistrationPage() {
     const allowed = sectionsForWorkspace(data).map((item) => item.id);
     setTab(tabFromSearch(searchParams, allowed));
   }, [searchParams, data]);
+
+  useEffect(() => {
+    if (!data) {
+      return;
+    }
+    const tabParam = searchParams.get("tab")?.trim();
+    if (tabParam && tabParam !== "register") {
+      return;
+    }
+    const studentId = searchParams.get("student")?.trim();
+    if (!studentId) {
+      return;
+    }
+    const allowed = sectionsForWorkspace(data).map((item) => item.id);
+    if (!allowed.includes("register")) {
+      return;
+    }
+    if (!data.students.some((student) => student.id === studentId)) {
+      return;
+    }
+    focusStudent(studentId, { syncUrl: false });
+  }, [searchParams, data, focusStudent]);
 
   const reload = useCallback(async () => {
     const workspace = await api.vbsRegistration(orgId);
@@ -231,7 +247,11 @@ export default function VbsRegistrationPage() {
   );
 
   const activeSection = sections.find((section) => section.id === tab);
-  const draftAge = ageFromBirthMonthYear(draft.birthMonth, draft.birthYear);
+  const vbsAgeOn = useMemo(
+    () => vbsSeasonAgeReferenceDate(data?.activeVbsYear ?? new Date().getFullYear()),
+    [data?.activeVbsYear],
+  );
+  const draftAge = ageFromBirthMonthYear(draft.birthMonth, draft.birthYear, vbsAgeOn);
 
   async function run(action: () => Promise<unknown>) {
     setBusy(true);
@@ -246,26 +266,22 @@ export default function VbsRegistrationPage() {
   }
 
   function toggleAllergy(label: string) {
-    setDraft((current) => {
-      const set = new Set(current.allergiesCommon);
-      if (set.has(label)) {
-        set.delete(label);
-      } else {
-        set.add(label);
-      }
-      return { ...current, allergiesCommon: [...set] };
-    });
+    setDraft((current) => toggleRegistrationAllergy(current, label));
   }
 
   function startNew() {
-    setDraft(emptyDraft());
+    setDraft(emptyRegistrationStudentDraft());
     setError("");
   }
 
-  function editStudent(student: VbsRegistrationStudent) {
-    setDraft(draftFromStudent(student));
-    setTab("register");
-    setSearchParams({}, { replace: true });
+  function openAddStudentForm() {
+    startNew();
+    setShowAddStudentForm(true);
+  }
+
+  function closeAddStudentForm() {
+    startNew();
+    setShowAddStudentForm(false);
   }
 
   async function submitRegistration(event: FormEvent) {
@@ -274,8 +290,18 @@ export default function VbsRegistrationPage() {
       return;
     }
     await run(async () => {
-      const result = await api.saveVbsRegistrationStudent(orgId, { ...draft });
-      setDraft(draftFromStudent(result.student));
+      const result = await api.saveVbsRegistrationStudent(orgId, { ...draft, id: "" });
+      setDraft(emptyRegistrationStudentDraft());
+      focusStudent(result.student.id);
+    });
+  }
+
+  async function saveStudentDraft(studentDraft: RegistrationStudentDraft) {
+    if (!data?.canWrite) {
+      return;
+    }
+    await run(async () => {
+      await api.saveVbsRegistrationStudent(orgId, { ...studentDraft });
     });
   }
 
@@ -288,8 +314,8 @@ export default function VbsRegistrationPage() {
     }
     await run(async () => {
       await api.deleteVbsRegistrationStudent(orgId, student.id);
-      if (draft.id === student.id) {
-        setDraft(emptyDraft());
+      if (expandedStudentId === student.id) {
+        focusStudent(null);
       }
       if (nametagStudentId === student.id) {
         setNametagStudentId("");
@@ -329,9 +355,6 @@ export default function VbsRegistrationPage() {
       });
       setNametagStatus("Nametag ready — scroll to preview.");
       await reload();
-      setDraft((current) =>
-        current.id === result.student.id ? draftFromStudent(result.student) : current,
-      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not generate nametag");
       setNametagStatus("");
@@ -352,27 +375,52 @@ export default function VbsRegistrationPage() {
       <header className="vbs-plan-masthead" aria-label="VBS registration summary">
         <div className="vbs-plan-masthead-main">
           {org ? <p className="vbs-plan-masthead-org">{org.name}</p> : null}
-          <h1 className="vbs-plan-masthead-title">Student registration</h1>
+          <h1 className="vbs-plan-masthead-title">Registration</h1>
           <p className="vbs-plan-masthead-empty muted">
-            Register VBS children, track allergies and attendance, and print themed nametags for your crew.
+            Register children on <strong>Students</strong>, then assign them to station classes on{" "}
+            <strong>Classes & roster</strong>. Volunteers come from Members & invites — not the student list.
           </p>
+          {data.viewAllSeasons && data.registrationSeasons.length > 0 ? (
+            <label className="vbs-task-field vbs-registration-season-filter">
+              <span className="vbs-task-field-label">Show students for</span>
+              <select
+                value={seasonFilter === "all" ? "all" : String(seasonFilter)}
+                onChange={(e) =>
+                  setSeasonFilter(e.target.value === "all" ? "all" : Number(e.target.value))
+                }
+              >
+                <option value="all">All VBS seasons</option>
+                {data.registrationSeasons.map((year) => (
+                  <option key={year} value={year}>
+                    VBS {year}
+                    {year === data.activeVbsYear ? " (active)" : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+          {!data.viewAllSeasons && data.viewSeason !== null ? (
+            <p className="muted">
+              Your access is limited to <strong>VBS {data.viewSeason}</strong> students.
+            </p>
+          ) : null}
         </div>
         <div className="vbs-plan-masthead-aside">
           <ul className="vbs-plan-snapshot" aria-label="Registration counts">
             <li>
-              <strong>{data.summary.total}</strong>
+              <strong>{displaySummary.total}</strong>
               <span>Registered</span>
             </li>
             <li>
-              <strong>{data.summary.parentOnline}</strong>
+              <strong>{displaySummary.parentOnline}</strong>
               <span>Parent online</span>
             </li>
             <li>
-              <strong>{data.summary.paymentPending}</strong>
+              <strong>{displaySummary.paymentPending}</strong>
               <span>Payment pending</span>
             </li>
             <li>
-              <strong>{data.summary.unassigned}</strong>
+              <strong>{displaySummary.unassigned}</strong>
               <span>No class</span>
             </li>
           </ul>
@@ -384,14 +432,22 @@ export default function VbsRegistrationPage() {
         <p className="vbs-plan-callout vbs-plan-callout-readonly">
           {data.canViewAllergies && !data.canViewContacts
             ? "Cooking team view — allergy and snack tools only. Contact details stay with registration staff."
-            : "You can view registrations. A registration admin or org admin is needed to add students or generate nametags."}
+            : !data.viewAllSeasons && data.viewSeason !== null && data.viewSeason !== data.activeVbsYear
+              ? `View-only — your account is for VBS ${data.viewSeason}. Registration edits require the active VBS ${data.activeVbsYear} season.`
+              : "You can view registrations. A registration admin or org admin is needed to add students or generate nametags."}
         </p>
       ) : null}
 
       <section className="vbs-plan-sections" aria-labelledby="vbs-reg-sections-title">
         <h2 id="vbs-reg-sections-title" className="vbs-plan-sections-title">
-          Registration workspace
+          Registration workflow
         </h2>
+        <ol className="vbs-reg-workflow-steps muted">
+          <li>Register each child on <strong>Students</strong> (parent/guardian info required)</li>
+          <li>Place them in classes on <strong>Classes &amp; roster</strong></li>
+          <li>Review allergies; print nametags when ready</li>
+          <li>Optional: publish the family info link under Students</li>
+        </ol>
         <div className="vbs-chrome-tabs">
           <nav className="vbs-chrome-tabs-bar" role="tablist" aria-label="Registration sections">
             {sections.map((item) => {
@@ -409,10 +465,14 @@ export default function VbsRegistrationPage() {
                   onClick={() => {
                     setTab(item.id);
                     const params = new URLSearchParams(searchParams);
-                    if (item.id === "classes") {
+                    if (item.id === "register") {
                       params.delete("tab");
                     } else {
                       params.set("tab", item.id);
+                      params.delete("student");
+                      params.delete("view");
+                      setExpandedStudentId(null);
+                      setShowAddStudentForm(false);
                     }
                     setSearchParams(params, { replace: true });
                   }}
@@ -435,30 +495,23 @@ export default function VbsRegistrationPage() {
               </p>
             ) : null}
 
-            {tab === "classes" ? (
+            {tab === "classes" && rosterData ? (
               <>
-                {data.publicRegistration && data.canWrite ? (
-                  <PublicRegistrationLinkPanel
-                    orgId={orgId}
-                    settings={data.publicRegistration}
-                    onUpdated={() => void reload()}
-                  />
-                ) : null}
-                <VbsRegistrationRosterPlanning
+                <VbsRegistrationClassesBoard
                   orgId={orgId}
-                  orgName={org?.name ?? ""}
-                  data={data}
+                  data={rosterData}
+                  vbsAgeOn={vbsSeasonAgeReferenceDate(rosterData.activeVbsYear)}
                   canWrite={data.canWrite}
                   onReload={reload}
                 />
               </>
             ) : null}
 
-            {tab === "contacts" ? <VbsRegistrationContactsPanel students={data.students} /> : null}
+            {tab === "contacts" ? <VbsRegistrationContactsPanel students={displayStudents} /> : null}
 
             {tab === "allergies" ? (
               <VbsRegistrationAllergiesPanel
-                students={data.students}
+                students={displayStudents}
                 commonAllergies={data.commonAllergies}
                 sharedWithCooking={data.canViewAllergies}
               />
@@ -466,30 +519,48 @@ export default function VbsRegistrationPage() {
 
             {tab === "register" ? (
               <>
-                <RegistrationForm
-                  draft={draft}
-                  setDraft={setDraft}
-                  draftAge={draftAge}
+                <RegistrationStudentRoster
+                  students={displayStudents}
                   data={data}
-                  busy={busy}
-                  onSubmit={submitRegistration}
-                  onNew={startNew}
-                  toggleAllergy={toggleAllergy}
-                />
-                <RegistrationRoster
-                  students={data.students}
+                  vbsAgeOn={vbsAgeOn}
                   canWrite={data.canWrite}
                   busy={busy}
-                  onEdit={editStudent}
+                  expandedStudentId={expandedStudentId}
+                  onExpandedStudentIdChange={focusStudent}
+                  onSave={saveStudentDraft}
                   onDelete={(student) => void removeStudent(student)}
+                  onAddStudent={openAddStudentForm}
+                  addStudentFormOpen={showAddStudentForm}
                 />
+                {showAddStudentForm && data.canWrite ? (
+                  <RegistrationForm
+                    draft={draft}
+                    setDraft={setDraft}
+                    draftAge={draftAge}
+                    data={data}
+                    busy={busy}
+                    onSubmit={submitRegistration}
+                    onCancel={closeAddStudentForm}
+                    toggleAllergy={toggleAllergy}
+                  />
+                ) : null}
+                {data.publicFamily && data.canWrite ? (
+                  <details className="vbs-registration-optional-public">
+                    <summary>Family info page (optional)</summary>
+                    <PublicFamilyLinkPanel
+                      orgId={orgId}
+                      settings={data.publicFamily}
+                      onUpdated={() => void reload()}
+                    />
+                  </details>
+                ) : null}
               </>
             ) : null}
 
             {tab === "nametags" ? (
               <NametagsPanel
                 data={data}
-                students={data.students}
+                students={displayStudents}
                 canWrite={data.canWrite}
                 busy={busy}
                 publisherId={publisherId}
@@ -518,7 +589,7 @@ export default function VbsRegistrationPage() {
   );
 }
 
-function PublicRegistrationLinkPanel({
+function PublicFamilyLinkPanel({
   orgId,
   settings,
   onUpdated,
@@ -527,6 +598,14 @@ function PublicRegistrationLinkPanel({
   settings: { enabled: boolean; link: string };
   onUpdated: () => void;
 }) {
+  const copy = {
+    hint: "A no-login page for already-registered families: VBS dates, daily hours, location, and your “Notes for families” text from Plan → Overview. It does not collect registrations — staff still add students in the roster.",
+    checkbox: "Publish family info page",
+    linkLabel: "Family info link",
+    enabledOn: "Family info page is open.",
+    enabledOff: "Family info page is closed.",
+    regenerated: "New family link created.",
+  };
   const [enabled, setEnabled] = useState(settings.enabled);
   const [link, setLink] = useState(settings.link);
   const [busy, setBusy] = useState(false);
@@ -537,14 +616,18 @@ function PublicRegistrationLinkPanel({
     setLink(settings.link);
   }, [settings.enabled, settings.link]);
 
+  async function patch(input: { enabled?: boolean; regenerateToken?: boolean }) {
+    return api.updateVbsRegistrationFamilyPage(orgId, input);
+  }
+
   async function saveEnabled(next: boolean) {
     setBusy(true);
     setStatus("");
     try {
-      const result = await api.updateVbsRegistrationPublic(orgId, { enabled: next });
+      const result = await patch({ enabled: next });
       setEnabled(result.enabled);
       setLink(result.link);
-      setStatus(next ? "Parent registration is open." : "Parent registration is closed.");
+      setStatus(next ? copy.enabledOn : copy.enabledOff);
       onUpdated();
     } catch (err) {
       setStatus(err instanceof Error ? err.message : "Could not update settings");
@@ -560,9 +643,9 @@ function PublicRegistrationLinkPanel({
     setBusy(true);
     setStatus("");
     try {
-      const result = await api.updateVbsRegistrationPublic(orgId, { regenerateToken: true });
+      const result = await patch({ regenerateToken: true });
       setLink(result.link);
-      setStatus("New parent link created.");
+      setStatus(copy.regenerated);
       onUpdated();
     } catch (err) {
       setStatus(err instanceof Error ? err.message : "Could not regenerate link");
@@ -573,11 +656,7 @@ function PublicRegistrationLinkPanel({
 
   return (
     <section className="vbs-panel vbs-registration-public">
-      <h2 className="vbs-plan-section-title">Parent registration (no login)</h2>
-      <p className="muted vbs-task-field-hint">
-        Share a link with families. Submissions appear on your roster as &quot;Parent&quot; entries. The URL is
-        unlisted — anyone with the link can register when this is on.
-      </p>
+      <p className="muted vbs-task-field-hint">{copy.hint}</p>
       <label className="vbs-registration-check">
         <input
           type="checkbox"
@@ -585,10 +664,10 @@ function PublicRegistrationLinkPanel({
           disabled={busy}
           onChange={(e) => void saveEnabled(e.target.checked)}
         />
-        Accept online parent registrations
+        {copy.checkbox}
       </label>
       <div className="vbs-registration-public-link">
-        <input type="text" readOnly value={link} aria-label="Parent registration link" onFocus={(e) => e.target.select()} />
+        <input type="text" readOnly value={link} aria-label={copy.linkLabel} onFocus={(e) => e.target.select()} />
         <button
           type="button"
           className="ghost"
@@ -616,345 +695,39 @@ function RegistrationForm({
   data,
   busy,
   onSubmit,
-  onNew,
+  onCancel,
   toggleAllergy,
 }: {
-  draft: Draft;
-  setDraft: (value: Draft | ((current: Draft) => Draft)) => void;
+  draft: RegistrationStudentDraft;
+  setDraft: (
+    value: RegistrationStudentDraft | ((current: RegistrationStudentDraft) => RegistrationStudentDraft),
+  ) => void;
   draftAge: number;
   data: VbsRegistrationWorkspace;
   busy: boolean;
   onSubmit: (event: FormEvent) => void;
-  onNew: () => void;
+  onCancel: () => void;
   toggleAllergy: (label: string) => void;
 }) {
-  const monthOptions = birthMonthOptions();
-  const yearOptions = birthYearOptions(18);
-
   return (
-    <form className="vbs-panel vbs-registration-form" onSubmit={onSubmit}>
-      <div className="vbs-registration-form-head">
-        <h2 className="vbs-plan-section-title">{draft.id ? "Edit student" : "Add a student"}</h2>
-        <button type="button" className="ghost" disabled={busy} onClick={onNew}>
-          Clear form
-        </button>
-      </div>
-
-      <div className="vbs-plan-overview-block">
-        <h3 className="vbs-plan-section-title">Child</h3>
-        <label className="vbs-plan-field">
-          Full name
-          <input
-            required
-            disabled={!data.canWrite || busy}
-            value={draft.childFullName}
-            onChange={(e) => setDraft({ ...draft, childFullName: e.target.value })}
-          />
-        </label>
-        <div className="vbs-plan-field-row">
-          <label className="vbs-plan-field">
-            Birth month
-            <select
-              required
-              disabled={!data.canWrite || busy}
-              value={draft.birthMonth}
-              onChange={(e) => setDraft({ ...draft, birthMonth: Number(e.target.value) })}
-            >
-              {monthOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="vbs-plan-field">
-            Birth year
-            <select
-              required
-              disabled={!data.canWrite || busy}
-              value={draft.birthYear}
-              onChange={(e) => setDraft({ ...draft, birthYear: Number(e.target.value) })}
-            >
-              {yearOptions.map((y) => (
-                <option key={y} value={y}>
-                  {y}
-                </option>
-              ))}
-            </select>
-          </label>
-          <div className="vbs-plan-field vbs-plan-field-readonly">
-            <span className="vbs-plan-field-readonly-label">Age (today)</span>
-            <strong className="vbs-plan-field-readonly-value">{draftAge}</strong>
-          </div>
-        </div>
-        <label className="vbs-plan-field">
-          T-shirt size
-          <select
-            disabled={!data.canWrite || busy}
-            value={draft.tshirtSize}
-            onChange={(e) => setDraft({ ...draft, tshirtSize: e.target.value })}
-          >
-            <option value="">Select size…</option>
-            {data.tshirtSizes.map((size) => (
-              <option key={size} value={size}>
-                {size}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="vbs-plan-field">
-          Assigned team / crew
-          <select
-            disabled={!data.canWrite || busy}
-            value={draft.assignedTeamId}
-            onChange={(e) => setDraft({ ...draft, assignedTeamId: e.target.value })}
-          >
-            <option value="">Suggest from age on save…</option>
-            {data.teams.map((team) => (
-              <option key={team.id} value={team.id}>
-                {team.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="vbs-plan-field">
-          Class (any class — age not enforced for staff)
-          <select
-            disabled={!data.canWrite || busy}
-            value={draft.classId}
-            onChange={(e) => setDraft({ ...draft, classId: e.target.value })}
-          >
-            <option value="">Suggest from age on save…</option>
-            {data.classes.map((cls) => (
-              <option key={cls.id} value={cls.id}>
-                {cls.name}
-                {cls.registrationClosed ? " (closed online)" : ""}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="vbs-plan-field">
-          Payment (offline)
-          <select
-            disabled={!data.canWrite || busy}
-            value={draft.paymentStatus}
-            onChange={(e) =>
-              setDraft({ ...draft, paymentStatus: e.target.value as VbsRegistrationPaymentStatus })
-            }
-          >
-            <option value="pending">Pending</option>
-            <option value="paid">Paid</option>
-            <option value="waived">Waived</option>
-          </select>
-        </label>
-      </div>
-
-      <div className="vbs-plan-overview-block">
-        <h3 className="vbs-plan-section-title">Allergies</h3>
-        <fieldset className="vbs-registration-allergies" disabled={!data.canWrite || busy}>
-          <legend className="muted">Common allergies</legend>
-          <ul className="vbs-registration-allergy-grid">
-            {data.commonAllergies.map((label) => (
-              <li key={label}>
-                <label className="vbs-registration-check">
-                  <input
-                    type="checkbox"
-                    checked={draft.allergiesCommon.includes(label)}
-                    onChange={() => toggleAllergy(label)}
-                  />
-                  {label}
-                </label>
-              </li>
-            ))}
-          </ul>
-        </fieldset>
-        <label className="vbs-plan-field">
-          Other allergies (type any not listed)
-          <textarea
-            rows={2}
-            disabled={!data.canWrite || busy}
-            value={draft.allergiesOther}
-            onChange={(e) => setDraft({ ...draft, allergiesOther: e.target.value })}
-            placeholder="e.g. red dye, cats, bee stings"
-          />
-        </label>
-      </div>
-
-      <div className="vbs-plan-overview-block">
-        <h3 className="vbs-plan-section-title">Contacts</h3>
-        <div className="vbs-plan-field-row">
-          <label className="vbs-plan-field">
-            Primary contact full name
-            <input
-              disabled={!data.canWrite || busy}
-              value={draft.contact1Name}
-              onChange={(e) => setDraft({ ...draft, contact1Name: e.target.value })}
-            />
-          </label>
-          <label className="vbs-plan-field">
-            Primary contact phone
-            <input
-              type="tel"
-              disabled={!data.canWrite || busy}
-              value={draft.contact1Phone}
-              onChange={(e) => setDraft({ ...draft, contact1Phone: e.target.value })}
-            />
-          </label>
-        </div>
-        <div className="vbs-plan-field-row">
-          <label className="vbs-plan-field">
-            Second contact full name
-            <input
-              disabled={!data.canWrite || busy}
-              value={draft.contact2Name}
-              onChange={(e) => setDraft({ ...draft, contact2Name: e.target.value })}
-            />
-          </label>
-          <label className="vbs-plan-field">
-            Second contact phone
-            <input
-              type="tel"
-              disabled={!data.canWrite || busy}
-              value={draft.contact2Phone}
-              onChange={(e) => setDraft({ ...draft, contact2Phone: e.target.value })}
-            />
-          </label>
-        </div>
-      </div>
-
-      <div className="vbs-plan-overview-block">
-        <h3 className="vbs-plan-section-title">Expected attendance (Mon–Fri)</h3>
-        <ul className="vbs-registration-weekdays">
-          {(
-            [
-              ["attendMon", "Monday"],
-              ["attendTue", "Tuesday"],
-              ["attendWed", "Wednesday"],
-              ["attendThu", "Thursday"],
-              ["attendFri", "Friday"],
-            ] as const
-          ).map(([key, label]) => (
-            <li key={key}>
-              <label className="vbs-registration-check">
-                <input
-                  type="checkbox"
-                  disabled={!data.canWrite || busy}
-                  checked={draft[key]}
-                  onChange={(e) => setDraft({ ...draft, [key]: e.target.checked })}
-                />
-                {label}
-              </label>
-            </li>
-          ))}
-        </ul>
-      </div>
-
-      <div className="vbs-plan-overview-block">
-        <label className="vbs-plan-field">
-          Special requests (optional)
-          <textarea
-            rows={2}
-            disabled={!data.canWrite || busy}
-            value={draft.specialRequests}
-            onChange={(e) => setDraft({ ...draft, specialRequests: e.target.value })}
-            placeholder="Buddy requests, accessibility, team preference…"
-          />
-        </label>
-        <label className="vbs-plan-field">
-          Comments (optional)
-          <textarea
-            rows={2}
-            disabled={!data.canWrite || busy}
-            value={draft.comments}
-            onChange={(e) => setDraft({ ...draft, comments: e.target.value })}
-          />
-        </label>
-      </div>
-
-      {data.canWrite ? (
-        <div className="vbs-plan-form-actions">
-          <button type="submit" className="vbs-plan-save" disabled={busy}>
-            {draft.id ? "Save changes" : "Add student"}
-          </button>
-        </div>
-      ) : null}
-    </form>
-  );
-}
-
-function RegistrationRoster({
-  students,
-  canWrite,
-  busy,
-  onEdit,
-  onDelete,
-}: {
-  students: VbsRegistrationStudent[];
-  canWrite: boolean;
-  busy: boolean;
-  onEdit: (student: VbsRegistrationStudent) => void;
-  onDelete: (student: VbsRegistrationStudent) => void;
-}) {
-  return (
-    <section className="vbs-panel vbs-registration-roster" aria-label="Registered students">
-      <h2 className="vbs-plan-section-title">Roster</h2>
-      {students.length === 0 ? (
-        <p className="muted">No students registered yet.</p>
-      ) : (
-        <div className="vbs-spreadsheet-scroll">
-          <table className="vbs-spreadsheet vbs-registration-table">
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Source</th>
-                <th>Age</th>
-                <th>Team</th>
-                <th>Class</th>
-                <th>Pay</th>
-                <th>Allergies</th>
-                <th>Attendance</th>
-                <th>Shirt</th>
-                {canWrite ? <th /> : null}
-              </tr>
-            </thead>
-            <tbody>
-              {students.map((student) => (
-                <tr key={student.id}>
-                  <td>{student.childFullName}</td>
-                  <td>
-                    <span className="vbs-registration-source">
-                      {student.source === "public" ? "Parent online" : "Staff"}
-                    </span>
-                  </td>
-                  <td>{student.ageYears}</td>
-                  <td>{student.assignedTeamName || "—"}</td>
-                  <td>{student.className || "—"}</td>
-                  <td>{student.paymentStatus}</td>
-                  <td>{allergiesLabel(student.allergiesCommon, student.allergiesOther)}</td>
-                  <td>{attendanceSummary(student)}</td>
-                  <td>{student.tshirtSize || "—"}</td>
-                  {canWrite ? (
-                    <td className="vbs-registration-row-actions">
-                      <button type="button" className="ghost" disabled={busy} onClick={() => onEdit(student)}>
-                        Edit
-                      </button>
-                      <button
-                        type="button"
-                        className="ghost danger"
-                        disabled={busy}
-                        onClick={() => onDelete(student)}
-                      >
-                        Remove
-                      </button>
-                    </td>
-                  ) : null}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </section>
+    <CollapsibleForm
+      title="Register a student"
+      className="vbs-registration-form"
+      busy={busy}
+      saveLabel="Save"
+      onCancel={onCancel}
+      onSubmit={onSubmit}
+    >
+      <RegistrationStudentFields
+        draft={draft}
+        setDraft={setDraft}
+        draftAge={draftAge}
+        data={data}
+        busy={busy}
+        canWrite={data.canWrite}
+        toggleAllergy={toggleAllergy}
+      />
+    </CollapsibleForm>
   );
 }
 
@@ -1011,7 +784,7 @@ function NametagsPanel({
       </p>
 
       {students.length === 0 ? (
-        <p className="vbs-plan-callout">Register at least one student on the Student registration tab first.</p>
+        <p className="vbs-plan-callout">Register at least one student on the Students tab first.</p>
       ) : (
         <>
           <div className="vbs-plan-field-row">
@@ -1025,7 +798,7 @@ function NametagsPanel({
                 <option value="">Choose…</option>
                 {students.map((student) => (
                   <option key={student.id} value={student.id}>
-                    {student.childFullName}
+                    {studentPlainName(student)}
                   </option>
                 ))}
               </select>

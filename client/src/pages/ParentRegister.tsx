@@ -2,7 +2,8 @@ import { FormEvent, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../api";
 import { BrandLogo } from "../BrandLogo";
-import type { PublicRegistrationForm } from "../types";
+import type { PublicFamilyPage as PublicFamilyPayload, PublicRegistrationForm } from "../types";
+import { ChildGenderField } from "../ChildGenderField";
 import {
   ageFromBirthMonthYear,
   birthMonthOptions,
@@ -11,6 +12,7 @@ import {
 
 type Draft = {
   childFullName: string;
+  childGender: "M" | "F" | "";
   birthMonth: number;
   birthYear: number;
   allergiesCommon: string[];
@@ -19,8 +21,10 @@ type Draft = {
   specialRequests: string;
   contact1Name: string;
   contact1Phone: string;
+  contact1Email: string;
   contact2Name: string;
   contact2Phone: string;
+  contact2Email: string;
   attendMon: boolean;
   attendTue: boolean;
   attendWed: boolean;
@@ -35,6 +39,7 @@ function emptyDraft(): Draft {
   const now = new Date();
   return {
     childFullName: "",
+    childGender: "",
     birthMonth: now.getMonth() + 1,
     birthYear: now.getFullYear() - 6,
     allergiesCommon: [],
@@ -43,8 +48,10 @@ function emptyDraft(): Draft {
     specialRequests: "",
     contact1Name: "",
     contact1Phone: "",
+    contact1Email: "",
     contact2Name: "",
     contact2Phone: "",
+    contact2Email: "",
     attendMon: true,
     attendTue: true,
     attendWed: true,
@@ -237,6 +244,11 @@ export default function ParentRegisterPage() {
               onChange={(e) => setDraft({ ...draft, childFullName: e.target.value })}
             />
           </label>
+          <ChildGenderField
+            value={draft.childGender}
+            disabled={submitting}
+            onChange={(childGender) => setDraft({ ...draft, childGender })}
+          />
           <div className="vbs-plan-field-row">
             <label className="vbs-plan-field">
               Birth month
@@ -342,6 +354,17 @@ export default function ParentRegisterPage() {
                 onChange={(e) => setDraft({ ...draft, contact1Phone: e.target.value })}
               />
             </label>
+            <label className="vbs-plan-field">
+              Primary contact email
+              <input
+                type="email"
+                autoComplete="email"
+                disabled={submitting}
+                value={draft.contact1Email}
+                onChange={(e) => setDraft({ ...draft, contact1Email: e.target.value })}
+                placeholder="Optional — for VBS updates"
+              />
+            </label>
           </div>
           <div className="vbs-plan-field-row">
             <label className="vbs-plan-field">
@@ -359,6 +382,16 @@ export default function ParentRegisterPage() {
                 disabled={submitting}
                 value={draft.contact2Phone}
                 onChange={(e) => setDraft({ ...draft, contact2Phone: e.target.value })}
+              />
+            </label>
+            <label className="vbs-plan-field">
+              Second contact email
+              <input
+                type="email"
+                autoComplete="email"
+                disabled={submitting}
+                value={draft.contact2Email}
+                onChange={(e) => setDraft({ ...draft, contact2Email: e.target.value })}
               />
             </label>
           </div>
@@ -418,6 +451,76 @@ export default function ParentRegisterPage() {
           </button>
         </div>
       </form>
+    </div>
+  );
+}
+
+/** Read-only VBS week info for families (no login). */
+export function ParentFamilyPage() {
+  const { token = "" } = useParams();
+  const [page, setPage] = useState<PublicFamilyPayload | null>(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .publicFamilyPage(token)
+      .then((data) => {
+        if (!cancelled) {
+          setPage(data);
+          setError("");
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : "Page not available");
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
+
+  return (
+    <div className="public-register-shell vbs-family-page">
+      <header className="public-register-head">
+        <BrandLogo />
+      </header>
+      <main className="public-register-body">
+        {error ? (
+          <p className="status">{error}</p>
+        ) : !page ? (
+          <p className="status">Loading…</p>
+        ) : (
+          <>
+            <h1>{page.organizationName}</h1>
+            <p className="vbs-family-program">{page.programLabel}</p>
+            {page.startDate || page.endDate ? (
+              <p>
+                <strong>Dates:</strong> {page.startDate || "—"}
+                {page.endDate ? ` – ${page.endDate}` : ""}
+              </p>
+            ) : null}
+            {page.dailyStart && page.dailyEnd ? (
+              <p>
+                <strong>Daily hours:</strong> {page.dailyStart} – {page.dailyEnd}
+              </p>
+            ) : null}
+            {page.location ? (
+              <p>
+                <strong>Location:</strong> {page.location}
+              </p>
+            ) : null}
+            {page.familyNotes ? (
+              <section className="vbs-family-notes">
+                <h2>Notes for families</h2>
+                <p>{page.familyNotes}</p>
+              </section>
+            ) : null}
+            <p className="muted vbs-family-payment">{page.paymentNote}</p>
+          </>
+        )}
+      </main>
     </div>
   );
 }

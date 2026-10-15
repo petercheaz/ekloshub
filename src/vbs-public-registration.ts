@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { db } from "./db/pool.js";
 import { canManageRegistration, getMembership } from "./orgs.js";
 import { listTeams } from "./teams.js";
@@ -14,6 +15,7 @@ import {
 } from "./vbs-registration.js";
 import { pickClassForPublicRegistration } from "./vbs-registration-classes.js";
 import { notifyRegistrationAdmins } from "./vbs-registration-notify.js";
+import { seasonYearForNewRegistration } from "./vbs-org-season.js";
 
 export const PUBLIC_REGISTRATION_PRIVACY = `We collect your child's registration information only to run Vacation Bible School for this church (scheduling, safety, allergies, and T-shirt sizing). We do not sell this information. Church staff and authorized volunteers may access it for VBS planning. Contact the church if you need to correct or remove an entry.`;
 
@@ -37,33 +39,98 @@ function checkRateLimit(key: string) {
   return true;
 }
 
-function publicLink(token: string) {
+type PublicSurface = "registration" | "family";
+
+const PUBLIC_SURFACE: Record<
+  PublicSurface,
+  { urlPath: string; enabledColumn: string; tokenColumn: string }
+> = {
+  registration: {
+    urlPath: "register",
+    enabledColumn: "public_registration_enabled",
+    tokenColumn: "public_registration_token",
+  },
+  family: {
+    urlPath: "family",
+    enabledColumn: "public_family_enabled",
+    tokenColumn: "public_family_token",
+  },
+};
+
+function appPublicUrl(pathSegment: string, token: string) {
   const base = (process.env.APP_PUBLIC_URL ?? "http://localhost:5173").replace(/\/$/, "");
-  return `${base}/register/${token}`;
+  return `${base}/${pathSegment}/${token}`;
 }
 
-async function orgByPublicToken(token: string) {
+async function orgByPublicToken(surface: PublicSurface, token: string) {
   const trimmed = token.trim();
   if (!trimmed) {
     return null;
   }
+  const cfg = PUBLIC_SURFACE[surface];
   const result = await db().query<{
     id: string;
     name: string;
-    public_registration_enabled: boolean;
-    public_registration_token: string;
+    enabled: boolean;
+    token: string;
   }>(
-    `SELECT id, name, public_registration_enabled, public_registration_token
-     FROM organizations
-     WHERE public_registration_token = $1`,
+    `SELECT id, name, ${cfg.enabledColumn} AS enabled, ${cfg.tokenColumn} AS token
+     FROM organizations WHERE ${cfg.tokenColumn} = $1`,
     [trimmed],
+  );
+  const row = result.rows[0];
+  if (!row) {
+    return null;
+  }
+  return { id: row.id, name: row.name, enabled: row.enabled, token: row.token };
+}
+
+type SettingsAccessError =
+  | { error: "Not a member of this organization" }
+  | { error: "You do not have permission to manage registration settings" };
+
+async function requireRegistrationSettingsAccess(
+  organizationId: string,
+  username: string,
+): Promise<SettingsAccessError | undefined> {
+  const platformAdmin = await isPlatformAdmin(username);
+  const membership = await getMembership(organizationId, username);
+  if (!membership && !platformAdmin) {
+    return { error: "Not a member of this organization" };
+  }
+  const role = membership?.role ?? "org_admin";
+  if (!canManageRegistration(role) && !platformAdmin) {
+    return { error: "You do not have permission to manage registration settings" };
+  }
+  return undefined;
+}
+
+async function readPublicLinkSettings(organizationId: string, surface: PublicSurface) {
+  const cfg = PUBLIC_SURFACE[surface];
+  const result = await db().query<{ enabled: boolean; token: string; name: string }>(
+    `SELECT ${cfg.enabledColumn} AS enabled, ${cfg.tokenColumn} AS token, name
+     FROM organizations WHERE id = $1`,
+    [organizationId],
   );
   return result.rows[0] ?? null;
 }
 
+async function ensurePublicToken(organizationId: string, surface: PublicSurface, existing: string) {
+  let token = existing.trim();
+  if (!token) {
+    token = crypto.randomUUID();
+    const cfg = PUBLIC_SURFACE[surface];
+    await db().query(`UPDATE organizations SET ${cfg.tokenColumn} = $2 WHERE id = $1`, [
+      organizationId,
+      token,
+    ]);
+  }
+  return token;
+}
+
 export async function getPublicRegistrationForm(token: string) {
-  const org = await orgByPublicToken(token);
-  if (!org || !org.public_registration_enabled) {
+  const org = await orgByPublicToken("registration", token);
+  if (!org || !org.enabled) {
     return { error: "Registration is not available" as const };
   }
   const plan = await db().query<{ title: string; program_title: string }>(
@@ -87,8 +154,8 @@ export async function submitPublicRegistration(
   input: Record<string, unknown>,
   meta: { ip?: string; forwarded?: string },
 ) {
-  const org = await orgByPublicToken(token);
-  if (!org || !org.public_registration_enabled) {
+  const org = await orgByPublicToken("registration", token);
+  if (!org || !org.enabled) {
     return { error: "Registration is not available" as const };
   }
   const honeypot = typeof input.website === "string" ? input.website.trim() : "";
@@ -123,18 +190,21 @@ export async function submitPublicRegistration(
 
   const id = crypto.randomUUID();
   const now = new Date();
+  const registrationSeason = await seasonYearForNewRegistration(org.id);
   const inserted = await db().query<RegistrationRow>(
     `INSERT INTO vbs_registrations (
-      id, organization_id, child_full_name, birth_month, birth_year, allergies_common, allergies_other,
-      comments, special_requests, contact1_name, contact1_phone, contact2_name, contact2_phone,
+      id, organization_id, child_full_name, child_gender, birth_month, birth_year, allergies_common, allergies_other,
+      comments, special_requests, contact1_name, contact1_phone, contact1_email, contact2_name, contact2_phone,
+      contact2_email,
       attend_mon, attend_tue, attend_wed, attend_thu, attend_fri, tshirt_size, assigned_team_id, class_id,
-      payment_status, nametag_extra_instructions, created_by, source, created_at, updated_at
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,'pending','',NULL,'public',$22,$22)
+      payment_status, nametag_extra_instructions, created_by, source, created_at, updated_at, vbs_season_year
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,'pending','',NULL,'public',$25,$25,$26)
     RETURNING ${registrationRowReturnSql}`,
     [
       id,
       org.id,
       parsed.childFullName,
+      parsed.childGender,
       parsed.birthMonth,
       parsed.birthYear,
       parsed.allergiesCommon,
@@ -143,8 +213,10 @@ export async function submitPublicRegistration(
       parsed.specialRequests,
       parsed.contact1Name,
       parsed.contact1Phone,
+      parsed.contact1Email,
       parsed.contact2Name,
       parsed.contact2Phone,
+      parsed.contact2Email,
       parsed.attendMon,
       parsed.attendTue,
       parsed.attendWed,
@@ -154,11 +226,13 @@ export async function submitPublicRegistration(
       assignedTeamId || null,
       classId || null,
       now,
+      registrationSeason,
     ],
   );
   const row = inserted.rows[0]!;
   if (classId) {
-    const { checkCapacityAlerts } = await import("./vbs-registration-classes.js");
+    const { addStudentToClass, checkCapacityAlerts } = await import("./vbs-registration-classes.js");
+    await addStudentToClass(org.id, id, classId);
     await checkCapacityAlerts(org.id, classId);
   }
   const teamName = assignedTeamId ? (teams.find((t) => t.id === assignedTeamId)?.name ?? "") : "";
@@ -172,49 +246,32 @@ export async function submitPublicRegistration(
   return { ok: true as const, confirmationId: student.id, childFullName: student.childFullName };
 }
 
-export async function getPublicRegistrationSettings(organizationId: string, username: string) {
-  const platformAdmin = await isPlatformAdmin(username);
-  const membership = await getMembership(organizationId, username);
-  if (!membership && !platformAdmin) {
-    return { error: "Not a member of this organization" as const };
+async function getPublicLinkSettings(organizationId: string, username: string, surface: PublicSurface) {
+  const denied = await requireRegistrationSettingsAccess(organizationId, username);
+  if (denied) {
+    return denied;
   }
-  const role = membership?.role ?? "org_admin";
-  if (!canManageRegistration(role) && !platformAdmin) {
-    return { error: "You do not have permission to manage registration settings" as const };
-  }
-  const result = await db().query<{
-    public_registration_enabled: boolean;
-    public_registration_token: string;
-    name: string;
-  }>(`SELECT public_registration_enabled, public_registration_token, name FROM organizations WHERE id = $1`, [
-    organizationId,
-  ]);
-  const org = result.rows[0];
+  const org = await readPublicLinkSettings(organizationId, surface);
   if (!org) {
     return { error: "Organization not found" as const };
   }
-  let token = org.public_registration_token?.trim() ?? "";
-  if (!token) {
-    token = crypto.randomUUID();
-    await db().query(`UPDATE organizations SET public_registration_token = $2 WHERE id = $1`, [
-      organizationId,
-      token,
-    ]);
-  }
+  const token = await ensurePublicToken(organizationId, surface, org.token);
+  const cfg = PUBLIC_SURFACE[surface];
   return {
-    enabled: org.public_registration_enabled,
-    link: publicLink(token),
+    enabled: org.enabled,
+    link: appPublicUrl(cfg.urlPath, token),
     token,
     organizationName: org.name,
   };
 }
 
-export async function updatePublicRegistrationSettings(
+async function updatePublicLinkSettings(
   organizationId: string,
   username: string,
+  surface: PublicSurface,
   input: { enabled?: boolean; regenerateToken?: boolean },
 ) {
-  const current = await getPublicRegistrationSettings(organizationId, username);
+  const current = await getPublicLinkSettings(organizationId, username, surface);
   if ("error" in current) {
     return current;
   }
@@ -223,14 +280,77 @@ export async function updatePublicRegistrationSettings(
     token = crypto.randomUUID();
   }
   const enabled = input.enabled ?? current.enabled;
+  const cfg = PUBLIC_SURFACE[surface];
   await db().query(
-    `UPDATE organizations SET public_registration_enabled = $2, public_registration_token = $3 WHERE id = $1`,
+    `UPDATE organizations SET ${cfg.enabledColumn} = $2, ${cfg.tokenColumn} = $3 WHERE id = $1`,
     [organizationId, enabled, token],
   );
   return {
     enabled,
-    link: publicLink(token),
+    link: appPublicUrl(cfg.urlPath, token),
     token,
     organizationName: current.organizationName,
   };
+}
+
+export async function getPublicRegistrationSettings(organizationId: string, username: string) {
+  return getPublicLinkSettings(organizationId, username, "registration");
+}
+
+export async function updatePublicRegistrationSettings(
+  organizationId: string,
+  username: string,
+  input: { enabled?: boolean; regenerateToken?: boolean },
+) {
+  return updatePublicLinkSettings(organizationId, username, "registration", input);
+}
+
+function formatPlanDate(value: Date | null) {
+  return value ? value.toISOString().slice(0, 10) : "";
+}
+
+export async function getPublicFamilyPage(token: string) {
+  const org = await orgByPublicToken("family", token);
+  if (!org || !org.enabled) {
+    return { error: "This page is not available" as const };
+  }
+  const plan = await db().query<{
+    title: string;
+    program_title: string;
+    location: string;
+    start_date: Date | null;
+    end_date: Date | null;
+    daily_start: string;
+    daily_end: string;
+    family_public_notes: string;
+  }>(
+    `SELECT title, program_title, location, start_date, end_date, daily_start, daily_end, family_public_notes
+     FROM vbs_plans WHERE organization_id = $1 LIMIT 1`,
+    [org.id],
+  );
+  const row = plan.rows[0];
+  return {
+    organizationName: org.name,
+    programLabel: row?.program_title?.trim() || row?.title?.trim() || "Vacation Bible School",
+    location: row?.location?.trim() ?? "",
+    startDate: formatPlanDate(row?.start_date ?? null),
+    endDate: formatPlanDate(row?.end_date ?? null),
+    dailyStart: row?.daily_start ?? "",
+    dailyEnd: row?.daily_end ?? "",
+    familyNotes: row?.family_public_notes?.trim() ?? "",
+    paymentNote:
+      "Registration fees, if any, are handled offline at the church. This page does not collect payments.",
+  };
+}
+
+export async function getPublicFamilySettings(organizationId: string, username: string) {
+  return getPublicLinkSettings(organizationId, username, "family");
+}
+
+export async function updatePublicFamilySettings(
+  organizationId: string,
+  username: string,
+  input: { enabled?: boolean; regenerateToken?: boolean },
+) {
+  return updatePublicLinkSettings(organizationId, username, "family", input);
 }

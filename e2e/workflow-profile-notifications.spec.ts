@@ -53,6 +53,7 @@ documentedTest(
     const publicPage = await publicContext.newPage();
     await publicPage.goto(`/register/${token}`);
     await publicPage.getByLabel(/^full name$/i).fill(childFullName);
+    await publicPage.getByLabel(/^Female \(F\)$/i).check();
     await publicPage.getByLabel(/primary contact full name/i).fill("E2E Parent");
     await publicPage.getByLabel(/primary contact phone/i).fill("+12065550199");
     await publicPage.getByRole("checkbox", { name: /understand and agree/i }).check();

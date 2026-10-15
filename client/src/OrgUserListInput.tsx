@@ -1,5 +1,6 @@
 import { useEffect, useId, useState } from "react";
 import { completeListToken, currentListToken, splitListTokens } from "./listInput";
+import { memberDisplayName } from "./org-member-display";
 import { pickExactOrgUser, searchOrgUsers, suggestionToken } from "./org-user-search";
 import type { UserSuggestion } from "./types";
 
@@ -142,7 +143,10 @@ export function OrgUserListInput({
             return (
               <li key={hit.username} role="option">
                 <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => pick(hit)}>
-                  {token}
+                  {preferEmail ? token : memberDisplayName(hit)}
+                  {!preferEmail && hit.username.toLowerCase() !== memberDisplayName(hit).toLowerCase() ? (
+                    <span className="org-user-typeahead-email muted"> · {hit.username}</span>
+                  ) : null}
                   {hit.email && hit.email.toLowerCase() !== hit.username.toLowerCase() && !preferEmail ? (
                     <span className="org-user-typeahead-email muted"> · {hit.email}</span>
                   ) : null}

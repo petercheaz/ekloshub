@@ -275,7 +275,7 @@ const statements = [
   `CREATE INDEX IF NOT EXISTS vbs_board_replies_post ON vbs_board_replies (post_id, created_at)`,
   `ALTER TABLE vbs_calendar_reminders DROP CONSTRAINT IF EXISTS vbs_calendar_reminders_item_type_check`,
   `ALTER TABLE vbs_calendar_reminders ADD CONSTRAINT vbs_calendar_reminders_item_type_check
-     CHECK (item_type IN ('task', 'schedule', 'checklist', 'plan_start', 'plan_end'))`,
+     CHECK (item_type IN ('task', 'schedule', 'checklist', 'plan_start', 'plan_end', 'prayer'))`,
   `ALTER TABLE organization_members ADD COLUMN IF NOT EXISTS notify_board_in_app BOOLEAN NOT NULL DEFAULT TRUE`,
   `ALTER TABLE organization_members ADD COLUMN IF NOT EXISTS notify_board_email BOOLEAN NOT NULL DEFAULT TRUE`,
   `ALTER TABLE organization_members ADD COLUMN IF NOT EXISTS notify_board_sms BOOLEAN NOT NULL DEFAULT FALSE`,
@@ -402,12 +402,31 @@ const statements = [
   `ALTER TABLE vbs_registration_class_staff DROP CONSTRAINT IF EXISTS vbs_registration_class_staff_role_check`,
   `ALTER TABLE vbs_registration_class_staff ADD CONSTRAINT vbs_registration_class_staff_role_check
      CHECK (role IN ('leader', 'teacher', 'helper'))`,
+  `ALTER TABLE vbs_registration_class_staff ADD COLUMN IF NOT EXISTS sort_order INT NOT NULL DEFAULT 0`,
+  `CREATE TABLE IF NOT EXISTS vbs_registration_class_students (
+    class_id TEXT NOT NULL REFERENCES vbs_registration_classes(id) ON DELETE CASCADE,
+    student_id TEXT NOT NULL REFERENCES vbs_registrations(id) ON DELETE CASCADE,
+    sort_order INT NOT NULL DEFAULT 0,
+    PRIMARY KEY (class_id, student_id)
+  )`,
+  `INSERT INTO vbs_registration_class_students (class_id, student_id, sort_order)
+     SELECT class_id, id, class_roster_sort FROM vbs_registrations
+     WHERE class_id IS NOT NULL
+     ON CONFLICT DO NOTHING`,
+  `ALTER TABLE vbs_registrations ADD COLUMN IF NOT EXISTS class_roster_sort INT NOT NULL DEFAULT 0`,
+  `ALTER TABLE vbs_registration_classes ADD COLUMN IF NOT EXISTS board_order INT NOT NULL DEFAULT 0`,
   `ALTER TABLE vbs_registration_classes ADD COLUMN IF NOT EXISTS capacity_warn_notified_count INT NOT NULL DEFAULT 0`,
+  `ALTER TABLE vbs_registration_classes ADD COLUMN IF NOT EXISTS rotation_index INT`,
+  `ALTER TABLE vbs_registration_classes ADD COLUMN IF NOT EXISTS section_label TEXT NOT NULL DEFAULT ''`,
   `ALTER TABLE vbs_registrations ADD COLUMN IF NOT EXISTS class_id TEXT REFERENCES vbs_registration_classes(id) ON DELETE SET NULL`,
   `ALTER TABLE vbs_registrations ADD COLUMN IF NOT EXISTS payment_status TEXT NOT NULL DEFAULT 'pending'`,
   `ALTER TABLE vbs_registrations DROP CONSTRAINT IF EXISTS vbs_registrations_payment_status_check`,
   `ALTER TABLE vbs_registrations ADD CONSTRAINT vbs_registrations_payment_status_check
      CHECK (payment_status IN ('pending', 'paid', 'waived'))`,
+  `ALTER TABLE vbs_registrations ADD COLUMN IF NOT EXISTS child_gender TEXT NOT NULL DEFAULT ''`,
+  `ALTER TABLE vbs_registrations DROP CONSTRAINT IF EXISTS vbs_registrations_child_gender_check`,
+  `ALTER TABLE vbs_registrations ADD CONSTRAINT vbs_registrations_child_gender_check
+     CHECK (child_gender IN ('', 'M', 'F'))`,
   `ALTER TABLE organizations ADD COLUMN IF NOT EXISTS cooking_team_id TEXT REFERENCES org_teams(id) ON DELETE SET NULL`,
   `CREATE TABLE IF NOT EXISTS vbs_registration_snacks_menu (
     organization_id TEXT PRIMARY KEY REFERENCES organizations(id) ON DELETE CASCADE,
@@ -418,6 +437,58 @@ const statements = [
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`,
   `ALTER TABLE vbs_registration_snacks_menu ADD COLUMN IF NOT EXISTS menu_json TEXT NOT NULL DEFAULT ''`,
+  `ALTER TABLE vbs_schedule_slots ADD COLUMN IF NOT EXISTS role_label TEXT NOT NULL DEFAULT ''`,
+  `ALTER TABLE vbs_schedule_slots ADD COLUMN IF NOT EXISTS assigned_username TEXT NOT NULL DEFAULT ''`,
+  `ALTER TABLE vbs_plans ADD COLUMN IF NOT EXISTS family_public_notes TEXT NOT NULL DEFAULT ''`,
+  `ALTER TABLE organizations ADD COLUMN IF NOT EXISTS public_family_enabled BOOLEAN NOT NULL DEFAULT FALSE`,
+  `ALTER TABLE organizations ADD COLUMN IF NOT EXISTS public_family_token TEXT NOT NULL DEFAULT ''`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS organizations_public_family_token_unique
+     ON organizations (public_family_token) WHERE public_family_token <> ''`,
+  `CREATE TABLE IF NOT EXISTS vbs_supply_items (
+    id TEXT PRIMARY KEY,
+    plan_id TEXT NOT NULL REFERENCES vbs_plans(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    quantity TEXT NOT NULL DEFAULT '',
+    estimated_cost NUMERIC(12, 2) NOT NULL DEFAULT 0,
+    purchased BOOLEAN NOT NULL DEFAULT FALSE,
+    assigned_team_id TEXT,
+    notes TEXT NOT NULL DEFAULT '',
+    sort_order INT NOT NULL DEFAULT 0
+  )`,
+  `CREATE INDEX IF NOT EXISTS vbs_supply_items_plan ON vbs_supply_items (plan_id, sort_order, name)`,
+  `ALTER TABLE vbs_registrations ADD COLUMN IF NOT EXISTS contact1_email TEXT NOT NULL DEFAULT ''`,
+  `ALTER TABLE vbs_registrations ADD COLUMN IF NOT EXISTS contact2_email TEXT NOT NULL DEFAULT ''`,
+  `ALTER TABLE organizations ADD COLUMN IF NOT EXISTS active_vbs_year INT`,
+  `ALTER TABLE organization_members ADD COLUMN IF NOT EXISTS vbs_season_year INT`,
+  `ALTER TABLE organization_members ADD COLUMN IF NOT EXISTS added_at TIMESTAMPTZ NOT NULL DEFAULT NOW()`,
+  `ALTER TABLE organization_members ADD COLUMN IF NOT EXISTS removed_at TIMESTAMPTZ`,
+  `ALTER TABLE vbs_registrations ADD COLUMN IF NOT EXISTS vbs_season_year INT`,
+  `UPDATE organizations o SET active_vbs_year = p.year FROM vbs_plans p WHERE p.organization_id = o.id AND o.active_vbs_year IS NULL`,
+  `UPDATE organization_members m SET vbs_season_year = COALESCE(o.active_vbs_year, p.year, 2026)
+     FROM organizations o
+     LEFT JOIN vbs_plans p ON p.organization_id = o.id
+     WHERE m.organization_id = o.id AND m.vbs_season_year IS NULL`,
+  `UPDATE vbs_registrations r SET vbs_season_year = COALESCE(o.active_vbs_year, p.year, 2026)
+     FROM organizations o
+     LEFT JOIN vbs_plans p ON p.organization_id = o.id
+     WHERE r.organization_id = o.id AND r.vbs_season_year IS NULL`,
+  `ALTER TABLE vbs_registration_classes ADD COLUMN IF NOT EXISTS vbs_season_year INT`,
+  `UPDATE vbs_registration_classes c SET vbs_season_year = COALESCE(o.active_vbs_year, p.year, 2026)
+     FROM organizations o
+     LEFT JOIN vbs_plans p ON p.organization_id = o.id
+     WHERE c.organization_id = o.id AND c.vbs_season_year IS NULL`,
+  `ALTER TABLE organization_members ADD COLUMN IF NOT EXISTS background_check_status TEXT NOT NULL DEFAULT 'not_started'`,
+  `ALTER TABLE organization_members DROP CONSTRAINT IF EXISTS organization_members_background_check_status_check`,
+  `ALTER TABLE organization_members ADD CONSTRAINT organization_members_background_check_status_check
+     CHECK (background_check_status IN ('not_started', 'pending', 'cleared'))`,
+  `CREATE TABLE IF NOT EXISTS org_vbs_season_snapshots (
+    organization_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    season_year INT NOT NULL,
+    snapshot JSONB NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (organization_id, season_year)
+  )`,
 ];
 
 const TEAM_NAME_UNIQUE_INDEX = `CREATE UNIQUE INDEX IF NOT EXISTS org_teams_org_name_unique

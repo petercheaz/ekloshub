@@ -46,7 +46,7 @@ documentedTest(
     expect(contactRes.ok).toBeTruthy();
     await page.goto(`/org/${orgId}/contact`);
     await captureStep(page, testInfo, "org-contact");
-    await expect(page.getByRole("heading", { name: /contact/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /communicate/i })).toBeVisible();
 
     const msgBody = testName("dm");
     const msgRes = await sessionCall(

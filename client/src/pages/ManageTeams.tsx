@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
+import { orgPath } from "../orgs";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { OrgUserListInput } from "../OrgUserListInput";
@@ -7,6 +8,8 @@ import { splitListTokens } from "../listInput";
 import { OrgUserTypeahead } from "../OrgUserTypeahead";
 import { OrgWorkspacePage } from "../OrgWorkspacePage";
 import type { OrgDetail, OrgTeam } from "../types";
+import { CollapsibleFormActions, CollapsibleFormPanel, CollapsibleFormTrigger } from "../CollapsibleForm";
+import { expandableRowHeaderProps } from "../expandable-row";
 
 function normalizeMemberList(raw: string) {
   return raw
@@ -104,35 +107,36 @@ export default function ManageTeamsPage() {
     <OrgWorkspacePage
       eyebrow="Manage teams"
       title="Teams"
-      tagline="Expand a team to edit its roster. Changes stay on your screen until you click Save team — closing the card or clicking Cancel discards them."
+      tagline="Build crew rosters from Members & invites, then use Plan → Workbook → Placements for daily roles and stations. Changes stay on your screen until you click Save team."
       actions={
-        <button
-          type="button"
-          className="vbs-plan-save"
+        <CollapsibleFormTrigger
+          label="Create team"
+          disabled={creatingTeam}
+          ariaExpanded={creatingTeam}
           onClick={openCreateTeam}
-        >
-          Create team
-        </button>
+        />
       }
     >
       {status ? <p className="status">{status}</p> : null}
 
       {creatingTeam ? (
-        <TeamEditor
-          key="new"
-          orgId={orgId}
-          onCancel={() => setCreatingTeam(false)}
-          onSaved={async (teamName) => {
-            setDetail(await api.organization(orgId));
-            setCreatingTeam(false);
-            setError("");
-            setStatus(`Created team “${teamName}”.`);
-          }}
-          onError={(message) => {
-            setError(message);
-            setStatus("");
-          }}
-        />
+        <CollapsibleFormPanel title="Create team">
+          <TeamEditor
+            key="new"
+            orgId={orgId}
+            onCancel={() => setCreatingTeam(false)}
+            onSaved={async (teamName) => {
+              setDetail(await api.organization(orgId));
+              setCreatingTeam(false);
+              setError("");
+              setStatus(`Created team “${teamName}”.`);
+            }}
+            onError={(message) => {
+              setError(message);
+              setStatus("");
+            }}
+          />
+        </CollapsibleFormPanel>
       ) : null}
 
       <section className="vbs-panel org-members">
@@ -197,26 +201,32 @@ function TeamRow({
 
   return (
     <li className={expanded ? "vbs-task-card open" : "vbs-task-card"}>
-      <button type="button" className="vbs-task-summary" aria-expanded={expanded} onClick={onRequestToggle}>
-        <span className="vbs-task-summary-main">
-          <span className="vbs-task-summary-title">{team.name}</span>
-          <span className="vbs-task-assignee-pill">{memberCount} members</span>
-          {expanded && dirty ? (
-            <span className="vbs-task-assignee-pill" title="Unsaved edits">
-              Unsaved
-            </span>
-          ) : null}
-        </span>
-        <span className="vbs-task-summary-meta muted">
-          Admin: {team.teamAdminUsername || "—"}
-          {team.members ? ` · ${team.members}` : ""}
-        </span>
-        <span className="vbs-task-chevron" aria-hidden="true">
-          {expanded ? "▾" : "▸"}
-        </span>
-      </button>
+      <div {...expandableRowHeaderProps(expanded, onRequestToggle, "vbs-task-summary-header")}>
+        <div className="vbs-task-summary">
+          <span className="vbs-task-summary-main">
+            <span className="vbs-task-summary-title">{team.name}</span>
+            <span className="vbs-task-assignee-pill">{memberCount} members</span>
+            {expanded && dirty ? (
+              <span className="vbs-task-assignee-pill" title="Unsaved edits">
+                Unsaved
+              </span>
+            ) : null}
+          </span>
+          <span className="vbs-task-summary-meta muted">
+            Admin: {team.teamAdminUsername || "—"}
+            {team.members ? ` · ${team.members}` : ""}
+          </span>
+          <span className="vbs-task-chevron" aria-hidden="true">
+            {expanded ? "▾" : "▸"}
+          </span>
+        </div>
+      </div>
       {expanded ? (
         <div className="vbs-task-body">
+          <p className="vbs-task-field-hint">
+            <Link to={orgPath(orgId, `/team/${team.id}`)}>Open team home</Link> — tasks, schedule, and board for this
+            crew.
+          </p>
           <TeamEditor
             orgId={orgId}
             team={team}
@@ -362,14 +372,12 @@ function TeamEditor({
           via Contact org &amp; teams.
         </span>
       </label>
-      <div className="vbs-task-add-actions org-member-form-actions">
-        <button type="submit" className="vbs-plan-save" disabled={busy || (!dirty && Boolean(team))}>
-          {busy ? "Saving…" : team ? "Save team" : "Create team"}
-        </button>
-        <button type="button" className="vbs-plan-save vbs-plan-save-danger" disabled={busy} onClick={discard}>
-          Cancel
-        </button>
-      </div>
+      <CollapsibleFormActions
+        onCancel={discard}
+        saveLabel={busy ? "Saving…" : "Save"}
+        busy={busy}
+        saveDisabled={!dirty && Boolean(team)}
+      />
     </form>
   );
 }
