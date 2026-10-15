@@ -129,7 +129,6 @@ if ! "${ssh_cmd[@]}" "test -f $REMOTE_ENV"; then
   SITE_HOST="${PUBLIC_IP}.sslip.io"
   "${ssh_cmd[@]}" "cat > $REMOTE_ENV" <<EOF
 SITE_ADDRESS=${SITE_HOST}
-ACME_EMAIL=off
 APP_PUBLIC_URL=https://${SITE_HOST}
 AUTH_PASSWORD=${AUTH_PASSWORD}
 SESSION_SECRET=${SESSION_SECRET}
