@@ -75,7 +75,7 @@ export default function InvitePage() {
     <div className="page login-page">
       <div className="login-brand">
         <BrandLogo className="login-logo" />
-        <p className="brand-wordmark">VBS Resources</p>
+        <p className="brand-wordmark">EklosHub</p>
       </div>
       <form className="login-card" onSubmit={(event) => void onSubmit(event)}>
         <h1>Join organization</h1>

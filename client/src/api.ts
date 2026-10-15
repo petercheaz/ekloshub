@@ -25,6 +25,7 @@ import type {
   UserVbsDefaultPayload,
   OrgVbsCurriculum,
   OrgVbsDefaultPayload,
+  OrgVbsEventsPayload,
   PhotoshoppeBrowseResult,
   VbsPlan,
   VbsPlanWorkspace,
@@ -45,9 +46,14 @@ export class ApiError extends Error {
 }
 
 let currentTenantId: string | null = null;
+let currentVbsEventId: string | null = null;
 
 export function setApiTenant(id: string | null) {
   currentTenantId = id;
+}
+
+export function setApiVbsEvent(id: string | null) {
+  currentVbsEventId = id;
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -57,6 +63,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     headers: {
       "Content-Type": "application/json",
       ...(currentTenantId ? { "X-Tenant-Id": currentTenantId } : {}),
+      ...(currentVbsEventId ? { "X-Vbs-Event-Id": currentVbsEventId } : {}),
       ...(init?.headers ?? {}),
     },
   });
@@ -75,6 +82,21 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
 
   return (await response.json()) as T;
+}
+
+function withYear(path: string, year?: number) {
+  const params = new URLSearchParams();
+  if (currentVbsEventId) {
+    params.set("eventId", currentVbsEventId);
+  } else if (year) {
+    params.set("year", String(year));
+  }
+  const qs = params.toString();
+  if (!qs) {
+    return path;
+  }
+  const join = path.includes("?") ? "&" : "?";
+  return `${path}${join}${qs}`;
 }
 
 async function publicRequest<T>(path: string, init?: RequestInit): Promise<T> {
@@ -115,7 +137,7 @@ export const api = {
     request<import("./SeasonCopyPanel").SeasonCopyOptions>(`/api/orgs/${orgId}/season-copy`),
   copyVbsSeason: (
     orgId: string,
-    input: { fromYear: number; toYear: number; startDate?: string; endDate?: string },
+    input: { fromYear: number; toYear: number; name?: string; startDate?: string; endDate?: string },
   ) =>
     request<{
       ok: boolean;
@@ -140,11 +162,13 @@ export const api = {
       method: "POST",
       body: JSON.stringify({}),
     }),
-  volunteerCompliance: (orgId: string) =>
-    request<import("./types").VolunteerComplianceWorkspace>(`/api/orgs/${orgId}/volunteer-compliance`),
-  updateVolunteerBackgroundCheck: (orgId: string, username: string, status: string) =>
+  volunteerCompliance: (orgId: string, year?: number) =>
     request<import("./types").VolunteerComplianceWorkspace>(
-      `/api/orgs/${orgId}/volunteer-compliance/${encodeURIComponent(username)}`,
+      withYear(`/api/orgs/${orgId}/volunteer-compliance`, year),
+    ),
+  updateVolunteerBackgroundCheck: (orgId: string, username: string, status: string, year?: number) =>
+    request<import("./types").VolunteerComplianceWorkspace>(
+      withYear(`/api/orgs/${orgId}/volunteer-compliance/${encodeURIComponent(username)}`, year),
       { method: "PATCH", body: JSON.stringify({ status }) },
     ),
   createOrganization: (input: { name: string; address: string; contact: string }) =>
@@ -317,6 +341,30 @@ export const api = {
       method: "PUT",
       body: JSON.stringify(input),
     }),
+  orgVbsEvents: (orgId: string) => request<OrgVbsEventsPayload>(`/api/orgs/${orgId}/vbs-events`),
+  setCurrentVbsEvent: (orgId: string, eventId: string) =>
+    request<OrgVbsEventsPayload>(`/api/orgs/${orgId}/vbs-events/current`, {
+      method: "POST",
+      body: JSON.stringify({ eventId }),
+    }),
+  setPersonalVbsEventDefault: (orgId: string, eventId: string) =>
+    request<OrgVbsEventsPayload>(`/api/orgs/${orgId}/vbs-events/default`, {
+      method: "PUT",
+      body: JSON.stringify({ eventId }),
+    }),
+  createVbsEvent: (
+    orgId: string,
+    input: { fromEventId?: string; year?: number; name?: string; startDate?: string; endDate?: string; makeCurrent?: boolean },
+  ) =>
+    request<OrgVbsEventsPayload>(`/api/orgs/${orgId}/vbs-events`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  renameVbsEvent: (orgId: string, eventId: string, name: string) =>
+    request<OrgVbsEventsPayload>(`/api/orgs/${orgId}/vbs-events/${encodeURIComponent(eventId)}`, {
+      method: "PUT",
+      body: JSON.stringify({ name }),
+    }),
   orgVbsDefault: (orgId: string) => request<OrgVbsDefaultPayload>(`/api/orgs/${orgId}/vbs-default`),
   saveOrgVbsDefault: (orgId: string, input: { year: number; publisherId: string; programTitle: string }) =>
     request<{ orgDefault: OrgVbsCurriculum }>(`/api/orgs/${orgId}/vbs-default`, {
@@ -348,7 +396,8 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify(input),
     }),
-  vbsRegistration: (orgId: string) => request<VbsRegistrationWorkspace>(`/api/orgs/${orgId}/vbs-registration`),
+  vbsRegistration: (orgId: string, year?: number) =>
+    request<VbsRegistrationWorkspace>(withYear(`/api/orgs/${orgId}/vbs-registration`, year)),
   saveVbsRegistrationStudent: (orgId: string, input: Record<string, unknown>) =>
     request<{ student: VbsRegistrationStudent }>(`/api/orgs/${orgId}/vbs-registration/students`, {
       method: "POST",
@@ -458,8 +507,10 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify(input),
     }),
-  cookingPlan: (orgId: string) =>
-    request<import("./types-cooking-plan").CookingPlanWorkspace>(`/api/orgs/${orgId}/cooking-plan`),
+  cookingPlan: (orgId: string, year?: number) =>
+    request<import("./types-cooking-plan").CookingPlanWorkspace>(
+      withYear(`/api/orgs/${orgId}/cooking-plan`, year),
+    ),
   saveCookingPlanSettings: (
     orgId: string,
     input: { cookingTeamId?: string; extraInstructions?: string },
@@ -496,7 +547,8 @@ export const api = {
       `/api/orgs/${orgId}/vbs-registration/cooking/generate-menu`,
       { method: "POST", body: JSON.stringify(input) },
     ),
-  vbsPlan: (orgId: string) => request<VbsPlanWorkspace>(`/api/orgs/${orgId}/vbs-plan`),
+  vbsPlan: (orgId: string, year?: number) =>
+    request<VbsPlanWorkspace>(withYear(`/api/orgs/${orgId}/vbs-plan`, year)),
   vbsReimbursementQueue: (orgId: string) =>
     request<{
       queue: {

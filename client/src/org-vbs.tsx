@@ -8,12 +8,10 @@ import {
   useState,
 } from "react";
 import { useLocation } from "react-router-dom";
-import type { VbsFilterState } from "./VbsFilterFields";
-import { VbsFilterFields } from "./VbsFilterFields";
-import { api } from "./api";
+import { api, setApiVbsEvent } from "./api";
 import { useAuth } from "./auth";
 import { useOrgs } from "./orgs";
-import type { Publisher, ShareProgram, UserVbsCurriculum } from "./types";
+import type { OrgVbsEvent, Publisher, ShareProgram, UserVbsCurriculum } from "./types";
 
 export type VbsWorkingSelection = {
   year: number;
@@ -38,36 +36,46 @@ type OrgVbsContextValue = {
   resetWorking: () => void;
   saveUserDefault: (next: VbsWorkingSelection) => Promise<void>;
   refresh: () => Promise<void>;
+  eventsReady: boolean;
+  events: OrgVbsEvent[];
+  viewingYear: number | null;
+  viewingEventId: string | null;
+  currentVbsYear: number | null;
+  currentEventId: string | null;
+  viewingEvent: OrgVbsEvent | null;
+  canSwitchEvents: boolean;
+  canMakeCurrent: boolean;
+  canCreateEvent: boolean;
+  orgEventEpoch: number;
+  setViewingYear: (year: number) => void;
+  setViewingEventId: (eventId: string) => void;
+  makeCurrent: () => Promise<void>;
+  setPersonalDefault: () => Promise<void>;
+  saveAsProject: (name?: string) => Promise<void>;
+  renameProject: (name: string) => Promise<void>;
+  refreshEvents: () => Promise<void>;
 };
 
 const OrgVbsContext = createContext<OrgVbsContextValue | null>(null);
 
-function storageKey(orgId: string) {
-  return `vbs.working.${orgId}`;
+function viewingKey(orgId: string) {
+  return `vbs.viewingEvent.${orgId}`;
 }
 
-function readStored(orgId: string): VbsWorkingSelection | null {
+function readViewingEventId(orgId: string): string | null {
   try {
-    const raw = sessionStorage.getItem(storageKey(orgId));
-    if (!raw) {
-      return null;
-    }
-    const parsed = JSON.parse(raw) as VbsWorkingSelection;
-    if (!parsed.year || !parsed.publisherId || !parsed.programTitle) {
-      return null;
-    }
-    return parsed;
+    return sessionStorage.getItem(viewingKey(orgId));
   } catch {
     return null;
   }
 }
 
-function writeStored(orgId: string, value: VbsWorkingSelection | null) {
-  if (!value) {
-    sessionStorage.removeItem(storageKey(orgId));
+function writeViewingEventId(orgId: string, eventId: string | null) {
+  if (!eventId) {
+    sessionStorage.removeItem(viewingKey(orgId));
     return;
   }
-  sessionStorage.setItem(storageKey(orgId), JSON.stringify(value));
+  sessionStorage.setItem(viewingKey(orgId), eventId);
 }
 
 function toWorking(curriculum: UserVbsCurriculum): VbsWorkingSelection {
@@ -86,37 +94,14 @@ function toWorking(curriculum: UserVbsCurriculum): VbsWorkingSelection {
   };
 }
 
-function siteFallback(
-  publishers: Publisher[],
-  programs: ShareProgram[],
-  defaultYear: number,
-): VbsWorkingSelection | null {
-  const publisherId = publishers[0]?.id ?? "";
-  const program = programs.find((p) => p.year === defaultYear && p.publisherId === publisherId);
-  if (!program) {
+function eventWorking(event: OrgVbsEvent | null): VbsWorkingSelection | null {
+  if (!event?.programTitle || !event.publisherId) {
     return null;
   }
   return {
-    year: program.year,
-    publisherId: program.publisherId,
-    programTitle: program.theme,
-  };
-}
-
-function baselineWorking(
-  userDefault: UserVbsCurriculum | null,
-  publishers: Publisher[],
-  programs: ShareProgram[],
-  defaultYear: number,
-): VbsWorkingSelection | null {
-  if (userDefault) {
-    return toWorking(userDefault);
-  }
-  return {
-    allFilters: true,
-    year: 0,
-    publisherId: "all",
-    programTitle: "all",
+    year: event.year,
+    publisherId: event.publisherId,
+    programTitle: event.programTitle,
   };
 }
 
@@ -125,55 +110,92 @@ export function OrgVbsProvider({ children }: { children: ReactNode }) {
   const { tenantId } = useOrgs();
   const [prefsReady, setPrefsReady] = useState(false);
   const [userDefault, setUserDefault] = useState<UserVbsCurriculum | null>(null);
-  const [working, setWorkingState] = useState<VbsWorkingSelection | null>(null);
-  const [hasSessionOverride, setHasSessionOverride] = useState(false);
   const [publishers, setPublishers] = useState<Publisher[]>([]);
   const [programs, setPrograms] = useState<ShareProgram[]>([]);
   const [defaultYear, setDefaultYear] = useState(new Date().getFullYear());
+  const [eventsReady, setEventsReady] = useState(false);
+  const [events, setEvents] = useState<OrgVbsEvent[]>([]);
+  const [viewingEventId, setViewingEventIdState] = useState<string | null>(null);
+  const [currentVbsYear, setCurrentVbsYear] = useState<number | null>(null);
+  const [currentEventId, setCurrentEventId] = useState<string | null>(null);
+  const [canSwitchEvents, setCanSwitchEvents] = useState(false);
+  const [canMakeCurrent, setCanMakeCurrent] = useState(false);
+  const [canCreateEvent, setCanCreateEvent] = useState(false);
+  const [orgEventEpoch, setOrgEventEpoch] = useState(0);
 
   const refresh = useCallback(async () => {
     setPrefsReady(false);
     if (!user) {
       setUserDefault(null);
-      setWorkingState(null);
-      setHasSessionOverride(false);
       setPrefsReady(true);
       return;
     }
-
     const userPayload = await api.userVbsDefault();
     setUserDefault(userPayload.userDefault);
     setPublishers(userPayload.publishers);
     setPrograms(userPayload.programs);
     setDefaultYear(userPayload.defaultYear);
-
-    const baseline = baselineWorking(
-      userPayload.userDefault,
-      userPayload.publishers,
-      userPayload.programs,
-      userPayload.defaultYear,
-    );
-
-    if (tenantId) {
-      const stored = readStored(tenantId);
-      if (stored) {
-        setWorkingState(stored);
-        setHasSessionOverride(true);
-      } else {
-        setWorkingState(baseline);
-        setHasSessionOverride(false);
-      }
-    } else {
-      setWorkingState(baseline);
-      setHasSessionOverride(false);
-    }
-
     setPrefsReady(true);
-  }, [tenantId, user]);
+  }, [user]);
 
   useEffect(() => {
     void refresh().catch(() => setPrefsReady(true));
   }, [refresh]);
+
+  const applyEventsPayload = useCallback(
+    (payload: Awaited<ReturnType<typeof api.orgVbsEvents>>, orgId: string, preferEventId?: string) => {
+      setEvents(payload.events);
+      setCurrentVbsYear(payload.currentVbsYear);
+      setCurrentEventId(payload.currentEventId);
+      setCanSwitchEvents(payload.canSwitchEvents);
+      setCanMakeCurrent(payload.canMakeCurrent);
+      setCanCreateEvent(payload.canCreateEvent);
+      const stored = preferEventId ?? readViewingEventId(orgId);
+      const nextId =
+        (stored && payload.events.some((event) => event.id === stored) ? stored : null) ??
+        payload.defaultEventId ??
+        payload.currentEventId ??
+        payload.events[0]?.id ??
+        null;
+      setViewingEventIdState(nextId);
+      writeViewingEventId(orgId, nextId);
+      setApiVbsEvent(nextId);
+    },
+    [],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!user || !tenantId) {
+      setEvents([]);
+      setViewingEventIdState(null);
+      setCurrentVbsYear(null);
+      setCurrentEventId(null);
+      setCanSwitchEvents(false);
+      setCanMakeCurrent(false);
+      setCanCreateEvent(false);
+      setApiVbsEvent(null);
+      setEventsReady(true);
+      return;
+    }
+    setEventsReady(false);
+    api
+      .orgVbsEvents(tenantId)
+      .then((payload) => {
+        if (!cancelled) {
+          applyEventsPayload(payload, tenantId);
+          setEventsReady(true);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setEventsReady(true);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [applyEventsPayload, tenantId, user]);
 
   const filterDefault = useMemo(() => {
     if (userDefault) {
@@ -183,35 +205,36 @@ export function OrgVbsProvider({ children }: { children: ReactNode }) {
   }, [userDefault]);
 
   const filterSource: VbsFilterSource = userDefault ? "user" : null;
+  const viewingEvent = useMemo(
+    () => events.find((event) => event.id === viewingEventId) ?? events[0] ?? null,
+    [events, viewingEventId],
+  );
+  const viewingYear = viewingEvent?.year ?? null;
+  const working = eventWorking(viewingEvent) ?? filterDefault;
 
-  const setWorking = useCallback(
-    (next: VbsWorkingSelection) => {
+  const setWorking = useCallback((_next: VbsWorkingSelection) => {
+    // Org tools follow the event switcher; catalog pages use saved filter defaults.
+  }, []);
+
+  const setViewingEventId = useCallback(
+    (eventId: string) => {
       if (!tenantId) {
         return;
       }
-      setWorkingState(next);
-      writeStored(tenantId, next);
-      const baseline = baselineWorking(userDefault, publishers, programs, defaultYear);
-      const matchesBaseline =
-        baseline &&
-        Boolean(baseline.allFilters) === Boolean(next.allFilters) &&
-        baseline.year === next.year &&
-        baseline.publisherId === next.publisherId &&
-        baseline.programTitle === next.programTitle;
-      setHasSessionOverride(!matchesBaseline);
+      setViewingEventIdState(eventId);
+      writeViewingEventId(tenantId, eventId);
+      setApiVbsEvent(eventId);
+      setOrgEventEpoch((value) => value + 1);
     },
-    [tenantId, userDefault, publishers, programs, defaultYear],
+    [tenantId],
   );
 
   const resetWorking = useCallback(() => {
-    if (!tenantId) {
+    if (!tenantId || !currentEventId) {
       return;
     }
-    writeStored(tenantId, null);
-    const baseline = baselineWorking(userDefault, publishers, programs, defaultYear);
-    setWorkingState(baseline);
-    setHasSessionOverride(false);
-  }, [tenantId, userDefault, publishers, programs, defaultYear]);
+    setViewingEventId(currentEventId);
+  }, [currentEventId, setViewingEventId, tenantId]);
 
   const saveUserDefault = useCallback(
     async (next: VbsWorkingSelection) => {
@@ -222,13 +245,73 @@ export function OrgVbsProvider({ children }: { children: ReactNode }) {
         allFilters: next.allFilters,
       });
       setUserDefault(result.userDefault);
-      if (tenantId && result.userDefault) {
-        writeStored(tenantId, null);
-        setWorkingState(toWorking(result.userDefault));
-        setHasSessionOverride(false);
+    },
+    [],
+  );
+
+  const setViewingYear = useCallback(
+    (year: number) => {
+      const match = events.find((event) => event.year === year && event.isCurrent) ?? events.find((event) => event.year === year);
+      if (match) {
+        setViewingEventId(match.id);
       }
     },
-    [tenantId],
+    [events, setViewingEventId],
+  );
+
+  const refreshEvents = useCallback(async () => {
+    if (!tenantId) {
+      return;
+    }
+    const payload = await api.orgVbsEvents(tenantId);
+    applyEventsPayload(payload, tenantId, viewingEventId ?? undefined);
+    setOrgEventEpoch((value) => value + 1);
+  }, [applyEventsPayload, tenantId, viewingEventId]);
+
+  const makeCurrent = useCallback(async () => {
+    if (!tenantId || !viewingEventId) {
+      return;
+    }
+    const payload = await api.setCurrentVbsEvent(tenantId, viewingEventId);
+    applyEventsPayload(payload, tenantId, viewingEventId);
+    setOrgEventEpoch((value) => value + 1);
+  }, [applyEventsPayload, tenantId, viewingEventId]);
+
+  const setPersonalDefault = useCallback(async () => {
+    if (!tenantId || !viewingEventId) {
+      return;
+    }
+    const payload = await api.setPersonalVbsEventDefault(tenantId, viewingEventId);
+    applyEventsPayload(payload, tenantId, viewingEventId);
+    setOrgEventEpoch((value) => value + 1);
+  }, [applyEventsPayload, tenantId, viewingEventId]);
+
+  const saveAsProject = useCallback(
+    async (name?: string) => {
+      if (!tenantId || !viewingEvent) {
+        return;
+      }
+      const payload = await api.createVbsEvent(tenantId, {
+        fromEventId: viewingEvent.id,
+        year: viewingEvent.year,
+        name: name?.trim() || undefined,
+      });
+      applyEventsPayload(payload, tenantId, payload.createdEventId);
+      setOrgEventEpoch((value) => value + 1);
+    },
+    [applyEventsPayload, tenantId, viewingEvent],
+  );
+
+  const renameProject = useCallback(
+    async (name: string) => {
+      if (!tenantId || !viewingEventId) {
+        return;
+      }
+      const payload = await api.renameVbsEvent(tenantId, viewingEventId, name);
+      applyEventsPayload(payload, tenantId, viewingEventId);
+      setOrgEventEpoch((value) => value + 1);
+    },
+    [applyEventsPayload, tenantId, viewingEventId],
   );
 
   const value = useMemo(
@@ -238,7 +321,7 @@ export function OrgVbsProvider({ children }: { children: ReactNode }) {
       filterDefault,
       filterSource,
       working,
-      hasSessionOverride,
+      hasSessionOverride: Boolean(viewingEventId && currentEventId && viewingEventId !== currentEventId),
       publishers,
       programs,
       defaultYear,
@@ -246,6 +329,24 @@ export function OrgVbsProvider({ children }: { children: ReactNode }) {
       resetWorking,
       saveUserDefault,
       refresh,
+      eventsReady,
+      events,
+      viewingYear,
+      viewingEventId,
+      currentVbsYear,
+      currentEventId,
+      viewingEvent,
+      canSwitchEvents,
+      canMakeCurrent,
+      canCreateEvent,
+      orgEventEpoch,
+      setViewingYear,
+      setViewingEventId,
+      makeCurrent,
+      setPersonalDefault,
+      saveAsProject,
+      renameProject,
+      refreshEvents,
     }),
     [
       prefsReady,
@@ -253,7 +354,10 @@ export function OrgVbsProvider({ children }: { children: ReactNode }) {
       filterDefault,
       filterSource,
       working,
-      hasSessionOverride,
+      viewingYear,
+      viewingEventId,
+      currentVbsYear,
+      currentEventId,
       publishers,
       programs,
       defaultYear,
@@ -261,6 +365,20 @@ export function OrgVbsProvider({ children }: { children: ReactNode }) {
       resetWorking,
       saveUserDefault,
       refresh,
+      eventsReady,
+      events,
+      viewingEvent,
+      canSwitchEvents,
+      canMakeCurrent,
+      canCreateEvent,
+      orgEventEpoch,
+      setViewingYear,
+      setViewingEventId,
+      makeCurrent,
+      setPersonalDefault,
+      saveAsProject,
+      renameProject,
+      refreshEvents,
     ],
   );
 
@@ -275,84 +393,205 @@ export function useOrgVbs() {
   return context;
 }
 
+function projectOptionLabel(event: OrgVbsEvent) {
+  const session = event.name.trim() || event.label;
+  const marks = [event.isCurrent ? "current" : "", event.isDefault ? "my default" : ""].filter(Boolean);
+  return marks.length ? `${session} (${marks.join(", ")})` : session;
+}
+
+function eventsGroupedByYear(events: OrgVbsEvent[]) {
+  const years: number[] = [];
+  const grouped = new Map<number, OrgVbsEvent[]>();
+  for (const event of events) {
+    const list = grouped.get(event.year);
+    if (list) {
+      list.push(event);
+      continue;
+    }
+    grouped.set(event.year, [event]);
+    years.push(event.year);
+  }
+  return years.map((year) => ({ year, events: grouped.get(year) ?? [] }));
+}
+
 export function OrgVbsBar() {
   const location = useLocation();
   const { tenantId } = useOrgs();
   const {
-    prefsReady,
-    working,
-    userDefault,
+    eventsReady,
+    events,
+    viewingYear,
+    viewingEventId,
+    currentVbsYear,
+    viewingEvent,
+    canSwitchEvents,
+    canMakeCurrent,
+    canCreateEvent,
     hasSessionOverride,
-    publishers,
-    programs,
-    defaultYear,
-    setWorking,
-    resetWorking,
+    setViewingEventId,
+    makeCurrent,
+    setPersonalDefault,
+    saveAsProject,
+    renameProject,
   } = useOrgVbs();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [drafting, setDrafting] = useState<"saveAs" | "rename" | null>(null);
+  const [draftName, setDraftName] = useState("");
 
-  const path = location.pathname;
-  if (
-    path.endsWith("/vbs-plan") ||
-    path.endsWith("/manage") ||
-    path.endsWith("/teams") ||
-    /\/org\/[^/]+$/.test(path)
-  ) {
+  const onOrgRoute = /^\/org\/[^/]+/.test(location.pathname) && !location.pathname.startsWith("/org/new");
+  if (!onOrgRoute || !tenantId || !eventsReady || events.length === 0) {
     return null;
   }
 
-  if (!tenantId || !prefsReady) {
-    return null;
+  const viewingIsCurrent = Boolean(viewingEvent?.isCurrent);
+  const grouped = eventsGroupedByYear(events);
+  const saveAsPlaceholder = viewingEvent?.name.trim() || viewingEvent?.programTitle.trim() || "New project";
+
+  async function run(action: () => Promise<void>) {
+    setBusy(true);
+    setError("");
+    try {
+      await action();
+      setDrafting(null);
+      setDraftName("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not update this VBS");
+    } finally {
+      setBusy(false);
+    }
   }
-
-  const year = working?.year ?? defaultYear;
-  const publisherId = working?.publisherId ?? publishers[0]?.id ?? "";
-  const programTitle = working?.programTitle ?? "";
-
-  const filterValue: VbsFilterState = {
-    yearFilter: String(year),
-    publisherFilter: publisherId,
-    titleFilter: programTitle,
-  };
 
   return (
-    <section className="vbs-filter-panel vbs-filter-panel-compact vbs-context-bar" aria-label="Working VBS">
+    <section className="vbs-filter-panel vbs-filter-panel-compact vbs-context-bar" aria-label="VBS project">
       <div className="vbs-context-head">
-        <span className="vbs-context-label">Working VBS</span>
+        <span className="vbs-context-label">VBS project</span>
         <div className="vbs-context-actions">
-          {userDefault?.allFilters ? (
-            <span className="vbs-context-meta muted">Your default: All years · All publishers · All curriculum</span>
-          ) : userDefault ? (
-            <span className="vbs-context-meta muted">
-              Your default: {userDefault.publisherName} · {userDefault.year} · {userDefault.programTitle}
-            </span>
+          {viewingIsCurrent ? (
+            <span className="vbs-context-meta muted">Current VBS for this church</span>
           ) : (
-            <span className="vbs-context-meta muted">No personal default yet</span>
+            <span className="vbs-context-meta muted">
+              Viewing another project — current remains {events.find((event) => event.isCurrent)?.name || events.find((event) => event.isCurrent)?.label || `VBS ${currentVbsYear}`}
+            </span>
           )}
-          {hasSessionOverride ? (
-            <button type="button" className="ghost" onClick={resetWorking}>
-              Reset to my default
-            </button>
-          ) : null}
         </div>
       </div>
-      <VbsFilterFields
-        mode="pick"
-        programs={programs}
-        publishers={publishers}
-        value={filterValue}
-        onChange={(next) =>
-          setWorking({
-            year: Number(next.yearFilter),
-            publisherId: next.publisherFilter,
-            programTitle: next.titleFilter,
-          })
-        }
-        ariaLabel="Working VBS selection"
-      />
+      <div className="vbs-context-main">
+        {canSwitchEvents ? (
+          <label className="vbs-context-event-field">
+            <select
+              value={viewingEventId ?? ""}
+              onChange={(event) => setViewingEventId(event.target.value)}
+              aria-label="Open VBS project"
+            >
+              {grouped.map((group) => (
+                <optgroup key={group.year} label={String(group.year)}>
+                  {group.events.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {projectOptionLabel(item)}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+          </label>
+        ) : (
+          <strong>{viewingEvent?.name || viewingEvent?.label || `VBS ${viewingYear}`}</strong>
+        )}
+        {canCreateEvent ? (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void run(() => saveAsProject())}
+          >
+            New project
+          </button>
+        ) : null}
+        {canCreateEvent ? (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => {
+              setDrafting((open) => (open === "saveAs" ? null : "saveAs"));
+              setDraftName("");
+            }}
+          >
+            Save as…
+          </button>
+        ) : null}
+        {canCreateEvent ? (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => {
+              setDrafting((open) => (open === "rename" ? null : "rename"));
+              setDraftName(viewingEvent?.name ?? "");
+            }}
+          >
+            Rename
+          </button>
+        ) : null}
+        {canMakeCurrent && hasSessionOverride ? (
+          <button type="button" className="primary" disabled={busy} onClick={() => void run(makeCurrent)}>
+            Make this the current VBS
+          </button>
+        ) : null}
+        {viewingEvent && !viewingEvent.isDefault ? (
+          <button type="button" disabled={busy} onClick={() => void run(setPersonalDefault)}>
+            Set as my default
+          </button>
+        ) : null}
+      </div>
+      {drafting === "saveAs" ? (
+        <form
+          className="vbs-context-add-event"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void run(() => saveAsProject(draftName));
+          }}
+        >
+          <label className="vbs-context-event-field">
+            <span className="muted">Project name</span>
+            <input
+              value={draftName}
+              onChange={(event) => setDraftName(event.target.value)}
+              placeholder={saveAsPlaceholder}
+              aria-label="New project name"
+            />
+          </label>
+          <button type="submit" className="primary" disabled={busy}>
+            {busy ? "Saving…" : "Save as new project"}
+          </button>
+        </form>
+      ) : null}
+      {drafting === "rename" ? (
+        <form
+          className="vbs-context-add-event"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void run(() => renameProject(draftName));
+          }}
+        >
+          <label className="vbs-context-event-field">
+            <span className="muted">Project name</span>
+            <input
+              value={draftName}
+              onChange={(event) => setDraftName(event.target.value)}
+              placeholder={saveAsPlaceholder}
+              aria-label="Rename project"
+            />
+          </label>
+          <button type="submit" className="primary" disabled={busy}>
+            {busy ? "Saving…" : "Save name"}
+          </button>
+        </form>
+      ) : null}
       <p className="vbs-filter-note muted">
-        Session-only picker for org tools (room design, etc.). Page filters use your personal default, not the org
-        plan.
+        Plan, schedule, registration, and volunteers show only this project. Edits save here automatically. Open any
+        past project from the list, or use New project / Save as to keep another week in the same year. New family
+        sign-ups still go to the current VBS until you switch it.
       </p>
+      {error ? <p className="error">{error}</p> : null}
     </section>
   );
 }

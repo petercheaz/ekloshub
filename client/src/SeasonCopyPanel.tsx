@@ -22,6 +22,7 @@ export function SeasonCopyPanel({
   const [toYear, setToYear] = useState<number | "">("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  const [sessionName, setSessionName] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -77,7 +78,7 @@ export function SeasonCopyPanel({
       return;
     }
     const confirmed = window.confirm(
-      `Copy VBS ${fromYear} setup into VBS ${toYear}? This replaces the current plan, schedule, tasks, supplies, and ${toYear} class templates. Student registrations are not copied.`,
+      `Copy VBS ${fromYear} into a new ${toYear} project${sessionName.trim() ? ` named ${sessionName.trim()}` : ""}? This creates a new event with its own plan, classes, kids, and staff. The source stays in place. Student registrations are not copied.`,
     );
     if (!confirmed) {
       return;
@@ -89,11 +90,12 @@ export function SeasonCopyPanel({
       const result = await api.copyVbsSeason(orgId, {
         fromYear,
         toYear,
+        name: sessionName.trim() || undefined,
         startDate: startDate.trim() || undefined,
         endDate: endDate.trim() || undefined,
       });
       setMessage(
-        `VBS ${result.toYear} is ready — copied ${result.copied.tasks} tasks, ${result.copied.scheduleSlots} schedule blocks, ${result.copied.registrationClasses} classes, and more from VBS ${result.fromYear}. Review dates and curriculum on the plan overview.`,
+        `A new VBS ${result.toYear} event is ready — copied ${result.copied.tasks} tasks, ${result.copied.scheduleSlots} schedule blocks, ${result.copied.registrationClasses} classes, and more from VBS ${result.fromYear}. The source event is unchanged.`,
       );
       onCopied?.();
       await reload();
@@ -113,13 +115,13 @@ export function SeasonCopyPanel({
 
   return (
     <section className="vbs-panel vbs-season-copy">
-      <h2 className="vbs-task-team-section-title">Start a new VBS year</h2>
+      <h2 className="vbs-task-team-section-title">Start another VBS</h2>
       <p className="muted vbs-task-field-hint">
         Active season: <strong>VBS {options.activeVbsYear}</strong>
-        {options.planYear !== null ? ` · Plan year: VBS ${options.planYear}` : ""}. Copy last year&apos;s plan,
-        schedule shape, milestones, supplies list, registration class templates, and the plan workbook (prayer,
-        placements, schedule columns, timeline) so directors edit instead of rebuilding from zero. Workbook dates
-        move with the new VBS week when you copy. Parent and student records stay in their original VBS year.
+        {options.planYear !== null ? ` · Plan year: VBS ${options.planYear}` : ""}. Copy a plan into a new project
+        — a later year, or another week in the same year. The source stays in place with its own kids and staff.
+        Parent and student records are not copied. If you leave the name blank, it is saved as the week dates
+        (for example Jun 8–12), with (2) added if that name is already used.
       </p>
       {options.sourceYears.length === 0 ? (
         <p className="vbs-plan-callout vbs-plan-callout-readonly">
@@ -161,6 +163,16 @@ export function SeasonCopyPanel({
           />
         </label>
         <label className="vbs-task-field">
+          <span className="vbs-task-field-label">Session name</span>
+          <input
+            value={sessionName}
+            onChange={(e) => setSessionName(e.target.value)}
+            placeholder="optional — uses week dates"
+            disabled={busy}
+          />
+          <span className="muted vbs-task-field-hint">Leave blank to auto-name from the week dates, uniquely.</span>
+        </label>
+        <label className="vbs-task-field">
           <span className="vbs-task-field-label">Week start (optional)</span>
           <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} disabled={busy} />
           <span className="muted vbs-task-field-hint">Leave blank to shift last year&apos;s dates forward.</span>
@@ -172,7 +184,7 @@ export function SeasonCopyPanel({
         <div className="vbs-task-add-actions">
           <AddActionButton
             type="submit"
-            label={busy ? "Copying…" : "Copy into new year"}
+            label={busy ? "Copying…" : "Copy into a new event"}
             disabled={busy || options.sourceYears.length === 0 || fromYear === "" || toYear === ""}
           />
         </div>

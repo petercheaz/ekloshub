@@ -15,6 +15,16 @@ import { hashVbsDefaultPassword } from "../vbs-password.js";
 
 const photoDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "seed-photos");
 
+function hashFromEnvPassword(...names: string[]) {
+  for (const name of names) {
+    const value = process.env[name]?.trim();
+    if (value) {
+      return bcrypt.hashSync(value, 10);
+    }
+  }
+  throw new Error(`Set ${names.join(" or ")} in .env (do not put passwords in source)`);
+}
+
 const PATTI_USERNAME = "patti.tam@gmail.com";
 const PATTI_PHONE = "4256613847";
 
@@ -57,7 +67,7 @@ export async function seedIfEmpty() {
     return;
   }
 
-  const passwordHash = bcrypt.hashSync(process.env.AUTH_PASSWORD ?? "vbs-dev", 10);
+  const passwordHash = hashFromEnvPassword("AUTH_PASSWORD");
 
   for (const username of seedUsers) {
     await db().query(
@@ -144,8 +154,7 @@ export async function seedIfEmpty() {
 }
 
 export async function ensureKnownAccounts() {
-  const peterPassword = process.env.PCHEAZ_PASSWORD ?? "Superadmin!1";
-  const passwordHash = bcrypt.hashSync(peterPassword, 10);
+  const passwordHash = hashFromEnvPassword("PCHEAZ_PASSWORD", "AUTH_PASSWORD");
   const username = "pcheaz@gmail.com";
   await db().query(
     `INSERT INTO users (username, password_hash, password_custom, verified, platform_admin, email, first_name, last_name, phone)
@@ -202,7 +211,7 @@ export async function ensureKnownAccounts() {
   await ensureSetupSeed(passwordHash);
 }
 
-export async function ensureSetupSeed(passwordHash = bcrypt.hashSync(process.env.AUTH_PASSWORD ?? "vbs-dev", 10)) {
+export async function ensureSetupSeed(passwordHash = hashFromEnvPassword("AUTH_PASSWORD")) {
   for (const username of seedUsers) {
     await db().query(
       "INSERT INTO users (username, password_hash, verified, platform_admin, vbs_default_all_filters) VALUES ($1, $2, $3, $4, TRUE) ON CONFLICT (username) DO NOTHING",

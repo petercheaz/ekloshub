@@ -36,6 +36,7 @@ export type OrgMember = {
   usesDefaultPassword: boolean;
   teamAdminTeamIds: string[];
   vbsSeasonYear: number;
+  vbsEventIds?: string[];
   addedAt: string;
   removedAt: string | null;
   backgroundCheckStatus: "not_started" | "pending" | "cleared";
@@ -47,7 +48,37 @@ export type VolunteerComplianceVolunteer = {
   firstName: string;
   lastName: string;
   email: string;
+  vbsSeasonYear?: number;
   backgroundCheckStatus: "not_started" | "pending" | "cleared";
+};
+
+export type OrgVbsEvent = {
+  id: string;
+  year: number;
+  name: string;
+  label: string;
+  programTitle: string;
+  publisherId: string;
+  publisherName: string;
+  startDate: string;
+  endDate: string;
+  isCurrent: boolean;
+  isDefault: boolean;
+  hasPlan: boolean;
+  hasRegistrations: boolean;
+  hasMembers: boolean;
+};
+
+export type OrgVbsEventsPayload = {
+  currentVbsYear: number;
+  currentEventId: string | null;
+  defaultEventId: string | null;
+  livePlanYear: number | null;
+  events: OrgVbsEvent[];
+  canSwitchEvents: boolean;
+  canMakeCurrent: boolean;
+  canCreateEvent: boolean;
+  createdEventId?: string;
 };
 
 export type VolunteerComplianceWorkspace = {
@@ -535,12 +566,15 @@ export type VbsRegistrationStaffMember = {
   lastName: string;
   email: string;
   role: OrgRole;
+  vbsSeasonYear?: number;
 };
 
 export type VbsRegistrationWorkspace = {
   students: VbsRegistrationStudent[];
   staffMembers: VbsRegistrationStaffMember[];
   activeVbsYear: number;
+  viewingYear?: number;
+  viewingEventId?: string | null;
   viewAllSeasons: boolean;
   viewSeason: number | null;
   registrationSeasons: number[];
@@ -599,6 +633,13 @@ export type VbsPlanWorkspace = {
   boardPosts: VbsBoardPost[];
   teams: OrgTeam[];
   canWrite: boolean;
+  isArchiveView?: boolean;
+  viewingYear?: number;
+  viewingEventId?: string | null;
+  currentVbsYear?: number;
+  currentEventId?: string | null;
+  livePlanYear?: number | null;
+  archiveCapturedAt?: string;
   notificationPrefs: { notifyEmail: boolean; notifySms: boolean };
   calendarDefaultView: CalendarViewMode;
   calendarReminders: VbsCalendarReminder[];

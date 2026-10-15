@@ -6,7 +6,7 @@ export function BrandLogo({ className = "" }: { className?: string }) {
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
       role="img"
-      aria-label="VBS Resources"
+      aria-label="EklosHub"
     >
       <g
         stroke="currentColor"

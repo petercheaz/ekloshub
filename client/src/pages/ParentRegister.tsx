@@ -147,7 +147,7 @@ export default function ParentRegisterPage() {
         <p className="status">{error}</p>
         <p className="muted">
           Ask your church for an updated registration link, or{" "}
-          <Link to="/login">sign in</Link> if you volunteer on VBS Resources.
+          <Link to="/login">sign in</Link> if you volunteer on EklosHub.
         </p>
       </div>
     );
@@ -194,7 +194,7 @@ export default function ParentRegisterPage() {
         </p>
         <p className="muted public-register-lead">
           Parents and guardians can register here — no account required. Church staff review submissions in
-          VBS Resources.
+          EklosHub.
         </p>
       </header>
 
@@ -358,11 +358,11 @@ export default function ParentRegisterPage() {
               Primary contact email
               <input
                 type="email"
+                required
                 autoComplete="email"
                 disabled={submitting}
                 value={draft.contact1Email}
                 onChange={(e) => setDraft({ ...draft, contact1Email: e.target.value })}
-                placeholder="Optional — for VBS updates"
               />
             </label>
           </div>

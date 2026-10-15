@@ -38,11 +38,11 @@ export default function LoginPage() {
     <div className="page login-page">
       <div className="login-brand">
         <BrandLogo className="login-logo" />
-        <p className="brand-wordmark">VBS Resources</p>
+        <p className="brand-wordmark">EklosHub</p>
       </div>
       <form className="login-card" onSubmit={onSubmit}>
         <h1>Sign in</h1>
-        <p className="tagline">Sign in to read and add VBS curriculum reviews.</p>
+        <p className="tagline">Sign in to EklosHub to read and add VBS curriculum reviews.</p>
         <label htmlFor="username">Username or email</label>
         <input
           id="username"

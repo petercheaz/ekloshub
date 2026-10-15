@@ -14,11 +14,19 @@ export function isOrgSeasonAdmin(role: OrgRole | null, platformAdmin: boolean) {
   return platformAdmin || role === "org_admin";
 }
 
+export function parseSeasonYear(value: unknown): number | undefined {
+  const year = typeof value === "number" ? value : Number(value);
+  if (!Number.isInteger(year) || year < 2000 || year > 2100) {
+    return undefined;
+  }
+  return year;
+}
+
 export async function getActiveVbsYear(organizationId: string) {
-  const result = await db().query<{ active_vbs_year: number | null; plan_year: number | null }>(
-    `SELECT o.active_vbs_year, p.year AS plan_year
+  const result = await db().query<{ active_vbs_year: number | null; event_year: number | null }>(
+    `SELECT o.active_vbs_year, e.year AS event_year
      FROM organizations o
-     LEFT JOIN vbs_plans p ON p.organization_id = o.id
+     LEFT JOIN vbs_events e ON e.id = o.active_vbs_event_id
      WHERE o.id = $1`,
     [organizationId],
   );
@@ -26,11 +34,21 @@ export async function getActiveVbsYear(organizationId: string) {
   if (!row) {
     return new Date().getFullYear();
   }
-  return row.active_vbs_year ?? row.plan_year ?? new Date().getFullYear();
+  return row.event_year ?? row.active_vbs_year ?? new Date().getFullYear();
 }
 
 export async function syncActiveVbsYear(organizationId: string, year: number) {
-  await db().query(`UPDATE organizations SET active_vbs_year = $2 WHERE id = $1`, [organizationId, year]);
+  await db().query(
+    `UPDATE organizations SET active_vbs_year = $2
+     WHERE id = $1`,
+    [organizationId, year],
+  );
+  await db().query(
+    `UPDATE vbs_events SET year = $2, updated_at = NOW()
+     WHERE id = (SELECT active_vbs_event_id FROM organizations WHERE id = $1)
+       AND (SELECT COUNT(*) FROM vbs_events WHERE organization_id = $1 AND year = $2) = 1`,
+    [organizationId, year],
+  );
 }
 
 export async function getMembershipSeason(

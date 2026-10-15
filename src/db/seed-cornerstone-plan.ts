@@ -201,21 +201,26 @@ export async function ensureCornerstoneSamplePlan(orgId: string, username: strin
   const endDate = isoDate(2026, 7, 24);
   const coordinatorNotes = `Rainforest Falls week at Cornerstone Seattle. ${SAMPLE_MARKER}`;
 
+  const canonicalEventId = `evt-${ORG_ID}-2026`;
   const existingPlan = await db().query<{ id: string; coordinator_notes: string }>(
-    "SELECT id, coordinator_notes FROM vbs_plans WHERE organization_id = $1",
-    [orgId],
+    `SELECT id, coordinator_notes FROM vbs_plans
+     WHERE id = $1 OR event_id = $2
+     ORDER BY CASE WHEN id = $1 THEN 0 ELSE 1 END
+     LIMIT 1`,
+    [PLAN_ID, canonicalEventId],
   );
   const planId = existingPlan.rows[0]?.id ?? PLAN_ID;
 
   if (!existingPlan.rows[0]) {
     await db().query(
       `INSERT INTO vbs_plans (
-         id, organization_id, year, title, publisher_id, program_title, location,
+         id, organization_id, event_id, year, title, publisher_id, program_title, location,
          start_date, end_date, daily_start, daily_end, expected_kids, coordinator_notes, updated_at
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
       [
         PLAN_ID,
         orgId,
+        canonicalEventId,
         2026,
         "VBS 2026 · Rainforest Falls",
         "group",
@@ -236,9 +241,9 @@ export async function ensureCornerstoneSamplePlan(orgId: string, username: strin
          year = $2, title = $3, publisher_id = $4, program_title = $5, location = $6,
          start_date = $7, end_date = $8, daily_start = $9, daily_end = $10,
          expected_kids = $11, coordinator_notes = $12, updated_at = $13
-       WHERE organization_id = $1`,
+       WHERE id = $1`,
       [
-        orgId,
+        PLAN_ID,
         2026,
         "VBS 2026 · Rainforest Falls",
         "group",
@@ -687,7 +692,8 @@ export async function ensureCornerstoneSamplePlan(orgId: string, username: strin
   for (const post of boardPosts) {
     await db().query(
       `INSERT INTO vbs_board_posts (id, plan_id, title, body, created_by, created_at, team_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+       VALUES ($1,$2,$3,$4,$5,$6,$7)
+       ON CONFLICT (id) DO NOTHING`,
       [post.id, planId, post.title, post.body, username, post.createdAt, post.teamId],
     );
     for (const reply of post.replies) {

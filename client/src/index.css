@@ -4928,6 +4928,38 @@ legend {
   max-width: 100%;
 }
 
+.vbs-context-event-field {
+  display: flex;
+  align-items: center;
+  min-width: min(100%, 26rem);
+}
+
+.vbs-context-add-event {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
+  align-items: end;
+  margin-top: 0.55rem;
+}
+
+.vbs-context-add-event .vbs-context-event-field {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.2rem;
+}
+
+.vbs-context-add-event input {
+  min-width: 10rem;
+}
+
+.vbs-context-event-field select {
+  width: 100%;
+}
+
+.vbs-members-year-toggle {
+  margin: 0.35rem 0 0.75rem;
+}
+
 .vbs-context-actions {
   display: flex;
   flex-wrap: wrap;

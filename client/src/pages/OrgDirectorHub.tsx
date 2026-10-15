@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { OrgWorkspacePage } from "../OrgWorkspacePage";
+import { useOrgVbs } from "../org-vbs";
 import { orgPath, useOrgs } from "../orgs";
 import type { OrgDetail, VbsPlanWorkspace, VbsRegistrationWorkspace } from "../types";
 import { milestoneIsDone } from "../vbs-milestone-status";
@@ -24,6 +25,7 @@ export default function OrgDirectorHubPage() {
   const { orgId = "" } = useParams();
   const { user } = useAuth();
   const { canAdmin, canManageMembers, current: org } = useOrgs();
+  const { viewingYear, viewingEventId, eventsReady, orgEventEpoch, refreshEvents } = useOrgVbs();
   const [detail, setDetail] = useState<OrgDetail | null>(null);
   const [plan, setPlan] = useState<VbsPlanWorkspace | null>(null);
   const [registration, setRegistration] = useState<VbsRegistrationWorkspace | null>(null);
@@ -31,11 +33,14 @@ export default function OrgDirectorHubPage() {
   const [seasonCopyKey, setSeasonCopyKey] = useState(0);
 
   useEffect(() => {
+    if (!eventsReady) {
+      return;
+    }
     let cancelled = false;
     void Promise.all([
       api.organization(orgId).catch(() => null),
-      api.vbsPlan(orgId).catch(() => null),
-      api.vbsRegistration(orgId).catch(() => null),
+      api.vbsPlan(orgId, viewingYear ?? undefined).catch(() => null),
+      api.vbsRegistration(orgId, viewingYear ?? undefined).catch(() => null),
     ]).then(([orgDetail, planData, regData]) => {
       if (cancelled) {
         return;
@@ -54,7 +59,7 @@ export default function OrgDirectorHubPage() {
     return () => {
       cancelled = true;
     };
-  }, [orgId]);
+  }, [eventsReady, orgEventEpoch, orgId, viewingEventId, viewingYear]);
 
   const planDays = useMemo(() => enumeratePlanDays(plan?.plan ?? null), [plan?.plan]);
   const scheduleDayCount = useMemo(() => {
@@ -64,7 +69,8 @@ export default function OrgDirectorHubPage() {
 
   const openTasks = plan?.tasks.filter((t) => t.status !== "done").length ?? 0;
   const openMilestones = plan?.checklist.filter((c) => !milestoneIsDone(c)).length ?? 0;
-  const memberCount = detail?.members.length ?? 0;
+  const memberCount =
+    detail?.members.filter((member) => !viewingYear || member.vbsSeasonYear === viewingYear).length ?? 0;
   const teamCount = detail?.teams.length ?? 0;
   const registered = registration?.summary.total ?? 0;
 
@@ -197,8 +203,9 @@ export default function OrgDirectorHubPage() {
           orgId={orgId}
           onCopied={() => {
             setSeasonCopyKey((k) => k + 1);
-            void api.vbsPlan(orgId).then(setPlan).catch(() => undefined);
-            void api.vbsRegistration(orgId).then(setRegistration).catch(() => undefined);
+            void refreshEvents();
+            void api.vbsPlan(orgId, viewingYear ?? undefined).then(setPlan).catch(() => undefined);
+            void api.vbsRegistration(orgId, viewingYear ?? undefined).then(setRegistration).catch(() => undefined);
           }}
         />
       ) : null}

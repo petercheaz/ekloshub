@@ -117,7 +117,7 @@ export async function createInvites(
     );
     const link = inviteLink(token, email);
     const text = [
-      `You are invited to join ${orgName} on VBS Resources.`,
+      `You are invited to join ${orgName} on EklosHub.`,
       ``,
       `Open this link: ${link}`,
       `Enter this keyword: ${keyword}`,

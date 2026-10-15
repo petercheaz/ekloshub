@@ -19,6 +19,7 @@ import {
   type SnackMenuItem,
 } from "./vbs-cooking-plan-types.js";
 import { SNACK_MENU_DAYS, type SnackMenuDayId } from "./vbs-snacks-menu-days.js";
+import { getActiveVbsYear, parseSeasonYear } from "./vbs-org-season.js";
 import {
   COMMON_REGISTRATION_ALLERGIES,
   formatAllergiesSummary,
@@ -109,7 +110,23 @@ async function savePlan(organizationId: string, username: string, plan: CookingP
   );
 }
 
-export async function getCookingPlanWorkspace(organizationId: string, username: string) {
+async function loadAllergyRegistrations(organizationId: string, year: number, eventId?: string | null) {
+  return db().query<RegistrationRow>(
+    `SELECT child_full_name, allergies_common, allergies_other, class_id FROM vbs_registrations
+     WHERE organization_id = $1 AND (
+       ($3::text IS NOT NULL AND vbs_event_id = $3)
+       OR ($3::text IS NULL AND COALESCE(vbs_season_year, $2) = $2)
+     )
+     ORDER BY child_full_name`,
+    [organizationId, year, eventId ?? null],
+  );
+}
+
+export async function getCookingPlanWorkspace(
+  organizationId: string,
+  username: string,
+  viewingYear?: number,
+) {
   const access = await accessContext(organizationId, username);
   if ("error" in access) {
     return access;
@@ -118,10 +135,10 @@ export async function getCookingPlanWorkspace(organizationId: string, username: 
   const menu = await loadPlanRow(organizationId);
   const row = menu.rows[0];
   const plan = planFromRow(row?.menu_json ?? "", row?.menu_text ?? "");
-  const registrations = await db().query<RegistrationRow>(
-    `SELECT child_full_name, allergies_common, allergies_other, class_id FROM vbs_registrations WHERE organization_id = $1 ORDER BY child_full_name`,
-    [organizationId],
-  );
+  const { resolveRequestedVbsEvent } = await import("./vbs-event-context.js");
+  const viewingEvent = await resolveRequestedVbsEvent(organizationId);
+  const year = viewingEvent?.year ?? parseSeasonYear(viewingYear) ?? (await getActiveVbsYear(organizationId));
+  const registrations = await loadAllergyRegistrations(organizationId, year, viewingEvent?.id);
   const allergy = buildAllergySummary(registrations.rows);
   const teams = await db().query<{ id: string; name: string }>(
     `SELECT id, name FROM org_teams WHERE organization_id = $1 ORDER BY name`,
@@ -254,10 +271,8 @@ export async function generateCookingPlan(
   }
 
   const org = await db().query<{ name: string }>(`SELECT name FROM organizations WHERE id = $1`, [organizationId]);
-  const registrations = await db().query<RegistrationRow>(
-    `SELECT child_full_name, allergies_common, allergies_other FROM vbs_registrations WHERE organization_id = $1`,
-    [organizationId],
-  );
+  const year = parseSeasonYear(input.year) ?? (await getActiveVbsYear(organizationId));
+  const registrations = await loadAllergyRegistrations(organizationId, year);
   const menu = await loadPlanRow(organizationId);
   const extraInstructions = menu.rows[0]?.extra_instructions ?? "";
   let plan = planFromRow(menu.rows[0]?.menu_json ?? "", menu.rows[0]?.menu_text ?? "");

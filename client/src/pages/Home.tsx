@@ -6,7 +6,7 @@ const publicLinks = [
   { to: "/share", title: "Share Resources", blurb: "Gift kits, décor, and supplies to other churches." },
   { to: "/setup", title: "Show Your Setup", blurb: "Photos and notes from your VBS rooms." },
   { to: "/messages", title: "Direct Message", blurb: "Reach teammates in your org or site-wide." },
-  { to: "/about", title: "About", blurb: "What VBS Resources is for and how to use it." },
+  { to: "/about", title: "About", blurb: "What EklosHub is for and how to use it." },
 ];
 
 export default function HomePage() {
@@ -18,7 +18,7 @@ export default function HomePage() {
   return (
     <div className="empty-main">
       <header className="landing-hero">
-        <p className="eyebrow">VBS Resources</p>
+        <p className="eyebrow">EklosHub</p>
         <h1>Plan, register, and run VBS in one place</h1>
         <p className="tagline">
           Use the rail for public tools and curriculum research. Open your organization at Director home to plan the

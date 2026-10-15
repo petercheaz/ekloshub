@@ -33,6 +33,7 @@ documentedTest(
     await publicPage.getByLabel(/^Male \(M\)$/i).check();
     await publicPage.getByLabel(/primary contact full name/i).fill("E2E Parent");
     await publicPage.getByLabel(/primary contact phone/i).fill("+12065550100");
+    await publicPage.getByLabel(/primary contact email/i).fill("e2e.parent@example.com");
     await publicPage.getByRole("checkbox", { name: /understand and agree/i }).check();
     await publicPage.getByRole("button", { name: /submit registration/i }).click();
     await expect(publicPage.getByRole("heading", { name: /thank you/i })).toBeVisible({ timeout: 20_000 });
