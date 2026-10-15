@@ -30,6 +30,7 @@ documentedTest(
 
     const childFullName = testName("public_child");
     await publicPage.getByLabel(/^full name$/i).fill(childFullName);
+    await publicPage.getByLabel(/^Male \(M\)$/i).check();
     await publicPage.getByLabel(/primary contact full name/i).fill("E2E Parent");
     await publicPage.getByLabel(/primary contact phone/i).fill("+12065550100");
     await publicPage.getByRole("checkbox", { name: /understand and agree/i }).check();

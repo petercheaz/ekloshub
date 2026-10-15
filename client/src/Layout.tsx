@@ -267,10 +267,18 @@ function OrgGroup({
       </button>
       {showChildren ? (
         <div className="org-links">
+          {collapsed ? null : <p className="menu-label org-links-label">Run VBS</p>}
+          <RailLink to={`/org/${org.id}`} icon={ICONS.home} label="Director home" collapsed={false} end />
+          <RailLink
+            to={`/org/${org.id}/my-week`}
+            icon={ICONS.calendar}
+            label="My VBS week"
+            collapsed={false}
+          />
           <RailLink
             to={`/org/${org.id}/vbs-plan`}
             icon={ICONS.calendar}
-            label="VBS Plan"
+            label="VBS plan"
             collapsed={false}
           />
           <RailLink
@@ -282,13 +290,50 @@ function OrgGroup({
           <RailLink
             to={`/org/${org.id}/cooking-plan`}
             icon={ICONS.food}
-            label="Cooking Plan"
+            label="Cooking plan"
             collapsed={false}
           />
+          {collapsed ? null : <p className="menu-label org-links-label">People</p>}
+          {org.role === "org_admin" ? (
+            <RailLink
+              to={`/org/${org.id}/teams`}
+              icon={ICONS.users}
+              label="Teams"
+              collapsed={false}
+            />
+          ) : null}
+          {org.role === "org_admin" || org.role === "registration_admin" ? (
+            <RailLink
+              to={`/org/${org.id}/manage`}
+              icon={ICONS.settings}
+              label="Members & invites"
+              collapsed={false}
+            />
+          ) : null}
+          {org.role === "org_admin" || org.role === "registration_admin" ? (
+            <RailLink
+              to={`/org/${org.id}/volunteers`}
+              icon={ICONS.users}
+              label="Background checks"
+              collapsed={false}
+            />
+          ) : null}
+          {org.role === "org_admin" ||
+          org.role === "org_team_admin" ||
+          org.role === "org_write" ||
+          org.role === "registration_admin" ? (
+            <RailLink
+              to={`/org/${org.id}/contact`}
+              icon={ICONS.contact}
+              label="Communicate"
+              collapsed={false}
+            />
+          ) : null}
+          {collapsed ? null : <p className="menu-label org-links-label">Creative</p>}
           <RailLink
             to={`/org/${org.id}/room-design`}
             icon={ICONS.sparkle}
-            label="Room Design"
+            label="Room design"
             collapsed={false}
           />
           <RailLink
@@ -297,30 +342,6 @@ function OrgGroup({
             label="Photoshoppe Lite"
             collapsed={false}
           />
-          {org.role === "org_admin" || org.role === "org_team_admin" ? (
-            <RailLink
-              to={`/org/${org.id}/contact`}
-              icon={ICONS.contact}
-              label="Contact org & teams"
-              collapsed={false}
-            />
-          ) : null}
-          {org.role === "org_admin" || org.role === "registration_admin" ? (
-            <RailLink
-              to={`/org/${org.id}/manage`}
-              icon={ICONS.settings}
-              label="Manage Org"
-              collapsed={false}
-            />
-          ) : null}
-          {org.role === "org_admin" ? (
-            <RailLink
-              to={`/org/${org.id}/teams`}
-              icon={ICONS.users}
-              label="Manage Teams"
-              collapsed={false}
-            />
-          ) : null}
         </div>
       ) : null}
     </div>
@@ -332,14 +353,16 @@ function RailLink({
   icon,
   label,
   collapsed,
+  end = false,
 }: {
   to: string;
   icon: string;
   label: string;
   collapsed: boolean;
+  end?: boolean;
 }) {
   return (
-    <NavLink to={to} className="nav-item" title={label}>
+    <NavLink to={to} end={end} className="nav-item" title={label}>
       <Icon path={icon} />
       {collapsed ? null : <span className="nav-label">{label}</span>}
     </NavLink>
@@ -363,6 +386,7 @@ function orgInitials(name: string) {
 }
 
 const ICONS = {
+  home: "M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8h5z",
   info: "M11 7h2v2h-2V7zm0 4h2v6h-2v-6zm1-9C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z",
   reviews:
     "M18 2H6a2 2 0 0 0-2 2v16l4-2 4 2 4-2 4 2V4a2 2 0 0 0-2-2zm-1 13H7v-2h10zm0-4H7V9h10z",

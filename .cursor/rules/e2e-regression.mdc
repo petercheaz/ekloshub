@@ -5,6 +5,12 @@ alwaysApply: true
 
 # E2E regression discipline
 
+## When to run the suite
+
+- **Do not** run `npm run validate`, `npm run test:e2e`, or Playwright unless the user invokes **`/validate`** or explicitly asks to run E2E / validate (e.g. “run validate”, “fix E2E”).
+- Other tasks (features, refactors, reviews): **`npm run build`** (or targeted checks) is enough unless the user requests validation.
+- When **`/validate`** is invoked, follow `/.cursor/skills/validate/SKILL.md` through **`npm run validate`** before finishing that validate task.
+
 ## When tests fail
 
 1. **Assume the product regressed** until you prove otherwise (intentional spec change, env/persona drift).
@@ -18,6 +24,4 @@ alwaysApply: true
 - New **route or nav section** → extend `routes-org.spec.ts` / `routes-global.spec.ts` or the deepest existing spec; add row in `e2e/site-coverage.ts`.
 - **RBAC / tab visibility** → `roles-access.spec.ts`.
 - **Create/update/delete** with API → extend or add `crud-*.spec.ts` with `test_` prefix + purge; raise `depth` to `crud` or `workflow` in `site-coverage.ts`.
-- Run **`npm run validate`** before finishing; all tests must pass without muting failures.
-
-Invoke skill **`/validate`** for the full workflow (`/.cursor/skills/validate/SKILL.md`).
+- After changing specs or coverage, remind the user to run **`/validate`** when they want the full suite — do not run it automatically on unrelated work.

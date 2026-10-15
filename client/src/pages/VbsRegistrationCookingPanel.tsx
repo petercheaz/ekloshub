@@ -1,4 +1,5 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { AddActionButton } from "../CollapsibleForm";
 import { api } from "../api";
 import { useOrgVbs } from "../org-vbs";
 import { vbsProgramsMatching, vbsYearOptions } from "../vbs-cascade";
@@ -221,9 +222,7 @@ export function VbsRegistrationCookingPanel({
             />
           </label>
           <div className="vbs-plan-form-actions">
-            <button type="submit" className="ghost" disabled={busy}>
-              Save notes
-            </button>
+            <AddActionButton type="submit" label="Save notes" disabled={busy} />
           </div>
         </form>
       </section>
@@ -323,16 +322,15 @@ export function VbsRegistrationCookingPanel({
             </select>
           </label>
         </div>
-        <button
-          type="button"
-          className="vbs-plan-save"
+        <AddActionButton
+          label={
+            regenerateDays.length === SNACK_MENU_DAYS.length
+              ? "Generate full week"
+              : `Generate ${regenerateDays.length} selected day(s)`
+          }
           disabled={busy || !themeTitle}
           onClick={() => void generateMenu()}
-        >
-          {regenerateDays.length === SNACK_MENU_DAYS.length
-            ? "Generate full week"
-            : `Generate ${regenerateDays.length} selected day(s)`}
-        </button>
+        />
         {status ? <p className="tagline">{status}</p> : null}
       </section>
 

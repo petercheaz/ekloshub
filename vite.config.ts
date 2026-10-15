@@ -15,6 +15,8 @@ export default defineConfig({
       "@org-permissions": path.join(sharedSrc, "org-permissions.ts"),
       "@vbs-snacks-menu-days": path.join(sharedSrc, "vbs-snacks-menu-days.ts"),
       "@vbs-cooking-plan-types": path.join(sharedSrc, "vbs-cooking-plan-types.ts"),
+      "@vbs-rotation-stations": path.join(sharedSrc, "vbs-rotation-stations.ts"),
+      "@vbs-workbook-stations": path.join(sharedSrc, "vbs-workbook-stations.ts"),
     },
   },
   server: {

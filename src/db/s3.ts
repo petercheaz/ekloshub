@@ -7,18 +7,35 @@ import {
 } from "@aws-sdk/client-s3";
 import { getMembership } from "../orgs.js";
 import { isPlatformAdmin } from "../users.js";
-import { s3 } from "./config.js";
+import { s3, s3UsesCustomEndpoint } from "./config.js";
 import { db } from "./pool.js";
 
-export const s3Client = new S3Client({
-  region: s3.region,
-  endpoint: s3.endpoint,
-  forcePathStyle: true,
-  credentials: {
-    accessKeyId: s3.accessKey,
-    secretAccessKey: s3.secretKey,
-  },
-});
+function buildS3Client() {
+  const base = { region: s3.region };
+  if (s3UsesCustomEndpoint()) {
+    return new S3Client({
+      ...base,
+      endpoint: s3.endpoint,
+      forcePathStyle: true,
+      credentials: {
+        accessKeyId: s3.accessKey ?? "",
+        secretAccessKey: s3.secretKey ?? "",
+      },
+    });
+  }
+  if (s3.accessKey && s3.secretKey) {
+    return new S3Client({
+      ...base,
+      credentials: {
+        accessKeyId: s3.accessKey,
+        secretAccessKey: s3.secretKey,
+      },
+    });
+  }
+  return new S3Client(base);
+}
+
+export const s3Client = buildS3Client();
 
 export function objectUrl(key: string) {
   if (!key) {

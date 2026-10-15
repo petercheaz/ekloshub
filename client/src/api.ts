@@ -30,6 +30,7 @@ import type {
   VbsPlanWorkspace,
   VbsRegistrationStudent,
   VbsRegistrationWorkspace,
+  PublicFamilyPage,
   PublicRegistrationForm,
 } from "./types";
 import type { EditorSnapshot } from "./photoshoppe/types";
@@ -110,6 +111,42 @@ export const api = {
   logout: () => request<{ ok: boolean }>("/api/logout", { method: "POST" }),
   organizations: () => request<{ organizations: Organization[] }>("/api/orgs"),
   organization: (id: string) => request<OrgDetail>(`/api/orgs/${id}`),
+  seasonCopyOptions: (orgId: string) =>
+    request<import("./SeasonCopyPanel").SeasonCopyOptions>(`/api/orgs/${orgId}/season-copy`),
+  copyVbsSeason: (
+    orgId: string,
+    input: { fromYear: number; toYear: number; startDate?: string; endDate?: string },
+  ) =>
+    request<{
+      ok: boolean;
+      fromYear: number;
+      toYear: number;
+      startDate: string;
+      endDate: string;
+      copied: {
+        stations: number;
+        tasks: number;
+        scheduleSlots: number;
+        checklistItems: number;
+        supplies: number;
+        registrationClasses: number;
+      };
+    }>(`/api/orgs/${orgId}/season-copy`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  saveSeasonSnapshot: (orgId: string) =>
+    request<{ ok: boolean; seasonYear: number }>(`/api/orgs/${orgId}/season-snapshot`, {
+      method: "POST",
+      body: JSON.stringify({}),
+    }),
+  volunteerCompliance: (orgId: string) =>
+    request<import("./types").VolunteerComplianceWorkspace>(`/api/orgs/${orgId}/volunteer-compliance`),
+  updateVolunteerBackgroundCheck: (orgId: string, username: string, status: string) =>
+    request<import("./types").VolunteerComplianceWorkspace>(
+      `/api/orgs/${orgId}/volunteer-compliance/${encodeURIComponent(username)}`,
+      { method: "PATCH", body: JSON.stringify({ status }) },
+    ),
   createOrganization: (input: { name: string; address: string; contact: string }) =>
     request<Organization>("/api/orgs", {
       method: "POST",
@@ -134,6 +171,8 @@ export const api = {
       newPassword?: string;
       resetPasswordToDefault?: boolean;
       teamAdminTeamIds?: string[];
+      vbsSeasonYear?: number;
+      restoreMember?: boolean;
     },
   ) =>
     request<OrgDetail>(`/api/orgs/${id}/members/${encodeURIComponent(username)}`, {
@@ -151,6 +190,14 @@ export const api = {
       method: "POST",
       body: JSON.stringify(input),
     }),
+  sendParentContact: (
+    orgId: string,
+    input: { subject: string; message: string; scope: "all" | "class"; classId?: string },
+  ) =>
+    request<{ ok: boolean; recipientCount: number; skippedNoEmail?: number }>(
+      `/api/orgs/${orgId}/contact/parents`,
+      { method: "POST", body: JSON.stringify(input) },
+    ),
   inviteToOrganization: (id: string, emails: string, role: import("./types").OrgRole = "org_read") =>
     request<{ invites: OrgInvite[] }>(`/api/orgs/${id}/invites`, {
       method: "POST",
@@ -291,6 +338,16 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify(input),
     }),
+  publicFamilyPage: (token: string) =>
+    publicRequest<PublicFamilyPage>(`/api/public/family/${encodeURIComponent(token)}`),
+  updateVbsRegistrationFamilyPage: (
+    orgId: string,
+    input: { enabled?: boolean; regenerateToken?: boolean },
+  ) =>
+    request<{ enabled: boolean; link: string }>(`/api/orgs/${orgId}/vbs-registration/family-page`, {
+      method: "PATCH",
+      body: JSON.stringify(input),
+    }),
   vbsRegistration: (orgId: string) => request<VbsRegistrationWorkspace>(`/api/orgs/${orgId}/vbs-registration`),
   saveVbsRegistrationStudent: (orgId: string, input: Record<string, unknown>) =>
     request<{ student: VbsRegistrationStudent }>(`/api/orgs/${orgId}/vbs-registration/students`, {
@@ -335,11 +392,47 @@ export const api = {
       method: "PUT",
       body: JSON.stringify(input),
     }),
+  removeVbsRegistrationClassStudent: (orgId: string, classId: string, studentId: string) =>
+    request<{ ok: boolean }>(
+      `/api/orgs/${orgId}/vbs-registration/classes/${classId}/students/${encodeURIComponent(studentId)}`,
+      { method: "DELETE" },
+    ),
   removeVbsRegistrationClassStaff: (orgId: string, classId: string, username: string) =>
     request<{ ok: boolean }>(
       `/api/orgs/${orgId}/vbs-registration/classes/${classId}/staff/${encodeURIComponent(username)}`,
       { method: "DELETE" },
     ),
+  reorderVbsRegistrationClasses: (orgId: string, classIds: string[]) =>
+    request<{ ok: boolean }>(`/api/orgs/${orgId}/vbs-registration/classes/order`, {
+      method: "PATCH",
+      body: JSON.stringify({ classIds }),
+    }),
+  autoAssignVbsRegistrationStudentsByAge: (orgId: string) =>
+    request<{ ok: boolean; placedStudents: number; unplaced: { name: string; age: number }[] }>(
+      `/api/orgs/${orgId}/vbs-registration/classes/auto-assign-students-by-age`,
+      { method: "POST" },
+    ),
+  reorderVbsRegistrationClassStudents: (
+    orgId: string,
+    classId: string | null,
+    studentIds: string[],
+  ) =>
+    request<{ ok: boolean }>(
+      classId
+        ? `/api/orgs/${orgId}/vbs-registration/classes/${classId}/students/order`
+        : `/api/orgs/${orgId}/vbs-registration/students/unassigned/order`,
+      { method: "PATCH", body: JSON.stringify({ studentIds }) },
+    ),
+  reorderVbsRegistrationClassStaff: (
+    orgId: string,
+    classId: string,
+    role: "leader" | "teacher" | "helper",
+    usernames: string[],
+  ) =>
+    request<{ ok: boolean }>(`/api/orgs/${orgId}/vbs-registration/classes/${classId}/staff/order`, {
+      method: "PATCH",
+      body: JSON.stringify({ role, usernames }),
+    }),
   vbsRegistrationCooking: (orgId: string) =>
     request<{
       cookingTeamId: string;
@@ -476,6 +569,13 @@ export const api = {
     }),
   deleteVbsScheduleSlot: (orgId: string, slotId: string) =>
     request<{ ok: boolean }>(`/api/orgs/${orgId}/vbs-plan/schedule/${slotId}`, { method: "DELETE" }),
+  saveVbsSupplyItem: (orgId: string, input: Record<string, unknown>) =>
+    request<{ ok: boolean }>(`/api/orgs/${orgId}/vbs-plan/supplies`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  deleteVbsSupplyItem: (orgId: string, itemId: string) =>
+    request<{ ok: boolean }>(`/api/orgs/${orgId}/vbs-plan/supplies/${itemId}`, { method: "DELETE" }),
   generateVbsDailySchedule: (orgId: string, replace = false) =>
     request<{ ok: boolean }>(`/api/orgs/${orgId}/vbs-plan/schedule/generate`, {
       method: "POST",

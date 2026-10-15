@@ -13,9 +13,10 @@ test.describe("Registration CRUD (test_ prefix)", () => {
     async ({ registrationAdminPage }, testInfo) => {
     const { page, orgId } = registrationAdminPage;
 
-    const className = testName("class");
+    const sectionLabel = testName("class").replace(/^test_/, "").slice(0, 16);
     const classRes = await sessionCall(page, "POST", `/api/orgs/${orgId}/vbs-registration/classes`, {
-      name: className,
+      rotationIndex: 1,
+      sectionLabel,
       minAge: 5,
       maxAge: 8,
       capacityMax: 20,
@@ -23,16 +24,17 @@ test.describe("Registration CRUD (test_ prefix)", () => {
     });
     expect(classRes.ok).toBeTruthy();
     let reg = await fetchRegistration(page, orgId);
-    const cls = reg.classes.find((c) => c.name === className);
+    const cls = reg.classes.find((c) => c.sectionLabel === sectionLabel && c.rotationIndex === 1);
     expect(cls).toBeTruthy();
 
     await page.goto(`/org/${orgId}/registration?tab=classes`);
     await captureStep(page, testInfo, "registration-classes-with-test-class");
-    await expect(page.getByText(className)).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByText(cls!.name)).toBeVisible({ timeout: 20_000 });
 
     const childFullName = testName("student");
     const studentRes = await sessionCall(page, "POST", `/api/orgs/${orgId}/vbs-registration/students`, {
       childFullName,
+      childGender: "M",
       birthMonth: 6,
       birthYear: 2018,
       classId: cls!.id,

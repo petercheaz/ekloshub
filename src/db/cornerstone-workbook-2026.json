@@ -1,0 +1,1015 @@
+{
+  "prayerSchedule": [
+    {
+      "person1": "Catherine Cheaz",
+      "person2": "Nathan Lieu",
+      "person3": "",
+      "prayDate": "2026-06-30"
+    },
+    {
+      "person1": "Patti Tam",
+      "person2": "Allison Chan",
+      "person3": "",
+      "prayDate": "2026-07-01"
+    },
+    {
+      "person1": "Madeline Wong",
+      "person2": "Amanda Wan",
+      "person3": "",
+      "prayDate": "2026-07-02"
+    },
+    {
+      "person1": "Isaac Wong",
+      "person2": "Kris Minakawa",
+      "person3": "",
+      "prayDate": "2026-07-03"
+    },
+    {
+      "person1": "Jillian Wong",
+      "person2": "Linda Okamoto",
+      "person3": "",
+      "prayDate": "2026-07-04"
+    },
+    {
+      "person1": "Linda Teng",
+      "person2": "Audrey Wu (Y)",
+      "person3": "",
+      "prayDate": "2026-07-05"
+    },
+    {
+      "person1": "Pastor Stephen",
+      "person2": "Elizabeth Ylaya",
+      "person3": "",
+      "prayDate": "2026-07-06"
+    },
+    {
+      "person1": "E.J. Ip (Y)",
+      "person2": "Sophie Nguyen",
+      "person3": "",
+      "prayDate": "2026-07-07"
+    },
+    {
+      "person1": "Pastor Daryl",
+      "person2": "Tabitha Nguyen (Y)",
+      "person3": "",
+      "prayDate": "2026-07-08"
+    },
+    {
+      "person1": "Pastor Gordon",
+      "person2": "Jen Counihan",
+      "person3": "",
+      "prayDate": "2026-07-09"
+    },
+    {
+      "person1": "Nolen Lee",
+      "person2": "Melody Wan (Y)",
+      "person3": "",
+      "prayDate": "2026-07-10"
+    },
+    {
+      "person1": "Curtis Munechika",
+      "person2": "David Yip",
+      "person3": "",
+      "prayDate": "2026-07-11"
+    },
+    {
+      "person1": "Marlene Yamashita",
+      "person2": "Alice Yip",
+      "person3": "",
+      "prayDate": "2026-07-12"
+    },
+    {
+      "person1": "Mark Yamashita",
+      "person2": "Lois Wan (Y)",
+      "person3": "Kevin Huang",
+      "prayDate": "2026-07-13"
+    },
+    {
+      "person1": "Zander Cheung (Y)",
+      "person2": "Christine Wong",
+      "person3": "Liana Su (Y)",
+      "prayDate": "2026-07-14"
+    },
+    {
+      "person1": "Eugene Wong",
+      "person2": "Addison Wu (Y)",
+      "person3": "Lucia Ng (Y)",
+      "prayDate": "2026-07-15"
+    },
+    {
+      "person1": "Victoria Jasinski",
+      "person2": "Millie Wu (Y)",
+      "person3": "Lillian Fok",
+      "prayDate": "2026-07-16"
+    },
+    {
+      "person1": "Helen Lu",
+      "person2": "Zoe Liang (Y)",
+      "person3": "Wing Fok",
+      "prayDate": "2026-07-17"
+    },
+    {
+      "person1": "Taylor Cheung (Y)",
+      "person2": "Riana Liang",
+      "person3": "Sherry Matsumoto",
+      "prayDate": "2026-07-18"
+    },
+    {
+      "person1": "Christopher Chan",
+      "person2": "Emma Matsumoto (Y)",
+      "person3": "Abby Chan (Y)",
+      "prayDate": "2026-07-19"
+    },
+    {
+      "person1": "Jenny Tang",
+      "person2": "Michael Ng (Y)",
+      "person3": "Maggie Yeh",
+      "prayDate": "2026-07-20"
+    },
+    {
+      "person1": "Kennedy Cheung (Y)",
+      "person2": "Lisa Wong",
+      "person3": "Sylvia Wong",
+      "prayDate": "2026-07-21"
+    },
+    {
+      "person1": "Sarah Yu (Y)",
+      "person2": "Wendy Wu",
+      "person3": "Andrea Ng",
+      "prayDate": "2026-07-22"
+    },
+    {
+      "person1": "Lee Ann Jinguji",
+      "person2": "Kyra Liang (Y)",
+      "person3": "Amy Shen",
+      "prayDate": "2026-07-23"
+    },
+    {
+      "person1": "Zachary Wu (Y)",
+      "person2": "Noah Liang (Y)",
+      "person3": "Alex Wong",
+      "prayDate": "2026-07-24"
+    },
+    {
+      "person1": "Mark Yamashita",
+      "person2": "",
+      "person3": "",
+      "prayDate": ""
+    },
+    {
+      "person1": "Nolen Lee",
+      "person2": "",
+      "person3": "",
+      "prayDate": ""
+    },
+    {
+      "person1": "Marlene Yamashita",
+      "person2": "",
+      "person3": "",
+      "prayDate": ""
+    },
+    {
+      "person1": "Laura Yamashita",
+      "person2": "",
+      "person3": "",
+      "prayDate": ""
+    },
+    {
+      "person1": "Amanda Wan",
+      "person2": "",
+      "person3": "",
+      "prayDate": ""
+    },
+    {
+      "person1": "Lois Wan (Y)",
+      "person2": "",
+      "person3": "",
+      "prayDate": ""
+    },
+    {
+      "person1": "Melody Wan (Y)",
+      "person2": "",
+      "person3": "",
+      "prayDate": ""
+    },
+    {
+      "person1": "Jenn Counihan",
+      "person2": "",
+      "person3": "",
+      "prayDate": ""
+    },
+    {
+      "person1": "Teresa Minato",
+      "person2": "",
+      "person3": "",
+      "prayDate": ""
+    },
+    {
+      "person1": "Lisa Wong",
+      "person2": "",
+      "person3": "",
+      "prayDate": ""
+    },
+    {
+      "person1": "Alex Wong",
+      "person2": "",
+      "person3": "",
+      "prayDate": ""
+    },
+    {
+      "person1": "John Minato",
+      "person2": "",
+      "person3": "",
+      "prayDate": ""
+    },
+    {
+      "person1": "David Yip",
+      "person2": "",
+      "person3": "",
+      "prayDate": ""
+    },
+    {
+      "person1": "Jenny Tang",
+      "person2": "",
+      "person3": "",
+      "prayDate": ""
+    },
+    {
+      "person1": "Eugene Choi",
+      "person2": "",
+      "person3": "",
+      "prayDate": ""
+    },
+    {
+      "person1": "Patrick Yamashita",
+      "person2": "",
+      "person3": "",
+      "prayDate": ""
+    },
+    {
+      "person1": "Curtis Munechika",
+      "person2": "",
+      "person3": "",
+      "prayDate": ""
+    },
+    {
+      "person1": "Carolyn Wu",
+      "person2": "",
+      "person3": "",
+      "prayDate": ""
+    },
+    {
+      "person1": "Grayson Wu",
+      "person2": "",
+      "person3": "",
+      "prayDate": ""
+    },
+    {
+      "person1": "Josh Ng",
+      "person2": "",
+      "person3": "",
+      "prayDate": ""
+    },
+    {
+      "person1": "Christopher Chan",
+      "person2": "",
+      "person3": "",
+      "prayDate": ""
+    },
+    {
+      "person1": "Christine Wong",
+      "person2": "",
+      "person3": "",
+      "prayDate": ""
+    },
+    {
+      "person1": "Riana Liang",
+      "person2": "",
+      "person3": "",
+      "prayDate": ""
+    },
+    {
+      "person1": "Noah Liang (Y)",
+      "person2": "",
+      "person3": "",
+      "prayDate": ""
+    },
+    {
+      "person1": "Zoe Liang (Y)",
+      "person2": "",
+      "person3": "",
+      "prayDate": ""
+    },
+    {
+      "person1": "Kyra Liang (Y)",
+      "person2": "",
+      "person3": "",
+      "prayDate": ""
+    },
+    {
+      "person1": "Teresa Nguyen",
+      "person2": "",
+      "person3": "",
+      "prayDate": ""
+    },
+    {
+      "person1": "Tabitha Nguyen (Y)",
+      "person2": "",
+      "person3": "",
+      "prayDate": ""
+    },
+    {
+      "person1": "Kennedy Cheung (Y)",
+      "person2": "",
+      "person3": "",
+      "prayDate": ""
+    },
+    {
+      "person1": "Taylor Cheung (Y)",
+      "person2": "",
+      "person3": "",
+      "prayDate": ""
+    },
+    {
+      "person1": "Zander Cheung (Y)",
+      "person2": "",
+      "person3": "",
+      "prayDate": ""
+    },
+    {
+      "person1": "Daryl Siu",
+      "person2": "",
+      "person3": "",
+      "prayDate": ""
+    },
+    {
+      "person1": "Kayla Gharai (Y)",
+      "person2": "",
+      "person3": "",
+      "prayDate": ""
+    },
+    {
+      "person1": "Eric Wong",
+      "person2": "",
+      "person3": "",
+      "prayDate": ""
+    },
+    {
+      "person1": "Abby Chan",
+      "person2": "",
+      "person3": "",
+      "prayDate": ""
+    },
+    {
+      "person1": "Allison Chan",
+      "person2": "",
+      "person3": "",
+      "prayDate": ""
+    }
+  ],
+  "volunteerPlacements": {
+    "dayDates": [
+      "2026-07-20",
+      "2026-07-21",
+      "2026-07-22",
+      "2026-07-23",
+      "2026-07-24"
+    ],
+    "rows": [
+      {
+        "roleLabel": "Greeters- 8:45am",
+        "assignmentsByDate": {
+          "2026-07-20": "Marlene Yamashita\nLinda Okamoto",
+          "2026-07-21": "Isaac Wong\nJillian Wong",
+          "2026-07-22": "Isaac Wong\nJillian Wong",
+          "2026-07-23": "Eugene Wong",
+          "2026-07-24": "Isaac Wong"
+        }
+      },
+      {
+        "roleLabel": "Check-in/Registration Table",
+        "assignmentsByDate": {
+          "2026-07-20": "Patti Tam\nMadeline Wong\nIsaac Wong\nJillian Wong\nLinda Teng",
+          "2026-07-21": "Patti Tam\nMadeline Wong",
+          "2026-07-22": "Patti Tam\nMadeline Wong",
+          "2026-07-23": "Madeline Wong\nJillian Wong",
+          "2026-07-24": "Madeline Wong\nJillian Wong"
+        }
+      },
+      {
+        "roleLabel": "Operation K2K Collection",
+        "assignmentsByDate": {
+          "2026-07-20": "",
+          "2026-07-21": "Kevin Huang",
+          "2026-07-22": "Kevin Huang",
+          "2026-07-23": "Kevin Huang",
+          "2026-07-24": "Kevin Huang"
+        }
+      },
+      {
+        "roleLabel": "High-Fivers\n& Day 1 Ushers",
+        "assignmentsByDate": {
+          "2026-07-20": "Everyone (except Crew Leaders, Greeters, Check-in, and Sing & Play Tune Lagoon people)",
+          "2026-07-21": "Nolen Lee\nLinda Okamoto",
+          "2026-07-22": "Sophie Nguyen\nEugene Wong",
+          "2026-07-23": "David Yip\nPstr. Daryl Siu",
+          "2026-07-24": "Jenn Counihan\nMarlene Yamashita"
+        }
+      },
+      {
+        "roleLabel": "Sing & Play Tune Lagoon",
+        "assignmentsByDate": {
+          "2026-07-20": "Pstr Stephen Okamoto\nE.J. Ip (Y) as Dr. Flutterby\nPstr Daryl Siu (AV)",
+          "2026-07-21": "Pstr Stephen Okamoto\nE.J. Ip (Y) as Dr. Flutterby\nPstr Daryl Siu (AV)",
+          "2026-07-22": "Pstr Stephen Okamoto\nE.J. Ip (Y) as Dr. Flutterby\nPstr Daryl Siu (AV)",
+          "2026-07-23": "Pstr Stephen Okamoto\nE.J. Ip (Y) as Dr. Flutterby\nPstr Daryl Siu (AV)",
+          "2026-07-24": "Pstr Stephen Okamoto\nE.J. Ip (Y) as Dr. Flutterby\nPstr Daryl Siu (AV)"
+        }
+      },
+      {
+        "roleLabel": "E- Rooted Bible Adventures",
+        "assignmentsByDate": {
+          "2026-07-20": "Pstr Daryl Siu",
+          "2026-07-21": "Pstr Daryl Siu\nElizabeth Ylaya",
+          "2026-07-22": "Pstr Daryl Siu\nPstr Gordon as David",
+          "2026-07-23": "Pstr Daryl Siu",
+          "2026-07-24": "Pstr Daryl Siu"
+        }
+      },
+      {
+        "roleLabel": "E- Sticky Scriptures",
+        "assignmentsByDate": {
+          "2026-07-20": "Marlene Yamashita\nMark Yamashita\nZander Cheung (Y)",
+          "2026-07-21": "Marlene Yamashita\nMark Yamashita\nZander Cheung (Y)",
+          "2026-07-22": "Marlene Yamashita\nMark Yamashita\nZander Cheung (Y)",
+          "2026-07-23": "Marlene Yamashita\nMark Yamashita\nZander Cheung (Y)",
+          "2026-07-24": "Marlene Yamashita\nMark Yamashita\nZander Cheung (Y)"
+        }
+      },
+      {
+        "roleLabel": "E- Imagination Station",
+        "assignmentsByDate": {
+          "2026-07-20": "Nolen Lee\nCurtis Munechika",
+          "2026-07-21": "Nolen Lee\nCurtis Munechika",
+          "2026-07-22": "Nolen Lee\nCurtis Munechika",
+          "2026-07-23": "Nolen Lee\nCurtis Munechika",
+          "2026-07-24": "Nolen Lee\nCurtis Munechika"
+        }
+      },
+      {
+        "roleLabel": "E- Wild Games & Missions",
+        "assignmentsByDate": {
+          "2026-07-20": "Eugene Wong\nKevin Huang\nTaylor Cheung (Y)",
+          "2026-07-21": "Eugene Wong\nKevin Huang\nTaylor Cheung (Y)",
+          "2026-07-22": "Eugene Wong\nHelen Lu\nTaylor Cheung (Y)",
+          "2026-07-23": "Eugene Wong\nKevin Huang\nTaylor Cheung (Y)",
+          "2026-07-24": "Eugene Wong\nKevin Huang\nTaylor Cheung (Y)"
+        }
+      },
+      {
+        "roleLabel": "E- Crew Leaders\nStandby Help: \n      Wing Fok\n      Jillian Wong",
+        "assignmentsByDate": {
+          "2026-07-20": "1. Lee Ann Jinguji\n2. Jenny Tang\n3. Zach Wu (Y)\n4. Christopher C./Kennedy C.(Y)\n5. Allison Chan\n6. Nathan Lieu/EJ Ip(Y)\n7. Sarah Yu (Y)*",
+          "2026-07-21": "1. Lee Ann Jinguji\n2. Jenny Tang\n3. Zach Wu (Y)\n4. Christopher C./Kennedy C.(Y)\n5. Allison Chan\n6. Nathan Lieu/EJ Ip(Y)\n7. Sarah Yu (Y)*",
+          "2026-07-22": "1. Lee Ann Jinguji\n2. Jenny Tang\n3. Zach Wu (Y)\n4. Christopher C./Kennedy C.(Y)\n5. Allison Chan\n6. Nathan Lieu/EJ Ip(Y)\n7. Sarah Yu (Y)",
+          "2026-07-23": "1. Lee Ann Jinguji\n2. Jenny Tang\n3. Zach Wu (Y)\n4. Christopher C./Kennedy C.(Y)\n5. Allison Chan\n6. Nathan Lieu/EJ Ip(Y)\n7. Sarah Yu (Y)*",
+          "2026-07-24": "1. Lee Ann Jinguji\n2. Jenny Tang\n3. Elizabeth Ylaya\n4. Christopher C./Kennedy C.(Y)\n5. Allison Chan\n6. Nathan Lieu/EJ Ip(Y)\n7. Sarah Yu (Y)"
+        }
+      },
+      {
+        "roleLabel": "Treetop Treats",
+        "assignmentsByDate": {
+          "2026-07-20": "Lisa Wong\nWendy Wu\nAlex Wong\nAndrea Ng\nMichael Ng (Y)\nNoah Liang (Y)\nKyra Liang (Y)",
+          "2026-07-21": "Lisa Wong\nWendy Wu\nAmy Shen\nNoah Liang (Y)\nKyra Liang (Y)\nMaggie Yeh",
+          "2026-07-22": "Lisa Wong\nWendy Wu\nAlex Wong\nAndrea Ng\nMichael Ng (Y)\nNoah Liang (Y)\nKyra Liang (Y)",
+          "2026-07-23": "Lisa Wong\nWendy Wu\nAlex Wong\nAmy Shen\nNoah Liang (Y)\nKyra Liang (Y)",
+          "2026-07-24": "Lisa Wong\nWendy Wu\nAlex Wong\nAndrea Ng\nMichael Ng (Y)\nNoah Liang (Y)\nKyra Liang (Y)"
+        }
+      },
+      {
+        "roleLabel": "E- Canopy Closing",
+        "assignmentsByDate": {
+          "2026-07-20": "Pstr Stephen Okamoto\nKevin Huang \nP. Daryl (AV)",
+          "2026-07-21": "Pstr Stephen Okamoto\n(Curtis Munechika)\nP. Daryl (AV)",
+          "2026-07-22": "Pstr Stephen Okamoto\n(Curtis Munechika)\nP. Daryl (AV)",
+          "2026-07-23": "Pstr Stephen Okamoto\n(Curtis Munechika)\nP. Daryl (AV)",
+          "2026-07-24": "Pstr Stephen Okamoto\n(Curtis Munechika)\nP. Daryl (AV)"
+        }
+      },
+      {
+        "roleLabel": "Spotlight Photographers",
+        "assignmentsByDate": {
+          "2026-07-20": "Sherry Matsumoto\nJenn Counihan\nAbby Chan (Y)",
+          "2026-07-21": "Sherry Matsumoto\nJenn Counihan\nAbby Chan (Y)",
+          "2026-07-22": "Sherry Matsumoto\nJenn Counihan\nAbby Chan (Y)",
+          "2026-07-23": "Sherry Matsumoto\nJenn Counihan\nAbby Chan (Y)",
+          "2026-07-24": "Abby Chan (Y)\nJenn Counihan"
+        }
+      },
+      {
+        "roleLabel": "General Photographer",
+        "assignmentsByDate": {
+          "2026-07-20": "Abby Chan (Y)\nKent Wong",
+          "2026-07-21": "Abby Chan (Y)",
+          "2026-07-22": "Abby Chan (Y)",
+          "2026-07-23": "Abby Chan (Y)",
+          "2026-07-24": "Abby Chan (Y)"
+        }
+      },
+      {
+        "roleLabel": "P- Exploration Stations",
+        "assignmentsByDate": {
+          "2026-07-20": "Amanda Wan\nKris Minakawa\nLillian Fok\nWing Fok\nPreschool Station Leaders",
+          "2026-07-21": "Amanda Wan\nKris Minakawa\nLillian Fok\nWing Fok\nPreschool Station Leaders",
+          "2026-07-22": "Amanda Wan\nKris Minakawa\nLillian Fok\nWing Fok\nKevin Huang\nPreschool Station Leaders",
+          "2026-07-23": "Lillian Fok \nKris Minakawa\nWing Fok\nAmy Shen\nPreschool Station Leaders",
+          "2026-07-24": "Lillian Fok \nKris Minakawa\nWing Fok\nPreschool Station Leaders"
+        }
+      },
+      {
+        "roleLabel": "P- Bible Adventures",
+        "assignmentsByDate": {
+          "2026-07-20": "Linda Okamoto\nLucia Ng (Y)",
+          "2026-07-21": "Linda Okamoto\nLucia Ng (Y)",
+          "2026-07-22": "Linda Okamoto\nLucia Ng (Y)",
+          "2026-07-23": "Linda Okamoto\nKris Minakawa",
+          "2026-07-24": "Linda Okamoto\nKris Minakawa"
+        }
+      },
+      {
+        "roleLabel": "P- Sticky Scriptures",
+        "assignmentsByDate": {
+          "2026-07-20": "Sophie Nguyen\nTabitha Nguyen (Y)",
+          "2026-07-21": "Sophie Nguyen\nTabitha Nguyen (Y)",
+          "2026-07-22": "Sophie Nguyen\nTabitha Nguyen (Y)",
+          "2026-07-23": "Sophie Nguyen\nTabitha Nguyen (Y)",
+          "2026-07-24": "(Sophie Nguyen) Catherine\nTabitha Nguyen (Y)"
+        }
+      },
+      {
+        "roleLabel": "P- Craft & Play",
+        "assignmentsByDate": {
+          "2026-07-20": "Jenn Counihan\nMadeline Wong\nMelody Wan (Y)",
+          "2026-07-21": "Jen Counihan\nMelody Wan (Y)",
+          "2026-07-22": "Jen Counihan\nMadeline Wong\nMelody Wan (Y)",
+          "2026-07-23": "Jen Counihan\nLillian Fok",
+          "2026-07-24": "Jen Counihan\nMadeline Wong"
+        }
+      },
+      {
+        "roleLabel": "P- Games",
+        "assignmentsByDate": {
+          "2026-07-20": "David Yip\nAlice Yip\nLois Wan (Y)",
+          "2026-07-21": "David Yip\nAlice Yip\nLois Wan (Y)",
+          "2026-07-22": "David Yip\nAlice Yip\nLois Wan (Y)",
+          "2026-07-23": "David Yip\nAlice Yip\nWing Fok",
+          "2026-07-24": "David Yip\nAlice Yip\nWing Fok"
+        }
+      },
+      {
+        "roleLabel": "P- Closing Circle",
+        "assignmentsByDate": {
+          "2026-07-20": "Linda Okamoto\nLucia Ng (Y)",
+          "2026-07-21": "Linda Okamoto\nLucia Ng (Y)",
+          "2026-07-22": "Linda Okamoto\nLucia Ng (Y)",
+          "2026-07-23": "Linda Okamoto\nKris Minakawa",
+          "2026-07-24": "Linda Okamoto\nKris Minakawa"
+        }
+      },
+      {
+        "roleLabel": "P- Crew Leaders\nStandby Help:\n   Isaac Wong (M-T)",
+        "assignmentsByDate": {
+          "2026-07-20": "1. Christine Wong/Emma M. (Y)\n2. Riana Liang/Millie Wu (Y)\n3. Zoe Liang (Y)/Addison Wu (Y)\n4. Liana Su (Y)/Audrey Wu (Y)",
+          "2026-07-21": "1. Christine Wong/Emma M. (Y)\n2. Riana Liang/Millie Wu (Y)\n3. Zoe Liang (Y)/Addison Wu (Y)\n4. Liana Su (Y)/Audrey Wu (Y)",
+          "2026-07-22": "1. Christine Wong/Emma M. (Y)\n2. Riana Liang/Millie Wu (Y)\n3. Zoe Liang (Y)/Addison Wu (Y)\n4. Liana Su (Y)/Audrey Wu (Y)",
+          "2026-07-23": "1. Christine Wong/Emma M. (Y)\n2. Riana Liang/Millie Wu (Y)\n3. Zoe Liang (Y)/Addison Wu (Y)\n4. Liana Su (Y)/Elizabeth Ylaya",
+          "2026-07-24": "1. Christine Wong**\n2. Riana Liang/Millie Wu (Y)\n3. Zoe Liang (Y)/Addison Wu (Y)\n4. Liana Su (Y)"
+        }
+      },
+      {
+        "roleLabel": "Check-out",
+        "assignmentsByDate": {
+          "2026-07-20": "Patti Tam- E\nIsaac Wong- E\nJillian Wong- E\nEugene Wong- E\nLinda Teng- E\nMadeline Wong- PS\nKris Minakawa- PS\nLillian Fok- PS",
+          "2026-07-21": "Patti Tam- E\nIsaac Wong- E\nJillian Wong- E\nEugene Wong- E\nMadeline Wong- PS\nKris Minakawa- PS\nLillian Fok- PS",
+          "2026-07-22": "Patti Tam- E\nIsaac Wong- E\nJillian Wong- E\nEugene Wong- E\nMadeline Wong- PS\nKris Minakawa- PS\nLillian Fok- PS",
+          "2026-07-23": "Jillian Wong- E\nEugene Wong- E\nMadeline Wong- PS\nLillian Fok- PS\nKris Minakawa- PS",
+          "2026-07-24": "Isaac Wong- E\nJillian Wong- E\nEugene Wong- E\nMadeline Wong- PS\nLillian Fok- PS\nKris Minakawa- PS"
+        }
+      },
+      {
+        "roleLabel": "Operation K2K Collection",
+        "assignmentsByDate": {
+          "2026-07-20": "",
+          "2026-07-21": "Kevin Huang",
+          "2026-07-22": "Kevin Huang",
+          "2026-07-23": "Kevin Huang",
+          "2026-07-24": "Kevin Huang"
+        }
+      }
+    ]
+  },
+  "stationNeeds": [
+    {
+      "preschool": {
+        "stationLabel": "Preschool",
+        "volunteersNeeded": "Volunteers needed",
+        "roomSupplies": "Room/Space needs & Supplies"
+      },
+      "elementary": {
+        "stationLabel": "Elementary",
+        "volunteersNeeded": "Volunteers needed",
+        "roomSupplies": "Room/Space needs & Supplies"
+      }
+    },
+    {
+      "preschool": {
+        "stationLabel": "Sing & Play Tune Lagoon\n(large room- w/ elementary)",
+        "volunteersNeeded": "1 leader",
+        "roomSupplies": "(see elementary)"
+      },
+      "elementary": {
+        "stationLabel": "Sing & Play Tune Lagoon\n(Large room)",
+        "volunteersNeeded": "1 leader",
+        "roomSupplies": "-entrance: registration tables (curtains)\n-main stage: Group backdrop\n-stage right:\n-stage left:\n-Overhead:\n-Parking lot side:\n-God Sightings Celebration Spot\n-Kitchen side:\n-Rainforest Falls Skit DVD?\n- Watch for God wristbands?\n-Creation cutouts"
+      }
+    },
+    {
+      "preschool": {
+        "stationLabel": "Paradise Preschool-\nExploration Stations\n(AB room)",
+        "volunteersNeeded": "1 Coordinator/Leader\n4 Station helpers (leaders from rotation stations)",
+        "roomSupplies": "3-4 stations: (each manned by a rotation leader)\n-Bible Activity page (table for coloring, crayons) - led by Craft/Play leader\n-1-2 sensory tables (depending on day)"
+      },
+      "elementary": {
+        "stationLabel": "Rooted Bible Adventure\n(conference room)",
+        "volunteersNeeded": "1 leader",
+        "roomSupplies": "-Bible Story Posters\nD1-2: jungle, desert, sea, sky\nD3-4: desert\nD5: sky\nneed a Roman soldier for day 3\nneed a wooden cross (day 4)\nneed a fan (day 5)\nNeed someone to come in as David on Day 3"
+      }
+    },
+    {
+      "preschool": {
+        "stationLabel": "Bible Adventures & missions\n(AB Room)",
+        "volunteersNeeded": "1 leader",
+        "roomSupplies": "-Picture of Caper somewhere\n-place to hang Character and Bible Story posters\n-TV/laptop\n-supply basket for each crew\n- easel for cross (day 4)"
+      },
+      "elementary": {
+        "stationLabel": "Sticky Scripture\n(library area)",
+        "volunteersNeeded": "1 leader",
+        "roomSupplies": "-\"Sticky Scripture\" sign\n-sheet hung from \"trees\" & Projecter/laptop to project videos\nDecor: Treehouse theme\n- need room to stand up and move around\n- need 3 green panels with 2 feet and 4 connectors (from ROCK)\nBible (Hands On Bible- NLT)\nBible verse posters\nBible Memory Buddies & Pouches\nPalms Bibles & Sticky Tabs\nBasket/container for each crew"
+      }
+    },
+    {
+      "preschool": {
+        "stationLabel": "Treetop Treats \n(Large Room- w/ elementary)",
+        "volunteersNeeded": "1 leader\n3 helpers",
+        "roomSupplies": "(see elementary)"
+      },
+      "elementary": {
+        "stationLabel": "Treetop Treats\n(Large Room)",
+        "volunteersNeeded": "1 leader\n3 helpers",
+        "roomSupplies": "-Blanket for each crew"
+      }
+    },
+    {
+      "preschool": {
+        "stationLabel": "Sticky Scripture\n(Outside offices)",
+        "volunteersNeeded": "1 leader",
+        "roomSupplies": "-\"Sticky Scripture\" sign\n-Projector/laptop and Sheet hung from \"trees\"\nDecor: Treehouse theme\n-place for Bible Verse posters\n-blanket for each crew to sit on?\n-supply basket for each crew"
+      },
+      "elementary": {
+        "stationLabel": "Imagination Station\n(Large Room Tent)",
+        "volunteersNeeded": "1 leader",
+        "roomSupplies": "-decor:\n-Table(s)\n-Mini Buddy Posters\n-Talk-Starter images and Lesson Images (need to print out)"
+      }
+    },
+    {
+      "preschool": {
+        "stationLabel": "Games\n(AB Room)",
+        "volunteersNeeded": "1 leader",
+        "roomSupplies": "-keep decor, move Explor.Stations against walls\nHula hoop, parachute,"
+      },
+      "elementary": {
+        "stationLabel": "Wild Games\n(large room)",
+        "volunteersNeeded": "1 leader",
+        "roomSupplies": "pool noodles, cones"
+      }
+    },
+    {
+      "preschool": {
+        "stationLabel": "Craft & Play \n(PJ's office)",
+        "volunteersNeeded": "1 leader",
+        "roomSupplies": "-Low table with taped-down tablecloth and chairs\n-Aviary theme"
+      },
+      "elementary": {
+        "stationLabel": "Canopy Closing\n(large room)",
+        "volunteersNeeded": "1 leader",
+        "roomSupplies": "Buddy shooter, easels,"
+      }
+    },
+    {
+      "preschool": {
+        "stationLabel": "Closing Circle\n(AB Room)",
+        "volunteersNeeded": "1 leader",
+        "roomSupplies": "-place to hang Bible Story Posters\n-space for kids to sit in a large circle\n-TV/DVD Player\n-Hand out: stickers and Bible Activity pages\n- Live feed to Conference room (Camera set up)"
+      },
+      "elementary": {
+        "stationLabel": "",
+        "volunteersNeeded": "",
+        "roomSupplies": ""
+      }
+    },
+    {
+      "preschool": {
+        "stationLabel": "Preschool Notes",
+        "volunteersNeeded": "",
+        "roomSupplies": ""
+      },
+      "elementary": {
+        "stationLabel": "Elementary Notes",
+        "volunteersNeeded": "",
+        "roomSupplies": ""
+      }
+    },
+    {
+      "preschool": {
+        "stationLabel": "Crews- max 5 kids per crew",
+        "volunteersNeeded": "",
+        "roomSupplies": ""
+      },
+      "elementary": {
+        "stationLabel": "Crews- Max 6 kids per crew",
+        "volunteersNeeded": "",
+        "roomSupplies": ""
+      }
+    },
+    {
+      "preschool": {
+        "stationLabel": "2 crews max in each station",
+        "volunteersNeeded": "12 kids per station",
+        "roomSupplies": ""
+      },
+      "elementary": {
+        "stationLabel": "2 crews max in each station",
+        "volunteersNeeded": "or 12-15 kids per station",
+        "roomSupplies": ""
+      }
+    },
+    {
+      "preschool": {
+        "stationLabel": "max 6 crews (max 30 preschoolers)",
+        "volunteersNeeded": "",
+        "roomSupplies": ""
+      },
+      "elementary": {
+        "stationLabel": "max 6 crews if Games is combined (max 36 elementary)",
+        "volunteersNeeded": "",
+        "roomSupplies": ""
+      }
+    },
+    {
+      "preschool": {
+        "stationLabel": "",
+        "volunteersNeeded": "",
+        "roomSupplies": ""
+      },
+      "elementary": {
+        "stationLabel": "If 4 stations, then max 8 crews (max 48 elementary)",
+        "volunteersNeeded": "",
+        "roomSupplies": ""
+      }
+    }
+  ],
+  "scheduleMatrix": [
+    {
+      "time": "Time",
+      "preschool": "Preschool",
+      "elementary": "Elementary",
+      "rotationF": "",
+      "rotationG": "",
+      "rotationH": ""
+    },
+    {
+      "time": "09:00",
+      "preschool": "Sing & Play Tune Lagoon\n25min- 9:00-9:25\n(Large room)",
+      "elementary": "",
+      "rotationF": "",
+      "rotationG": "",
+      "rotationH": ""
+    },
+    {
+      "time": "09:10",
+      "preschool": "",
+      "elementary": "",
+      "rotationF": "",
+      "rotationG": "",
+      "rotationH": ""
+    },
+    {
+      "time": "09:20",
+      "preschool": "",
+      "elementary": "",
+      "rotationF": "",
+      "rotationG": "",
+      "rotationH": ""
+    },
+    {
+      "time": "09:25",
+      "preschool": "5 minutes to travel to next station",
+      "elementary": "",
+      "rotationF": "",
+      "rotationG": "",
+      "rotationH": ""
+    },
+    {
+      "time": "09:30",
+      "preschool": "Paradise Preschool- Exploration Stations\n15min- 9:30-9:45\n(AB Room)",
+      "elementary": "Rooted Bible Adventures\n20min-9:30-9:50\n(Conference Room)",
+      "rotationF": "Wild Games & Missions\n20min-9:30-9:50\n(Large Room)",
+      "rotationG": "Sticky Scriptures\n20min-9:30-9:50\n(Library Area)",
+      "rotationH": "Imagination Station\n20min-9:30-9:50\n(Lg Room Tent)"
+    },
+    {
+      "time": "09:40",
+      "preschool": "",
+      "elementary": "",
+      "rotationF": "",
+      "rotationG": "",
+      "rotationH": ""
+    },
+    {
+      "time": "09:45",
+      "preschool": "5 min travel time",
+      "elementary": "",
+      "rotationF": "",
+      "rotationG": "",
+      "rotationH": ""
+    },
+    {
+      "time": "09:50",
+      "preschool": "Bible Adventures & Missions\n25min- 9:50-10:15\n(AB Room)",
+      "elementary": "5 min travel time",
+      "rotationF": "",
+      "rotationG": "",
+      "rotationH": ""
+    },
+    {
+      "time": "",
+      "preschool": "",
+      "elementary": "Imagination Station\n20min-9:55-10:15\n(Lg Room Tent)",
+      "rotationF": "Rooted Bible Adventures\n20min-9:55-10:15\n(Conference Room)",
+      "rotationG": "Wild Games & Missions\n20min-9:55-10:15\n(Large Room)",
+      "rotationH": "Sticky Scriptures\n20min-9:55-10:15\n(Library Area)"
+    },
+    {
+      "time": "10:00",
+      "preschool": "",
+      "elementary": "",
+      "rotationF": "",
+      "rotationG": "",
+      "rotationH": ""
+    },
+    {
+      "time": "10:10",
+      "preschool": "",
+      "elementary": "",
+      "rotationF": "",
+      "rotationG": "",
+      "rotationH": ""
+    },
+    {
+      "time": "10:15",
+      "preschool": "5 min travel time",
+      "elementary": "",
+      "rotationF": "",
+      "rotationG": "",
+      "rotationH": ""
+    },
+    {
+      "time": "10:20",
+      "preschool": "Treetop Treats\n20min- 10:20-10:40\n(In Large Room, on blankets)",
+      "elementary": "",
+      "rotationF": "",
+      "rotationG": "",
+      "rotationH": ""
+    },
+    {
+      "time": "10:30",
+      "preschool": "",
+      "elementary": "",
+      "rotationF": "",
+      "rotationG": "",
+      "rotationH": ""
+    },
+    {
+      "time": "10:40",
+      "preschool": "5 min travel time",
+      "elementary": "",
+      "rotationF": "",
+      "rotationG": "",
+      "rotationH": ""
+    },
+    {
+      "time": "10:45",
+      "preschool": "Sticky Scriptures\n15min- 10:45-11:00\n(Office Foyer)",
+      "elementary": "Sticky Scriptures\n20min-10:45-11:05\n(Library Area)",
+      "rotationF": "Imagination Station\n20min-10:45-11:05\n(Lg Room Tent)",
+      "rotationG": "Rooted Bible Adventures\n20min-10:45-11:05\n(Conference Room)",
+      "rotationH": "Wild Games & Missions\n20min-10:45-11:05\n(Large Room)"
+    },
+    {
+      "time": "10:50",
+      "preschool": "",
+      "elementary": "",
+      "rotationF": "",
+      "rotationG": "",
+      "rotationH": ""
+    },
+    {
+      "time": "11:00",
+      "preschool": "5 min travel time",
+      "elementary": "",
+      "rotationF": "",
+      "rotationG": "",
+      "rotationH": ""
+    },
+    {
+      "time": "11:05",
+      "preschool": "Craft & Play\n15min- 11:05-11:20\n(P.Gordon's Office)",
+      "elementary": "5 min travel time",
+      "rotationF": "",
+      "rotationG": "",
+      "rotationH": ""
+    },
+    {
+      "time": "11:10",
+      "preschool": "",
+      "elementary": "Wild Games & Missions\n20min-11:10-11:30\n(Large Room)",
+      "rotationF": "Sticky Scriptures\n20min-11:10-11:30\n(Library Area)",
+      "rotationG": "Imagination Station\n20min-11:10-11:30\n(Lg Room Tent)",
+      "rotationH": "Rooted Bible Adventures\n20min-11:10-11:30\n(Conference Room)"
+    },
+    {
+      "time": "11:20",
+      "preschool": "5 min travel time",
+      "elementary": "",
+      "rotationF": "",
+      "rotationG": "",
+      "rotationH": ""
+    },
+    {
+      "time": "11:25",
+      "preschool": "Games\n15min- 11:25-11:40\n(AB Room)",
+      "elementary": "",
+      "rotationF": "",
+      "rotationG": "",
+      "rotationH": ""
+    },
+    {
+      "time": "11:30",
+      "preschool": "",
+      "elementary": "5 min travel time",
+      "rotationF": "",
+      "rotationG": "",
+      "rotationH": ""
+    },
+    {
+      "time": "",
+      "preschool": "",
+      "elementary": "Canopy Closing\n25 min- 11:35-12:00\n(Large Room)",
+      "rotationF": "",
+      "rotationG": "",
+      "rotationH": ""
+    },
+    {
+      "time": "11:40",
+      "preschool": "5 min travel time",
+      "elementary": "",
+      "rotationF": "",
+      "rotationG": "",
+      "rotationH": ""
+    },
+    {
+      "time": "11:45",
+      "preschool": "Closing Circle\n15min- 11:45-12:00\n(AB Room)",
+      "elementary": "",
+      "rotationF": "",
+      "rotationG": "",
+      "rotationH": ""
+    },
+    {
+      "time": "11:50",
+      "preschool": "",
+      "elementary": "",
+      "rotationF": "",
+      "rotationG": "",
+      "rotationH": ""
+    },
+    {
+      "time": "12:00",
+      "preschool": "Dismissal/Pick-Up from AB Room",
+      "elementary": "Dismissal/Pick-Up from Large Room",
+      "rotationF": "",
+      "rotationG": "",
+      "rotationH": ""
+    }
+  ]
+}

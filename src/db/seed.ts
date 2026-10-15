@@ -42,9 +42,11 @@ async function ensurePattiRegistrationAdmin(orgId: string) {
     [PATTI_USERNAME, passwordHash, PATTI_PHONE],
   );
   await db().query(
-    `INSERT INTO organization_members (organization_id, username, role)
-     VALUES ($1,$2,'registration_admin')
-     ON CONFLICT (organization_id, username) DO UPDATE SET role = 'registration_admin'`,
+    `INSERT INTO organization_members (organization_id, username, role, vbs_season_year, background_check_status)
+     VALUES ($1,$2,'registration_admin',2026,'cleared')
+     ON CONFLICT (organization_id, username) DO UPDATE SET
+       role = 'registration_admin',
+       background_check_status = 'cleared'`,
     [orgId, PATTI_USERNAME],
   );
 }
@@ -142,7 +144,8 @@ export async function seedIfEmpty() {
 }
 
 export async function ensureKnownAccounts() {
-  const passwordHash = bcrypt.hashSync(process.env.AUTH_PASSWORD ?? "vbs-dev", 10);
+  const peterPassword = process.env.PCHEAZ_PASSWORD ?? "Superadmin!1";
+  const passwordHash = bcrypt.hashSync(peterPassword, 10);
   const username = "pcheaz@gmail.com";
   await db().query(
     `INSERT INTO users (username, password_hash, password_custom, verified, platform_admin, email, first_name, last_name, phone)
@@ -171,9 +174,11 @@ export async function ensureKnownAccounts() {
     );
   }
   await db().query(
-    `INSERT INTO organization_members (organization_id, username, role)
-     VALUES ($1,$2,'org_admin')
-     ON CONFLICT (organization_id, username) DO UPDATE SET role = 'org_admin'`,
+    `INSERT INTO organization_members (organization_id, username, role, vbs_season_year, background_check_status)
+     VALUES ($1,$2,'org_admin',2026,'cleared')
+     ON CONFLICT (organization_id, username) DO UPDATE SET
+       role = 'org_admin',
+       background_check_status = 'cleared'`,
     [id, username],
   );
 

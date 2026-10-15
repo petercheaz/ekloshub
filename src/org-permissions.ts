@@ -10,6 +10,9 @@
  * | org_team_admin       | read + team†   | read         | —              | —            | —          |
  * | org_read             | read + limited‡| read         | —              | —            | —          |
  *
+ * Volunteer outreach (Communicate): org_admin = whole org + teams; org_write = teams; org_team_admin = assigned teams.
+ * Parent email: registration_admin + org_admin. See org-contact.ts.
+ *
  * * Coordinators (org_write) edit the VBS plan; registration is a separate duty (registration_admin).
  * † Team admins edit tasks/posts for their teams; org-wide plan fields need org_write or org_admin.
  * ‡ org_read may update tasks assigned to them and post to their teams (see vbs-plan / board).
@@ -48,8 +51,9 @@ export function canWriteRole(role: OrgRole | null) {
   return role === "org_admin" || role === "org_write";
 }
 
+/** In-app + email/SMS outreach to logged-in volunteers (not registered parents). */
 export function canContactOrg(role: OrgRole | null) {
-  return role === "org_admin" || role === "org_team_admin";
+  return role === "org_admin" || role === "org_team_admin" || role === "org_write";
 }
 
 export function canManageOrg(role: OrgRole | null) {

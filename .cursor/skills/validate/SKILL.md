@@ -1,13 +1,15 @@
 ---
 name: validate
 description: >-
-  /validate — Playwright E2E regression suite for VBS: run tests, fix app bugs when red,
-  extend coverage when features change. Tests must fail on real regressions — do not
-  weaken assertions to get green. Use when the user invokes /validate or asks to validate,
-  fix E2E, or extend CRUD/role/route coverage.
+  /validate ONLY — run this skill when the user types /validate or clearly asks to run the
+  full E2E suite (validate, test:e2e, Playwright regression). Do NOT run npm run validate
+  on other tasks. Playwright E2E for VBS: fix app when red, extend coverage when features
+  change; never weaken assertions to get green.
 ---
 
 # /validate (VBS E2E)
+
+**Invoke this skill only when the user asks for `/validate` or an explicit full E2E run.** Do not run `npm run validate` as part of unrelated feature work, refactors, or “done” checklists unless they requested validation in that message.
 
 **Regression suite, not a rubber stamp.** Passing means the scenarios in `e2e/` still behave as asserted. Failing means **fix the app first** (or revert a bad change). Only change tests when product intent or RBAC intentionally changed.
 
@@ -70,7 +72,7 @@ The validate report lists depths and explains: **high confidence only for crud/w
 | `workflow-org.spec.ts` | Cooking, contact, messages, board, teams CRUD, room/Photoshoppe/manage |
 | `workflow-content.spec.ts` | Setup CRUD, reviews, shares, home, about |
 | `workflow-profile-notifications.spec.ts` | Profile contact save + bell mark-all-read after public reg |
-| `plan-export.spec.ts` | Excel export download from plan workbooks |
+| `plan-export.spec.ts` | Excel export download from VBS Plan header |
 | `reimbursement-flow.spec.ts` | Submitted test_ receipt on reimbursements tab |
 | `public-registration.spec.ts` | Public parent UI form submit + cleanup |
 
@@ -111,8 +113,8 @@ Workers default to **1** (shared `E2E_ORG_ID` + global `test_` purge).
 - [ ] If RED: read trace / error-context.md → fix APP or env → re-run full suite
 - [ ] If UI label moved only: update selector, keep same expectation
 - [ ] If intentional product change: update test + summary + site-coverage depth
-- [ ] New route/RBAC/CRUD from feature work: extend e2e before calling done
-- [ ] Full suite green without weakening assertions
+- [ ] New route/RBAC/CRUD from feature work: extend e2e specs + site-coverage (during this /validate task)
+- [ ] Full suite green without weakening assertions before finishing **this** /validate task
 ```
 
 ---
@@ -123,7 +125,7 @@ Workers default to **1** (shared `E2E_ORG_ID` + global `test_` purge).
 2. **Permission / tab visibility** → `roles-access.spec.ts`.
 3. **Writable domain with delete API** → `crud-*.spec.ts`, set depth **`crud`**.
 4. **Multi-step but no CRUD** → workflow test, depth **`workflow`**.
-5. **Run `npm run validate`**.
+5. **Run `npm run validate`** (only in this /validate workflow — not on unrelated agent tasks).
 
 ---
 

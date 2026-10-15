@@ -1,42 +1,58 @@
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { hashVbsDefaultPassword } from "../vbs-password.js";
 import { db } from "./pool.js";
 import { defaultEmailForUsername } from "../users.js";
 
 export const CORNERSTONE_ORG_ID = "org-cornerstone-seattle";
 
-type MemberSeed = {
+const __seedDir = dirname(fileURLToPath(import.meta.url));
+
+export type MemberSeed = {
   username: string;
   firstName: string;
   lastName: string;
+  email?: string | null;
+  backgroundCheckStatus?: "not_started" | "pending" | "cleared";
 };
 
-/** Cornerstone Seattle org roster (default login password = vbs{program year}). */
-export const CORNERSTONE_MEMBER_SEEDS: MemberSeed[] = [
-  { username: "mark.yamashita", firstName: "Mark", lastName: "Yamashita" },
-  { username: "marlene.yamashita", firstName: "Marlene", lastName: "Yamashita" },
-  { username: "nolen.lee", firstName: "Nolen", lastName: "Lee" },
-  { username: "david.yip", firstName: "David", lastName: "Yip" },
-  { username: "alice.yip", firstName: "Alice", lastName: "Yip" },
-  { username: "curtis.munechika", firstName: "Curtis", lastName: "Munechika" },
-  { username: "pastor.daryl", firstName: "Pastor", lastName: "Daryl" },
-  { username: "pastor.stephen", firstName: "Pastor", lastName: "Stephen" },
-  { username: "pastor.gordon", firstName: "Pastor", lastName: "Gordon" },
-  { username: "amanda.wan", firstName: "Amanda", lastName: "Wan" },
-  { username: "christopher.chan", firstName: "Christopher", lastName: "Chan" },
-  { username: "sophie.nguyen", firstName: "Sophie", lastName: "Nguyen" },
-  { username: "lisa.wong", firstName: "Lisa", lastName: "Wong" },
-  { username: "eugene.wong", firstName: "Eugene", lastName: "Wong" },
-  { username: "ryan.wong", firstName: "Ryan", lastName: "Wong" },
-  { username: "christina.wong", firstName: "Christina", lastName: "Wong" },
-  { username: "kaylee.okamoto", firstName: "Kaylee", lastName: "Okamoto" },
-  { username: "abby.chow", firstName: "Abby", lastName: "Chow" },
-  { username: "felicity.ng", firstName: "Felicity", lastName: "Ng" },
-  { username: "abby.chan", firstName: "Abby", lastName: "Chan" },
-  { username: "ken.wong", firstName: "Ken", lastName: "Wong" },
-];
+type VolunteerJsonRow = {
+  username: string;
+  firstName: string;
+  lastName: string;
+  email: string | null;
+  backgroundCheckStatus: "not_started" | "pending" | "cleared";
+};
+
+function loadCornerstoneVolunteerSeeds(): MemberSeed[] {
+  const raw = JSON.parse(
+    readFileSync(join(__seedDir, "cornerstone-volunteers-2026.json"), "utf8"),
+  ) as VolunteerJsonRow[];
+  return raw.map((row) => ({
+    username: row.username.trim(),
+    firstName: row.firstName,
+    lastName: row.lastName,
+    email: row.email,
+    backgroundCheckStatus: row.backgroundCheckStatus,
+  }));
+}
+
+/** Cornerstone Seattle org roster from the 2026 VBS Planning workbook Volunteers sheet. */
+export const CORNERSTONE_MEMBER_SEEDS: MemberSeed[] = loadCornerstoneVolunteerSeeds();
 
 export function cornerstoneMemberUsernames() {
   return CORNERSTONE_MEMBER_SEEDS.map((member) => member.username);
+}
+
+function resolveBackgroundCheckStatus(member: MemberSeed): "not_started" | "pending" | "cleared" {
+  if (member.username === "mark.yamashita" || member.username === "patti.tam@gmail.com") {
+    return "cleared";
+  }
+  if (member.username === "david.yip" || member.username === "alice.yip") {
+    return "pending";
+  }
+  return member.backgroundCheckStatus ?? "not_started";
 }
 
 export async function ensureCornerstoneMembers(orgId: string) {
@@ -45,7 +61,8 @@ export async function ensureCornerstoneMembers(orgId: string) {
   }
   const passwordHash = hashVbsDefaultPassword();
   for (const member of CORNERSTONE_MEMBER_SEEDS) {
-    const email = defaultEmailForUsername(member.username);
+    const email = (member.email?.trim() || defaultEmailForUsername(member.username)).trim();
+    const bgStatus = resolveBackgroundCheckStatus(member);
     await db().query(
       `INSERT INTO users (
          username, password_hash, password_custom, verified, platform_admin, email, first_name, last_name, vbs_default_all_filters
@@ -69,10 +86,12 @@ export async function ensureCornerstoneMembers(orgId: string) {
       [member.username, passwordHash, member.firstName, member.lastName, email],
     );
     await db().query(
-      `INSERT INTO organization_members (organization_id, username, role)
-       VALUES ($1,$2,'org_write')
-       ON CONFLICT (organization_id, username) DO NOTHING`,
-      [orgId, member.username],
+      `INSERT INTO organization_members (organization_id, username, role, vbs_season_year, background_check_status)
+       VALUES ($1,$2,'org_write',2026,$3)
+       ON CONFLICT (organization_id, username) DO UPDATE SET
+         vbs_season_year = COALESCE(organization_members.vbs_season_year, 2026),
+         background_check_status = EXCLUDED.background_check_status`,
+      [orgId, member.username, bgStatus],
     );
   }
 }

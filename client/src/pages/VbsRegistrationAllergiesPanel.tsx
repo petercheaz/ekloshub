@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { Link, useParams } from "react-router-dom";
+import { StudentName, studentPlainName } from "../StudentName";
 import type { VbsRegistrationStudent } from "../types";
 import { allergiesLabel } from "../vbs-registration-utils";
 
@@ -22,12 +23,12 @@ export function VbsRegistrationAllergiesPanel({
     for (const student of students) {
       for (const label of student.allergiesCommon) {
         const list = map.get(label) ?? [];
-        list.push(student.childFullName);
+        list.push(studentPlainName(student));
         map.set(label, list);
       }
       if (student.allergiesOther.trim()) {
         const list = map.get("Other / notes") ?? [];
-        list.push(`${student.childFullName}: ${student.allergiesOther.trim()}`);
+        list.push(`${studentPlainName(student)}: ${student.allergiesOther.trim()}`);
         map.set("Other / notes", list);
       }
     }
@@ -90,7 +91,9 @@ export function VbsRegistrationAllergiesPanel({
             <tbody>
               {withAny.map((student) => (
                 <tr key={student.id}>
-                  <td>{student.childFullName}</td>
+                  <td>
+                    <StudentName student={student} />
+                  </td>
                   <td>{student.className || "—"}</td>
                   <td>{student.ageYears}</td>
                   <td>{allergiesLabel(student.allergiesCommon, student.allergiesOther)}</td>

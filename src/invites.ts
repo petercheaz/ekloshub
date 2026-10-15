@@ -217,11 +217,16 @@ export async function acceptInvite(
   }
 
   const memberRole = isOrgRole(invite.role) ? invite.role : "org_read";
+  const { seasonYearForNewMember } = await import("./vbs-org-season.js");
+  const seasonYear = await seasonYearForNewMember(invite.organization_id);
   await db().query(
-    `INSERT INTO organization_members (organization_id, username, role)
-     VALUES ($1,$2,$3)
-     ON CONFLICT (organization_id, username) DO NOTHING`,
-    [invite.organization_id, username, memberRole],
+    `INSERT INTO organization_members (organization_id, username, role, vbs_season_year, added_at, removed_at)
+     VALUES ($1,$2,$3,$4,NOW(),NULL)
+     ON CONFLICT (organization_id, username) DO UPDATE SET
+       role = EXCLUDED.role,
+       removed_at = NULL,
+       vbs_season_year = EXCLUDED.vbs_season_year`,
+    [invite.organization_id, username, memberRole, seasonYear],
   );
   await db().query("UPDATE org_invites SET accepted_at = NOW() WHERE id = $1", [invite.id]);
   return { username, organizationId: invite.organization_id };

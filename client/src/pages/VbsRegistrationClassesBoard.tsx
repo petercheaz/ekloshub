@@ -1,115 +1,66 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState, type DragEvent } from "react";
+import { useNavigate } from "react-router-dom";
+import { orgPath } from "../orgs";
+import { CollapsibleFormActions, CollapsibleFormPanel, CollapsibleFormTrigger } from "../CollapsibleForm";
+import { expandableRowHeaderProps } from "../expandable-row";
 import { api } from "../api";
 import type {
-  OrgMember,
   VbsRegistrationClass,
+  VbsRegistrationStaffMember,
   VbsRegistrationStudent,
   VbsRegistrationWorkspace,
 } from "../types";
+import {
+  formatRegistrationClassName,
+  VBS_ROTATION_STATION_NAMES,
+} from "@vbs-rotation-stations";
+import {
+  insertClassIdBefore,
+  insertIdBefore,
+  insertUsernameBefore,
+  partitionStudentsByClass,
+} from "../vbs-registration-class-roster";
+import {
+  classStudentStats,
+  RosterColumnShell,
+  RosterListTail,
+  rosterDropKey,
+  StaffPoolChip,
+  StaffRosterChip,
+  StudentRosterChip,
+  studentAgeAtVbs,
+  type RosterDrag,
+  type RosterDropTarget,
+  type StaffRole,
+} from "../RegistrationClassRosterDnD";
 
-type StaffDrag = {
-  kind: "staff";
-  username: string;
-  fromClassId: string | null;
-  role: "leader" | "teacher" | "helper";
-};
-type StudentDrag = { kind: "student"; studentId: string; fromClassId: string | null };
-
-function memberLabel(member: OrgMember) {
+function staffLabel(member: VbsRegistrationStaffMember) {
   const name = [member.firstName, member.lastName].filter(Boolean).join(" ").trim();
   return name || member.username;
 }
 
-function tshirtShort(size: string) {
-  if (!size.trim()) {
-    return "—";
+function findStaffSlotForUsername(
+  classes: VbsRegistrationClass[],
+  username: string,
+): { classId: string; role: "leader" | "teacher" | "helper" } | null {
+  for (const c of classes) {
+    if (c.leaders.includes(username)) {
+      return { classId: c.id, role: "leader" };
+    }
+    if (c.teachers.includes(username)) {
+      return { classId: c.id, role: "teacher" };
+    }
+    if (c.helpers.includes(username)) {
+      return { classId: c.id, role: "helper" };
+    }
   }
-  return size.replace(/^Youth /, "Y").replace(/^Adult /, "A");
-}
-
-function StudentChip({
-  student,
-  canWrite,
-  onDragStart,
-}: {
-  student: VbsRegistrationStudent;
-  canWrite: boolean;
-  onDragStart: () => void;
-}) {
-  const first = student.childFullName.trim().split(/\s+/)[0] ?? student.childFullName;
-  return (
-    <div
-      className="vbs-reg-class-chip vbs-reg-class-chip-student"
-      draggable={canWrite}
-      onDragStart={(e) => {
-        e.dataTransfer.effectAllowed = "move";
-        onDragStart();
-      }}
-      title={`${student.childFullName}${student.source === "public" ? " · Parent online" : ""}`}
-    >
-      <span className="vbs-reg-class-chip-name">{first}</span>
-      <span className="vbs-reg-class-chip-icons" aria-hidden>
-        {student.source === "public" ? (
-          <span className="vbs-reg-class-icon vbs-reg-class-icon-parent" title="Parent online">
-            P
-          </span>
-        ) : null}
-        {student.paymentStatus === "pending" ? (
-          <span className="vbs-reg-class-icon vbs-reg-class-icon-pay-pending" title="Payment pending">
-            $
-          </span>
-        ) : student.paymentStatus === "paid" ? (
-          <span className="vbs-reg-class-icon vbs-reg-class-icon-pay-paid" title="Paid">
-            ✓
-          </span>
-        ) : (
-          <span className="vbs-reg-class-icon vbs-reg-class-icon-pay-waived" title="Waived">
-            W
-          </span>
-        )}
-        <span className="vbs-reg-class-icon vbs-reg-class-icon-shirt" title={student.tshirtSize || "No shirt size"}>
-          {tshirtShort(student.tshirtSize)}
-        </span>
-      </span>
-    </div>
-  );
-}
-
-function StaffChip({
-  username,
-  label,
-  role,
-  canWrite,
-  fromClassId,
-  onDragStart,
-}: {
-  username: string;
-  label: string;
-  role: "leader" | "teacher" | "helper";
-  canWrite: boolean;
-  fromClassId: string | null;
-  onDragStart: () => void;
-}) {
-  const roleLetter = role === "leader" ? "L" : role === "helper" ? "H" : "T";
-  return (
-    <div
-      className={`vbs-reg-class-chip vbs-reg-class-chip-staff vbs-reg-class-chip-${role}`}
-      draggable={canWrite}
-      onDragStart={(e) => {
-        e.dataTransfer.effectAllowed = "move";
-        onDragStart();
-      }}
-      title={`${label} (${role})`}
-    >
-      <span className="vbs-reg-class-chip-name">{label}</span>
-      <span className="vbs-reg-class-chip-role">{roleLetter}</span>
-    </div>
-  );
+  return null;
 }
 
 type ClassDraft = {
   id: string;
-  name: string;
+  rotationIndex: number;
+  sectionLabel: string;
   minAge: number;
   maxAge: number;
   capacityMax: number;
@@ -117,140 +68,360 @@ type ClassDraft = {
 };
 
 function emptyClassDraft(): ClassDraft {
-  return { id: "", name: "", minAge: 4, maxAge: 11, capacityMax: 20, registrationClosed: false };
+  return {
+    id: "",
+    rotationIndex: 0,
+    sectionLabel: "",
+    minAge: 4,
+    maxAge: 7,
+    capacityMax: 20,
+    registrationClosed: false,
+  };
+}
+
+function classDraftTitle(draft: ClassDraft) {
+  return formatRegistrationClassName(draft.rotationIndex, draft.sectionLabel);
+}
+
+function classDraftFromClass(cls: VbsRegistrationClass): ClassDraft {
+  return {
+    id: cls.id,
+    rotationIndex: cls.rotationIndex ?? 0,
+    sectionLabel: cls.sectionLabel,
+    minAge: cls.minAge,
+    maxAge: cls.maxAge,
+    capacityMax: cls.capacityMax,
+    registrationClosed: cls.registrationClosed,
+  };
+}
+
+function ClassEditorFields({
+  draft,
+  setDraft,
+  busy,
+}: {
+  draft: ClassDraft;
+  setDraft: (value: ClassDraft | ((current: ClassDraft) => ClassDraft)) => void;
+  busy: boolean;
+}) {
+  return (
+    <>
+      <p className="muted vbs-reg-class-editor-lead">
+        Title preview: <strong>{classDraftTitle(draft)}</strong>
+      </p>
+      <div className="vbs-plan-field-row">
+        <label className="vbs-plan-field">
+          Rotation station
+          <select
+            required
+            disabled={busy}
+            value={draft.rotationIndex}
+            onChange={(e) => setDraft({ ...draft, rotationIndex: Number(e.target.value) })}
+          >
+            {VBS_ROTATION_STATION_NAMES.map((station, index) => (
+              <option key={station} value={index}>
+                {station}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="vbs-plan-field">
+          Section (optional)
+          <input
+            disabled={busy}
+            value={draft.sectionLabel}
+            placeholder="I, II, A…"
+            maxLength={16}
+            onChange={(e) => setDraft({ ...draft, sectionLabel: e.target.value })}
+          />
+        </label>
+      </div>
+      <div className="vbs-plan-field-row">
+        <label className="vbs-plan-field">
+          Min age
+          <input
+            type="number"
+            min={0}
+            required
+            disabled={busy}
+            value={draft.minAge}
+            onChange={(e) => setDraft({ ...draft, minAge: Number(e.target.value) })}
+          />
+        </label>
+        <label className="vbs-plan-field">
+          Max age
+          <input
+            type="number"
+            min={0}
+            required
+            disabled={busy}
+            value={draft.maxAge}
+            onChange={(e) => setDraft({ ...draft, maxAge: Number(e.target.value) })}
+          />
+        </label>
+        <label className="vbs-plan-field">
+          Max students (0 = no limit)
+          <input
+            type="number"
+            min={0}
+            disabled={busy}
+            value={draft.capacityMax}
+            onChange={(e) => setDraft({ ...draft, capacityMax: Number(e.target.value) })}
+          />
+        </label>
+      </div>
+      <label className="vbs-registration-check">
+        <input
+          type="checkbox"
+          disabled={busy}
+          checked={draft.registrationClosed}
+          onChange={(e) => setDraft({ ...draft, registrationClosed: e.target.checked })}
+        />
+        Closed to new online assignments
+      </label>
+    </>
+  );
 }
 
 export function VbsRegistrationClassesBoard({
   orgId,
   data,
+  vbsAgeOn,
   canWrite,
   onReload,
 }: {
   orgId: string;
   data: VbsRegistrationWorkspace;
+  vbsAgeOn: Date;
   canWrite: boolean;
   onReload: () => Promise<void>;
 }) {
-  const [members, setMembers] = useState<OrgMember[]>([]);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState("");
   const [classDraft, setClassDraft] = useState<ClassDraft>(() => emptyClassDraft());
-  const [dragStudent, setDragStudent] = useState<StudentDrag | null>(null);
-  const [dragStaff, setDragStaff] = useState<StaffDrag | null>(null);
+  const [showAddClassForm, setShowAddClassForm] = useState(false);
+  const [expandedClassId, setExpandedClassId] = useState<string | null>(null);
+  const [drag, setDrag] = useState<RosterDrag | null>(null);
+  const [dropTarget, setDropTarget] = useState<RosterDropTarget | null>(null);
+  const navigate = useNavigate();
 
-  useEffect(() => {
-    let cancelled = false;
-    api
-      .organization(orgId)
-      .then((detail) => {
-        if (!cancelled) {
-          setMembers(detail.members);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setMembers([]);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [orgId]);
+  function openStudentDetail(studentId: string) {
+    const params = new URLSearchParams();
+    params.set("student", studentId);
+    navigate(`${orgPath(orgId, "/registration")}?${params.toString()}`);
+  }
 
-  const memberMap = useMemo(() => new Map(members.map((m) => [m.username, m])), [members]);
+  function openStaffDetail(username: string) {
+    navigate(`${orgPath(orgId, "/manage")}?member=${encodeURIComponent(username)}`);
+  }
 
-  const studentsByClass = useMemo(() => {
-    const map = new Map<string, VbsRegistrationStudent[]>();
-    const unassigned: VbsRegistrationStudent[] = [];
-    for (const student of data.students) {
-      if (!student.classId) {
-        unassigned.push(student);
-        continue;
-      }
-      const list = map.get(student.classId) ?? [];
-      list.push(student);
-      map.set(student.classId, list);
-    }
-    return { map, unassigned };
-  }, [data.students]);
+  const staffMembers = data.staffMembers ?? [];
+  const memberMap = useMemo(() => new Map(staffMembers.map((m) => [m.username, m])), [staffMembers]);
 
-  const assignedStaffUsernames = useMemo(() => {
-    const set = new Set<string>();
-    for (const cls of data.classes) {
-      for (const u of cls.leaders) {
-        set.add(u);
-      }
-      for (const u of cls.teachers) {
-        set.add(u);
-      }
-      for (const u of cls.helpers) {
-        set.add(u);
-      }
-    }
-    return set;
-  }, [data.classes]);
-
-  const staffPool = useMemo(
-    () => members.filter((m) => !assignedStaffUsernames.has(m.username)),
-    [members, assignedStaffUsernames],
+  const studentsByClass = useMemo(
+    () => partitionStudentsByClass(data.students, data.classes),
+    [data.students, data.classes],
   );
 
-  async function dropStudent(targetClassId: string | null) {
-    if (!dragStudent || !canWrite) {
-      return;
+  const staffAssignmentByUser = useMemo(() => {
+    const map = new Map<string, string[]>();
+    const push = (username: string, label: string) => {
+      const list = map.get(username) ?? [];
+      list.push(label);
+      map.set(username, list);
+    };
+    for (const cls of data.classes) {
+      for (const u of cls.leaders) {
+        push(u, `Leader · ${cls.name}`);
+      }
+      for (const u of cls.teachers) {
+        push(u, `Teacher · ${cls.name}`);
+      }
+      for (const u of cls.helpers) {
+        push(u, `Helper · ${cls.name}`);
+      }
     }
-    if (dragStudent.fromClassId === targetClassId) {
-      return;
-    }
-    setBusy(true);
-    setStatus("");
-    try {
-      await api.assignVbsRegistrationStudentClass(orgId, dragStudent.studentId, targetClassId);
-      await onReload();
-    } catch (err) {
-      setStatus(err instanceof Error ? err.message : "Could not move student");
-    } finally {
-      setBusy(false);
-      setDragStudent(null);
-    }
+    return new Map([...map.entries()].map(([username, labels]) => [username, labels.join(" · ")]));
+  }, [data.classes]);
+
+  const sortedStaff = useMemo(
+    () => [...staffMembers].sort((a, b) => staffLabel(a).localeCompare(staffLabel(b))),
+    [staffMembers],
+  );
+
+  function clearDrag() {
+    setDrag(null);
+    setDropTarget(null);
   }
 
-  async function dropStaff(targetClassId: string, role: "leader" | "teacher" | "helper") {
-    if (!dragStaff || !canWrite) {
-      return;
-    }
-    setBusy(true);
-    setStatus("");
-    try {
-      if (dragStaff.fromClassId && dragStaff.fromClassId !== targetClassId) {
-        await api.removeVbsRegistrationClassStaff(orgId, dragStaff.fromClassId, dragStaff.username);
-      } else if (dragStaff.fromClassId === targetClassId && dragStaff.role === role) {
-        setBusy(false);
-        setDragStaff(null);
+  const sortedClasses = useMemo(() => {
+    return [...data.classes].sort((a, b) => {
+      if ((a.boardOrder ?? 0) !== (b.boardOrder ?? 0)) {
+        return (a.boardOrder ?? 0) - (b.boardOrder ?? 0);
+      }
+      const ai = a.rotationIndex ?? 99;
+      const bi = b.rotationIndex ?? 99;
+      if (ai !== bi) {
+        return ai - bi;
+      }
+      if (a.minAge !== b.minAge) {
+        return a.minAge - b.minAge;
+      }
+      return a.sectionLabel.localeCompare(b.sectionLabel, undefined, { numeric: true });
+    });
+  }, [data.classes]);
+
+  function isDropOver(target: RosterDropTarget) {
+    return dropTarget !== null && rosterDropKey(dropTarget) === rosterDropKey(target);
+  }
+
+  function dragOverTarget(target: RosterDropTarget) {
+    return (e: DragEvent) => {
+      if (!canWrite || !drag) {
         return;
       }
-      await api.assignVbsRegistrationClassStaff(orgId, targetClassId, { username: dragStaff.username, role });
+      e.preventDefault();
+      e.stopPropagation();
+      e.dataTransfer.dropEffect = "move";
+      setDropTarget(target);
+    };
+  }
+
+  function dropOnTarget(target: RosterDropTarget) {
+    return (e: DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!canWrite || !drag) {
+        return;
+      }
+      void applyDrop(target);
+    };
+  }
+
+  async function applyDrop(target: RosterDropTarget) {
+    if (!drag || !canWrite) {
+      clearDrag();
+      return;
+    }
+    setBusy(true);
+    setStatus("");
+    try {
+      if (drag.kind === "student" && target.kind === "student") {
+        if (target.classId === null) {
+          if (drag.fromClassId) {
+            await api.removeVbsRegistrationClassStudent(orgId, drag.fromClassId, drag.studentId);
+          } else {
+            const pool = studentsByClass.pool;
+            const studentIds = insertIdBefore(pool, drag.studentId, target.beforeStudentId);
+            await api.reorderVbsRegistrationClassStudents(orgId, null, studentIds);
+          }
+        } else {
+          let roster = [...(studentsByClass.map.get(target.classId) ?? [])];
+          const student = data.students.find((s) => s.id === drag.studentId);
+          if (student && !roster.some((s) => s.id === student.id)) {
+            roster = [...roster, student];
+          }
+          const studentIds = insertIdBefore(roster, drag.studentId, target.beforeStudentId);
+          await api.reorderVbsRegistrationClassStudents(orgId, target.classId, studentIds);
+        }
+      } else if (drag.kind === "staff" && target.kind === "staff") {
+        const cls = data.classes.find((c) => c.id === target.classId);
+        const roleList =
+          target.role === "leader" ? cls?.leaders ?? [] : target.role === "helper" ? cls?.helpers ?? [] : cls?.teachers ?? [];
+        const merged =
+          drag.fromClassId === target.classId && drag.role === target.role
+            ? roleList
+            : [...roleList.filter((u) => u !== drag.username), drag.username];
+        const usernames = insertUsernameBefore(merged, drag.username, target.beforeUsername);
+        await api.assignVbsRegistrationClassStaff(orgId, target.classId, {
+          username: drag.username,
+          role: target.role,
+        });
+        await api.reorderVbsRegistrationClassStaff(orgId, target.classId, target.role, usernames);
+      } else if (drag.kind === "staff" && target.kind === "staff-pool") {
+        if (drag.fromClassId) {
+          await api.removeVbsRegistrationClassStaff(orgId, drag.fromClassId, drag.username);
+        }
+      } else if (drag.kind === "class" && target.kind === "class") {
+        const classIds = insertClassIdBefore(
+          sortedClasses.map((c) => c.id),
+          drag.classId,
+          target.beforeClassId,
+        );
+        await api.reorderVbsRegistrationClasses(orgId, classIds);
+      }
       await onReload();
     } catch (err) {
-      setStatus(err instanceof Error ? err.message : "Could not assign staff");
+      setStatus(err instanceof Error ? err.message : "Could not update roster");
     } finally {
       setBusy(false);
-      setDragStaff(null);
+      clearDrag();
     }
   }
 
-  async function saveClass(event: FormEvent) {
-    event.preventDefault();
+  async function removeStudentFromClass(studentId: string, fromClassId: string) {
     if (!canWrite) {
       return;
     }
     setBusy(true);
+    try {
+      await api.removeVbsRegistrationClassStudent(orgId, fromClassId, studentId);
+      await onReload();
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : "Could not remove student");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function removeStaffFromClass(classId: string, username: string) {
+    if (!canWrite) {
+      return;
+    }
+    setBusy(true);
+    try {
+      await api.removeVbsRegistrationClassStaff(orgId, classId, username);
+      await onReload();
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : "Could not remove staff");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function closeAddClassForm() {
+    setClassDraft(emptyClassDraft());
+    setShowAddClassForm(false);
+  }
+
+  function openAddClassForm() {
+    setExpandedClassId(null);
+    setClassDraft(emptyClassDraft());
+    setShowAddClassForm(true);
+  }
+
+  function toggleClassExpand(classId: string) {
+    setShowAddClassForm(false);
+    setExpandedClassId((current) => (current === classId ? null : classId));
+  }
+
+  async function saveClassDraft(draft: ClassDraft, event?: FormEvent) {
+    event?.preventDefault();
+    if (!canWrite) {
+      return;
+    }
+    const wasEdit = Boolean(draft.id);
+    setBusy(true);
     setStatus("");
     try {
-      await api.saveVbsRegistrationClass(orgId, { ...classDraft });
-      setClassDraft(emptyClassDraft());
+      await api.saveVbsRegistrationClass(orgId, { ...draft });
+      if (wasEdit) {
+        setExpandedClassId(null);
+      } else {
+        closeAddClassForm();
+      }
       await onReload();
-      setStatus(classDraft.id ? "Class updated." : "Class added.");
+      setStatus(wasEdit ? "Class updated." : "Class added.");
     } catch (err) {
       setStatus(err instanceof Error ? err.message : "Could not save class");
     } finally {
@@ -265,23 +436,13 @@ export function VbsRegistrationClassesBoard({
     setBusy(true);
     try {
       await api.deleteVbsRegistrationClass(orgId, classId);
+      setExpandedClassId((current) => (current === classId ? null : current));
       await onReload();
     } catch (err) {
       setStatus(err instanceof Error ? err.message : "Could not delete class");
     } finally {
       setBusy(false);
     }
-  }
-
-  function editClass(cls: VbsRegistrationClass) {
-    setClassDraft({
-      id: cls.id,
-      name: cls.name,
-      minAge: cls.minAge,
-      maxAge: cls.maxAge,
-      capacityMax: cls.capacityMax,
-      registrationClosed: cls.registrationClosed,
-    });
   }
 
   function capacityLabel(cls: VbsRegistrationClass) {
@@ -291,146 +452,208 @@ export function VbsRegistrationClassesBoard({
     return `${cls.enrolledCount} / ${cls.capacityMax}`;
   }
 
+  async function assignStudentsByAge() {
+    if (!canWrite || data.students.length === 0 || data.classes.length === 0) {
+      return;
+    }
+    if (
+      !window.confirm(
+        "Place each student on every station class that matches their VBS age? Students will be removed from classes outside that age range.",
+      )
+    ) {
+      return;
+    }
+    setBusy(true);
+    setStatus("");
+    try {
+      const result = await api.autoAssignVbsRegistrationStudentsByAge(orgId);
+      await onReload();
+      if (result.unplaced.length === 0) {
+        setStatus(
+          `Set ${result.placedStudents} student${result.placedStudents === 1 ? "" : "s"} on age-matching station classes.`,
+        );
+      } else {
+        const names = result.unplaced.map((u) => `${u.name} (age ${u.age})`).join(", ");
+        setStatus(
+          `Placed ${result.placedStudents} student${result.placedStudents === 1 ? "" : "s"} by age. No matching class for: ${names}.`,
+        );
+      }
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : "Could not assign students by age");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div className="vbs-reg-classes">
       <p className="muted vbs-reg-classes-payment-note">{data.paymentNote}</p>
+      <p className="muted vbs-reg-classes-drag-hint">
+        <strong>Students</strong> (registered children from the Students tab) go on the left — drag them into a station
+        class row. <strong>Volunteers & staff</strong> (church logins from Members & invites, not children) go on the
+        right — drag onto a role column or <strong>drop on another person</strong> to swap order. Use{" "}
+        <span aria-hidden="true">×</span> to remove from a class, or drag back to the staff pool. Drag class rows by the
+        handle to reorder stations on the board.
+      </p>
 
       {canWrite ? (
-        <form className="vbs-panel vbs-reg-class-editor" onSubmit={(e) => void saveClass(e)}>
-          <h3 className="vbs-plan-section-title">{classDraft.id ? "Edit class" : "Add class"}</h3>
-          <div className="vbs-plan-field-row">
-            <label className="vbs-plan-field">
-              Class name
-              <input
-                required
-                disabled={busy}
-                value={classDraft.name}
-                onChange={(e) => setClassDraft({ ...classDraft, name: e.target.value })}
-              />
-            </label>
-            <label className="vbs-plan-field">
-              Min age
-              <input
-                type="number"
-                min={0}
-                disabled={busy}
-                value={classDraft.minAge}
-                onChange={(e) => setClassDraft({ ...classDraft, minAge: Number(e.target.value) })}
-              />
-            </label>
-            <label className="vbs-plan-field">
-              Max age
-              <input
-                type="number"
-                min={0}
-                disabled={busy}
-                value={classDraft.maxAge}
-                onChange={(e) => setClassDraft({ ...classDraft, maxAge: Number(e.target.value) })}
-              />
-            </label>
-            <label className="vbs-plan-field">
-              Max students (0 = no limit)
-              <input
-                type="number"
-                min={0}
-                disabled={busy}
-                value={classDraft.capacityMax}
-                onChange={(e) => setClassDraft({ ...classDraft, capacityMax: Number(e.target.value) })}
-              />
-            </label>
-          </div>
-          <label className="vbs-registration-check">
-            <input
-              type="checkbox"
-              disabled={busy}
-              checked={classDraft.registrationClosed}
-              onChange={(e) => setClassDraft({ ...classDraft, registrationClosed: e.target.checked })}
-            />
-            Closed to new online assignments
-          </label>
-          <div className="vbs-plan-form-actions">
-            <button type="submit" className="vbs-plan-save" disabled={busy}>
-              {classDraft.id ? "Save class" : "Add class"}
+        <div className="vbs-registration-form-head">
+          <h2 className="vbs-plan-section-title">Classes</h2>
+          <div className="vbs-reg-classes-head-actions">
+            <button
+              type="button"
+              className="vbs-plan-save vbs-collapsible-form-trigger"
+              disabled={busy || data.students.length === 0 || data.classes.length === 0}
+              onClick={() => void assignStudentsByAge()}
+            >
+              Set Students According To Age
             </button>
-            {classDraft.id ? (
-              <button type="button" className="ghost" disabled={busy} onClick={() => setClassDraft(emptyClassDraft())}>
-                Cancel edit
-              </button>
-            ) : null}
+            <CollapsibleFormTrigger
+              label="Add class"
+              disabled={busy || showAddClassForm}
+              ariaExpanded={showAddClassForm}
+              onClick={openAddClassForm}
+            />
           </div>
-        </form>
+        </div>
       ) : null}
 
-      <div className="vbs-reg-classes-layout">
-        <section
-          className="vbs-reg-class-column vbs-reg-class-column-unassigned"
-          onDragOver={(e) => {
-            if (canWrite && dragStudent) {
-              e.preventDefault();
-            }
-          }}
-          onDrop={(e) => {
-            e.preventDefault();
-            void dropStudent(null);
-          }}
-        >
-          <header className="vbs-reg-class-column-head">
-            <h3>Unassigned</h3>
-            <span className="muted">{studentsByClass.unassigned.length}</span>
+      {canWrite ? (
+        <p className="muted vbs-reg-classes-row-hint">Click a class row to edit station, ages, and capacity.</p>
+      ) : null}
+
+      {showAddClassForm && canWrite ? (
+        <CollapsibleFormPanel title="Add class" className="vbs-reg-class-editor">
+          <form className="vbs-collapsible-form" onSubmit={(e) => void saveClassDraft(classDraft, e)}>
+            <ClassEditorFields draft={classDraft} setDraft={setClassDraft} busy={busy} />
+            <CollapsibleFormActions onCancel={closeAddClassForm} saveLabel="Save" busy={busy} />
+          </form>
+        </CollapsibleFormPanel>
+      ) : null}
+
+      <div className="vbs-reg-classes-layout vbs-reg-classes-layout-rows">
+        <aside className="vbs-reg-side-pool vbs-reg-student-pool">
+          <header className="vbs-reg-side-pool-head">
+            <h3>Students</h3>
+            <span className="muted">{data.students.length} registered</span>
           </header>
-          <div className="vbs-reg-class-drop">
-            {studentsByClass.unassigned.map((student) => (
-              <StudentChip
+          <p className="muted vbs-reg-side-pool-note">
+            Every student stays here for rotation — drag onto each station class as needed. Add or edit
+            registrations on the Students tab.
+          </p>
+          <div className="vbs-roster-sortable-list vbs-reg-drop-zone">
+            {studentsByClass.pool.map((student) => (
+              <StudentRosterChip
                 key={student.id}
                 student={student}
+                ageYears={studentAgeAtVbs(student, vbsAgeOn)}
                 canWrite={canWrite && !busy}
-                onDragStart={() => setDragStudent({ kind: "student", studentId: student.id, fromClassId: null })}
+                dropActive={drag?.kind === "student"}
+                dropOver={isDropOver({ kind: "student", classId: null, beforeStudentId: student.id })}
+                onDragStart={() =>
+                  setDrag({ kind: "student", studentId: student.id, fromClassId: null })
+                }
+                onDragOverBefore={dragOverTarget({ kind: "student", classId: null, beforeStudentId: student.id })}
+                onDropBefore={dropOnTarget({ kind: "student", classId: null, beforeStudentId: student.id })}
+                onOpenDetail={() => openStudentDetail(student.id)}
               />
             ))}
+            <RosterListTail
+              canWrite={canWrite && !busy}
+              dropActive={drag?.kind === "student"}
+              dropOver={isDropOver({ kind: "student", classId: null, beforeStudentId: null })}
+              onDragOver={dragOverTarget({ kind: "student", classId: null, beforeStudentId: null })}
+              onDrop={dropOnTarget({ kind: "student", classId: null, beforeStudentId: null })}
+              label={
+                data.students.length === 0
+                  ? "Drop students here"
+                  : "Drop from a class to remove that station only · reorder list"
+              }
+            />
+            {data.students.length === 0 && !canWrite ? (
+              <p className="muted vbs-reg-drop-empty">No students registered yet.</p>
+            ) : null}
           </div>
-        </section>
+        </aside>
 
-        <div className="vbs-reg-class-columns-scroll">
-          {data.classes.map((cls) => (
-            <ClassColumn
+        <div className="vbs-reg-class-rows">
+          {data.classes.length === 0 ? (
+            <p className="muted">No classes yet. Click Add class to match your VBS rotation stations.</p>
+          ) : null}
+          {sortedClasses.map((cls) => (
+            <ClassRow
               key={cls.id}
               cls={cls}
               students={studentsByClass.map.get(cls.id) ?? []}
               memberMap={memberMap}
+              vbsAgeOn={vbsAgeOn}
               canWrite={canWrite && !busy}
-              onEdit={() => editClass(cls)}
-              onDelete={() => void removeClass(cls.id, cls.name)}
+              busy={busy}
+              expanded={expandedClassId === cls.id}
+              classDrag={drag}
+              dropTarget={dropTarget}
+              onToggleExpand={() => toggleClassExpand(cls.id)}
+              onSave={(draft) => saveClassDraft(draft)}
+              onRemove={() => void removeClass(cls.id, cls.name)}
               capacityLabel={capacityLabel(cls)}
-              dragStudent={dragStudent}
-              dragStaff={dragStaff}
-              setDragStudent={setDragStudent}
-              setDragStaff={setDragStaff}
-              onDropStudent={() => void dropStudent(cls.id)}
-              onDropStaff={(role) => void dropStaff(cls.id, role)}
+              onClassDragStart={() => setDrag({ kind: "class", classId: cls.id })}
+              onClassDragOverBefore={dropOnTarget}
+              onClassDragOver={dragOverTarget}
+              onRemoveStudent={(studentId) => void removeStudentFromClass(studentId, cls.id)}
+              onRemoveStaff={(username) => void removeStaffFromClass(cls.id, username)}
+              onStaffDragStart={(username, role) =>
+                setDrag({ kind: "staff", username, fromClassId: cls.id, role })
+              }
+              onStudentDragStart={(studentId) =>
+                setDrag({ kind: "student", studentId, fromClassId: cls.id })
+              }
+              onOpenStudent={openStudentDetail}
+              onOpenStaff={openStaffDetail}
             />
           ))}
         </div>
 
-        <aside className="vbs-reg-class-staff-pool">
-          <header className="vbs-reg-class-column-head">
-            <h3>Volunteers</h3>
-            <span className="muted">Drag to a class</span>
+        <aside className="vbs-reg-side-pool vbs-reg-account-pool">
+          <header className="vbs-reg-side-pool-head">
+            <h3>Volunteers & staff</h3>
+            <span className="muted">{sortedStaff.length}</span>
           </header>
-          <div className="vbs-reg-class-drop">
-            {staffPool.map((member) => (
-              <StaffChip
-                key={member.username}
-                username={member.username}
-                label={memberLabel(member)}
-                role="teacher"
-                canWrite={canWrite && !busy}
-                fromClassId={null}
-                onDragStart={() =>
-                  setDragStaff({ kind: "staff", username: member.username, fromClassId: null, role: "teacher" })
-                }
-              />
-            ))}
-            {staffPool.length === 0 ? <p className="muted">All org members are assigned to a class.</p> : null}
+          <p className="muted vbs-reg-side-pool-note">
+            Org members with logins (Manage org → Members & invites). Pending invites are not listed until they accept.
+          </p>
+          <div
+            className={`vbs-roster-sortable-list vbs-reg-drop-zone${drag?.kind === "staff" ? " is-active" : ""}${isDropOver({ kind: "staff-pool" }) ? " is-over" : ""}`}
+            onDragOver={drag?.kind === "staff" ? dragOverTarget({ kind: "staff-pool" }) : undefined}
+            onDrop={drag?.kind === "staff" ? dropOnTarget({ kind: "staff-pool" }) : undefined}
+          >
+            {sortedStaff.map((member) => {
+              const assignment = staffAssignmentByUser.get(member.username);
+              const name = staffLabel(member);
+              return (
+                <div key={member.username} className="vbs-reg-account-pool-item">
+                  <StaffPoolChip
+                    member={member}
+                    name={name}
+                    canWrite={canWrite && !busy}
+                    onDragStart={() =>
+                      setDrag({
+                        kind: "staff",
+                        username: member.username,
+                        fromClassId: null,
+                        role: "teacher",
+                      })
+                    }
+                    onOpenDetail={() => openStaffDetail(member.username)}
+                  />
+                  {assignment ? <span className="muted vbs-reg-account-assignment">{assignment}</span> : null}
+                </div>
+              );
+            })}
+            {sortedStaff.length === 0 ? (
+              <p className="muted vbs-reg-drop-empty">
+                No staff logins yet — invite volunteers under Manage org → Members & invites.
+              </p>
+            ) : null}
           </div>
         </aside>
       </div>
@@ -440,175 +663,244 @@ export function VbsRegistrationClassesBoard({
   );
 }
 
-function ClassColumn({
+function ClassRow({
   cls,
   students,
   memberMap,
+  vbsAgeOn,
   canWrite,
-  onEdit,
-  onDelete,
+  busy,
+  expanded,
+  classDrag,
+  dropTarget,
+  onToggleExpand,
+  onSave,
+  onRemove,
   capacityLabel,
-  dragStudent,
-  dragStaff,
-  setDragStudent,
-  setDragStaff,
-  onDropStudent,
-  onDropStaff,
+  onClassDragStart,
+  onClassDragOverBefore,
+  onClassDragOver,
+  onRemoveStudent,
+  onRemoveStaff,
+  onStaffDragStart,
+  onStudentDragStart,
+  onOpenStudent,
+  onOpenStaff,
 }: {
   cls: VbsRegistrationClass;
   students: VbsRegistrationStudent[];
-  memberMap: Map<string, OrgMember>;
+  memberMap: Map<string, VbsRegistrationStaffMember>;
+  vbsAgeOn: Date;
   canWrite: boolean;
-  onEdit: () => void;
-  onDelete: () => void;
+  busy: boolean;
+  expanded: boolean;
+  classDrag: RosterDrag | null;
+  dropTarget: RosterDropTarget | null;
+  onToggleExpand: () => void;
+  onSave: (draft: ClassDraft) => Promise<void>;
+  onRemove: () => void;
   capacityLabel: string;
-  dragStudent: StudentDrag | null;
-  dragStaff: StaffDrag | null;
-  setDragStudent: (value: StudentDrag | null) => void;
-  setDragStaff: (value: StaffDrag | null) => void;
-  onDropStudent: () => void;
-  onDropStaff: (role: "leader" | "teacher" | "helper") => void;
+  onClassDragStart: () => void;
+  onClassDragOverBefore: (target: RosterDropTarget) => (e: DragEvent) => void;
+  onClassDragOver: (target: RosterDropTarget) => (e: DragEvent) => void;
+  onRemoveStudent: (studentId: string) => void;
+  onRemoveStaff: (username: string) => void;
+  onStaffDragStart: (username: string, role: StaffRole) => void;
+  onStudentDragStart: (studentId: string) => void;
+  onOpenStudent: (studentId: string) => void;
+  onOpenStaff: (username: string) => void;
 }) {
+  const [draft, setDraft] = useState(() => classDraftFromClass(cls));
+
+  useEffect(() => {
+    setDraft(classDraftFromClass(cls));
+  }, [cls]);
+
+  async function handleSave(event: FormEvent) {
+    event.preventDefault();
+    if (!canWrite) {
+      return;
+    }
+    await onSave(draft);
+  }
   const nearFull =
     cls.capacityMax > 0 && cls.enrolledCount >= Math.ceil(cls.capacityMax * 0.85) && cls.enrolledCount < cls.capacityMax;
   const full = cls.capacityMax > 0 && cls.enrolledCount >= cls.capacityMax;
 
-  function staffLabel(username: string) {
+  function staffName(username: string) {
     const member = memberMap.get(username);
-    return member ? memberLabel(member) : username;
+    return member ? staffLabel(member) : username;
   }
 
+  function staffLogin(username: string) {
+    return memberMap.get(username)?.username ?? username;
+  }
+
+  const isDropOver = (target: RosterDropTarget) =>
+    dropTarget !== null && rosterDropKey(dropTarget) === rosterDropKey(target);
+
+  const stats = classStudentStats(students, (s) => studentAgeAtVbs(s, vbsAgeOn));
+  const studentMeta =
+    stats.total === 0
+      ? ""
+      : `${stats.boys}M · ${stats.girls}F${stats.ageSpan ? ` · ${stats.ageSpan}` : ""}`;
+
+  const staffZone = (role: StaffRole, title: string, usernames: string[]) => (
+    <RosterColumnShell title={title} meta={usernames.length ? `${usernames.length} assigned` : undefined}>
+      {usernames.map((username) => (
+        <StaffRosterChip
+          key={username}
+          label={staffName(username)}
+          login={staffLogin(username)}
+          role={role}
+          canWrite={canWrite}
+          dropActive={classDrag?.kind === "staff"}
+          dropOver={isDropOver({ kind: "staff", classId: cls.id, role, beforeUsername: username })}
+          onDragStart={() => onStaffDragStart(username, role)}
+          onDragOverBefore={onClassDragOver({ kind: "staff", classId: cls.id, role, beforeUsername: username })}
+          onDropBefore={onClassDragOverBefore({ kind: "staff", classId: cls.id, role, beforeUsername: username })}
+          onRemove={() => onRemoveStaff(username)}
+          onOpenDetail={() => onOpenStaff(username)}
+        />
+      ))}
+      <RosterListTail
+        canWrite={canWrite}
+        dropActive={classDrag?.kind === "staff"}
+        dropOver={isDropOver({ kind: "staff", classId: cls.id, role, beforeUsername: null })}
+        onDragOver={onClassDragOver({ kind: "staff", classId: cls.id, role, beforeUsername: null })}
+        onDrop={onClassDragOverBefore({ kind: "staff", classId: cls.id, role, beforeUsername: null })}
+        label={usernames.length === 0 ? "Drop volunteers here" : "Drop to place last"}
+      />
+    </RosterColumnShell>
+  );
+
+  const headerProps = canWrite
+    ? expandableRowHeaderProps(
+        expanded,
+        onToggleExpand,
+        `vbs-reg-class-row-head${expanded ? " open" : ""}`,
+        `${cls.name}, class summary`,
+      )
+    : { className: "vbs-reg-class-row-head" };
+
+  const classDropOver = isDropOver({ kind: "class", beforeClassId: cls.id });
+
   return (
-    <section className={`vbs-reg-class-column${cls.registrationClosed ? " is-closed" : ""}${full ? " is-full" : ""}`}>
-      <header className="vbs-reg-class-column-head">
-        <div>
-          <h3>{cls.name}</h3>
-          <p className="muted vbs-reg-class-meta">
-            Ages {cls.minAge}–{cls.maxAge} · {capacityLabel}
-            {cls.registrationClosed ? " · Closed" : null}
-            {nearFull ? " · Almost full" : null}
-          </p>
+    <div
+      className={`vbs-reg-class-row-wrap${classDropOver ? " is-class-drop-over" : ""}`}
+      onDragOver={
+        classDrag?.kind === "class"
+          ? onClassDragOver({ kind: "class", beforeClassId: cls.id })
+          : undefined
+      }
+      onDrop={
+        classDrag?.kind === "class"
+          ? onClassDragOverBefore({ kind: "class", beforeClassId: cls.id })
+          : undefined
+      }
+    >
+      {canWrite ? (
+        <button
+          type="button"
+          className="vbs-roster-class-grip"
+          draggable
+          aria-label={`Drag to reorder ${cls.name}`}
+          onDragStart={(e) => {
+            e.dataTransfer.effectAllowed = "move";
+            onClassDragStart();
+          }}
+        >
+          ⠿
+        </button>
+      ) : null}
+      <section
+        className={`vbs-reg-class-row${cls.registrationClosed ? " is-closed" : ""}${full ? " is-full" : ""}${expanded ? " is-expanded" : ""}`}
+      >
+      <header {...headerProps}>
+        <div className="vbs-reg-class-row-head-main">
+          {canWrite ? (
+            <span className="vbs-registration-roster-chevron" aria-hidden="true">
+              {expanded ? "▾" : "▸"}
+            </span>
+          ) : null}
+          <div>
+            <h3>{cls.name}</h3>
+            <p className="muted vbs-reg-class-meta">
+              Ages {cls.minAge}–{cls.maxAge} · {capacityLabel}
+              {stats.total > 0 ? ` · ${stats.total} students (${studentMeta})` : null}
+              {cls.registrationClosed ? " · Closed" : null}
+              {nearFull ? " · Almost full" : null}
+            </p>
+          </div>
         </div>
         {canWrite ? (
-          <div className="vbs-reg-class-column-actions">
-            <button type="button" className="ghost" onClick={onEdit}>
-              Edit
-            </button>
-            <button type="button" className="ghost danger" onClick={onDelete}>
-              Delete
-            </button>
-          </div>
+          <button
+            type="button"
+            className="ghost vbs-task-remove vbs-registration-row-remove"
+            data-no-row-toggle
+            disabled={busy}
+            aria-label={`Remove class ${cls.name}`}
+            onClick={onRemove}
+          >
+            ×
+          </button>
         ) : null}
       </header>
 
-      <div
-        className="vbs-reg-class-staff-zone"
-        onDragOver={(e) => {
-          if (canWrite && dragStaff) {
-            e.preventDefault();
-          }
-        }}
-        onDrop={(e) => {
-          e.preventDefault();
-          onDropStaff("leader");
-        }}
-      >
-        <h4>Leaders</h4>
-        {cls.leaders.map((username) => (
-          <StaffChip
-            key={username}
-            username={username}
-            label={staffLabel(username)}
-            role="leader"
-            canWrite={canWrite}
-            fromClassId={cls.id}
-            onDragStart={() =>
-              setDragStaff({ kind: "staff", username, fromClassId: cls.id, role: "leader" })
-            }
+      {expanded && canWrite ? (
+        <form className="vbs-reg-class-row-editor vbs-collapsible-form" onSubmit={(e) => void handleSave(e)}>
+          <ClassEditorFields draft={draft} setDraft={setDraft} busy={busy} />
+          <CollapsibleFormActions
+            onCancel={onToggleExpand}
+            saveLabel="Save"
+            busy={busy}
           />
-        ))}
-      </div>
+        </form>
+      ) : null}
 
-      <div
-        className="vbs-reg-class-staff-zone"
-        onDragOver={(e) => {
-          if (canWrite && dragStaff) {
-            e.preventDefault();
-          }
-        }}
-        onDrop={(e) => {
-          e.preventDefault();
-          onDropStaff("teacher");
-        }}
-      >
-        <h4>Teachers</h4>
-        {cls.teachers.map((username) => (
-          <StaffChip
-            key={username}
-            username={username}
-            label={staffLabel(username)}
-            role="teacher"
+      <div className="vbs-reg-class-row-body">
+        <div className="vbs-reg-class-row-grid vbs-reg-class-row-staff">
+          {staffZone("leader", "Leaders", cls.leaders)}
+          {staffZone("teacher", "Teachers", cls.teachers)}
+          {staffZone("helper", "Helpers", cls.helpers)}
+        </div>
+        <div className="vbs-reg-class-row-students">
+        <RosterColumnShell title={`Students (${students.length})`} meta={studentMeta || undefined}>
+          {students.map((student) => (
+            <StudentRosterChip
+              key={student.id}
+              student={student}
+              ageYears={studentAgeAtVbs(student, vbsAgeOn)}
+              canWrite={canWrite}
+              dropActive={classDrag?.kind === "student"}
+              dropOver={isDropOver({ kind: "student", classId: cls.id, beforeStudentId: student.id })}
+              onDragStart={() => onStudentDragStart(student.id)}
+              onDragOverBefore={onClassDragOver({
+                kind: "student",
+                classId: cls.id,
+                beforeStudentId: student.id,
+              })}
+              onDropBefore={onClassDragOverBefore({
+                kind: "student",
+                classId: cls.id,
+                beforeStudentId: student.id,
+              })}
+              onRemove={() => onRemoveStudent(student.id)}
+              onOpenDetail={() => onOpenStudent(student.id)}
+            />
+          ))}
+          <RosterListTail
             canWrite={canWrite}
-            fromClassId={cls.id}
-            onDragStart={() =>
-              setDragStaff({ kind: "staff", username, fromClassId: cls.id, role: "teacher" })
-            }
+            dropActive={classDrag?.kind === "student"}
+            dropOver={isDropOver({ kind: "student", classId: cls.id, beforeStudentId: null })}
+            onDragOver={onClassDragOver({ kind: "student", classId: cls.id, beforeStudentId: null })}
+            onDrop={onClassDragOverBefore({ kind: "student", classId: cls.id, beforeStudentId: null })}
+            label={students.length === 0 ? "Drop students here" : "Drop to place last"}
           />
-        ))}
-      </div>
-
-      <div
-        className="vbs-reg-class-staff-zone"
-        onDragOver={(e) => {
-          if (canWrite && dragStaff) {
-            e.preventDefault();
-          }
-        }}
-        onDrop={(e) => {
-          e.preventDefault();
-          onDropStaff("helper");
-        }}
-      >
-        <h4>Helpers</h4>
-        {cls.helpers.map((username) => (
-          <StaffChip
-            key={username}
-            username={username}
-            label={staffLabel(username)}
-            role="helper"
-            canWrite={canWrite}
-            fromClassId={cls.id}
-            onDragStart={() =>
-              setDragStaff({ kind: "staff", username, fromClassId: cls.id, role: "helper" })
-            }
-          />
-        ))}
-      </div>
-
-      <div
-        className="vbs-reg-class-drop vbs-reg-class-students"
-        onDragOver={(e) => {
-          if (canWrite && dragStudent) {
-            e.preventDefault();
-          }
-        }}
-        onDrop={(e) => {
-          e.preventDefault();
-          onDropStudent();
-        }}
-      >
-        {students.map((student) => (
-          <StudentChip
-            key={student.id}
-            student={student}
-            canWrite={canWrite}
-            onDragStart={() =>
-              setDragStudent({ kind: "student", studentId: student.id, fromClassId: cls.id })
-            }
-          />
-        ))}
-        {students.length === 0 ? <p className="muted">Drop students here</p> : null}
+        </RosterColumnShell>
+        </div>
       </div>
     </section>
+    </div>
   );
 }

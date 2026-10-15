@@ -51,6 +51,10 @@ type MemberRow = {
   phone: string;
   verified: boolean;
   password_custom: boolean;
+  vbs_season_year?: number;
+  added_at?: Date;
+  removed_at?: Date | null;
+  background_check_status?: string;
 };
 
 function presentMember(row: MemberRow) {
@@ -63,6 +67,15 @@ function presentMember(row: MemberRow) {
     phone: row.phone ?? "",
     verified: row.verified === true,
     usesDefaultPassword: !row.password_custom,
+    vbsSeasonYear: row.vbs_season_year ?? new Date().getFullYear(),
+    addedAt: row.added_at ? row.added_at.toISOString() : "",
+    removedAt: row.removed_at ? row.removed_at.toISOString() : null,
+    backgroundCheckStatus:
+      row.background_check_status === "pending" ||
+      row.background_check_status === "cleared" ||
+      row.background_check_status === "not_started"
+        ? row.background_check_status
+        : "not_started",
   };
 }
 
@@ -92,7 +105,19 @@ async function actorCanManageMembers(organizationId: string, actor: string) {
 
 export async function getMembership(organizationId: string, username: string) {
   const result = await db().query<MemberRow>(
-    "SELECT username, role FROM organization_members WHERE organization_id = $1 AND username = $2",
+    `SELECT username, role, vbs_season_year, added_at, removed_at, background_check_status
+     FROM organization_members
+     WHERE organization_id = $1 AND username = $2 AND removed_at IS NULL`,
+    [organizationId, username],
+  );
+  return result.rows[0] ?? null;
+}
+
+async function getMembershipRow(organizationId: string, username: string) {
+  const result = await db().query<MemberRow>(
+    `SELECT username, role, vbs_season_year, added_at, removed_at
+     FROM organization_members
+     WHERE organization_id = $1 AND username = $2`,
     [organizationId, username],
   );
   return result.rows[0] ?? null;
@@ -102,7 +127,7 @@ export async function listOrganizations(username: string, _platformAdmin = false
   const result = await db().query<OrgRow>(
     `SELECT o.*, m.role
      FROM organizations o
-     JOIN organization_members m ON m.organization_id = o.id
+     JOIN organization_members m ON m.organization_id = o.id AND m.removed_at IS NULL
      WHERE m.username = $1
      ORDER BY o.name`,
     [username],
@@ -125,15 +150,21 @@ export async function getOrganization(organizationId: string, username: string, 
   if (!org.role && !platformAdmin) {
     return { error: "Not a member of this organization" as const };
   }
+  const includeRemoved = platformAdmin || org.role === "org_admin";
   const members = await db().query<MemberRow>(
-    `SELECT m.username, m.role, u.email, u.first_name, u.last_name, u.phone, u.verified,
+    `SELECT m.username, m.role, m.vbs_season_year, m.added_at, m.removed_at, m.background_check_status,
+            u.email, u.first_name, u.last_name, u.phone, u.verified,
             COALESCE(u.password_custom, FALSE) AS password_custom
      FROM organization_members m
      JOIN users u ON u.username = m.username
      WHERE m.organization_id = $1
-     ORDER BY LOWER(COALESCE(NULLIF(u.last_name, ''), m.username)), LOWER(u.first_name), m.username`,
+       ${includeRemoved ? "" : "AND m.removed_at IS NULL"}
+     ORDER BY m.removed_at NULLS FIRST, m.vbs_season_year DESC,
+              LOWER(COALESCE(NULLIF(u.last_name, ''), m.username)), LOWER(u.first_name), m.username`,
     [organizationId],
   );
+  const { getActiveVbsYear } = await import("./vbs-org-season.js");
+  const activeVbsYear = await getActiveVbsYear(organizationId);
   const invitations =
     org.role === "org_admin" || org.role === "registration_admin"
       ? (
@@ -190,6 +221,7 @@ export async function getOrganization(organizationId: string, username: string, 
   }
   return {
     organization: present(org),
+    activeVbsYear,
     members: members.rows.map((row) => ({
       ...presentMember(row),
       teamAdminTeamIds: teamAdminByUser.get(row.username) ?? [],
@@ -214,14 +246,16 @@ export async function createOrganization(
   }
   const id = crypto.randomUUID();
   const createdAt = new Date().toISOString();
+  const year = new Date().getFullYear();
   await db().query(
-    `INSERT INTO organizations (id, name, address, contact, created_by, created_at)
-     VALUES ($1,$2,$3,$4,$5,$6)`,
-    [id, name, address, contact, username, createdAt],
+    `INSERT INTO organizations (id, name, address, contact, created_by, created_at, active_vbs_year)
+     VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+    [id, name, address, contact, username, createdAt, year],
   );
   await db().query(
-    "INSERT INTO organization_members (organization_id, username, role) VALUES ($1,$2,'org_admin')",
-    [id, username],
+    `INSERT INTO organization_members (organization_id, username, role, vbs_season_year, added_at)
+     VALUES ($1,$2,'org_admin',$3,NOW())`,
+    [id, username, year],
   );
   return {
     organization: {
@@ -289,11 +323,16 @@ export async function addOrganizationMember(
         }
       }
     }
+    const { seasonYearForNewMember } = await import("./vbs-org-season.js");
+    const seasonYear = await seasonYearForNewMember(organizationId);
     await db().query(
-      `INSERT INTO organization_members (organization_id, username, role)
-       VALUES ($1,$2,$3)
-       ON CONFLICT (organization_id, username) DO UPDATE SET role = EXCLUDED.role`,
-      [organizationId, name, role],
+      `INSERT INTO organization_members (organization_id, username, role, vbs_season_year, added_at, removed_at)
+       VALUES ($1,$2,$3,$4,NOW(),NULL)
+       ON CONFLICT (organization_id, username) DO UPDATE SET
+         role = EXCLUDED.role,
+         removed_at = NULL,
+         vbs_season_year = EXCLUDED.vbs_season_year`,
+      [organizationId, name, role, seasonYear],
     );
   }
   return getOrganization(organizationId, actor, false);
@@ -313,13 +352,15 @@ export async function updateOrganizationMember(
     newPassword: string;
     resetPasswordToDefault: boolean;
     teamAdminTeamIds: string[];
+    vbsSeasonYear?: number;
+    restoreMember?: boolean;
   },
 ) {
   const access = await actorCanManageMembers(organizationId, actor);
   if (!access.ok) {
     return { error: access.error };
   }
-  const target = await getMembership(organizationId, memberUsername);
+  const target = await getMembershipRow(organizationId, memberUsername);
   if (!target) {
     return { error: "User is not a member of this organization" as const };
   }
@@ -436,9 +477,26 @@ export async function updateOrganizationMember(
     return { error: syncResult.error };
   }
 
+  const actorMembership = await getMembership(organizationId, actor);
+  const { canManageOrg } = await import("./org-permissions.js");
+  const { isPlatformAdmin } = await import("./users.js");
+  const platformAdmin = await isPlatformAdmin(actor);
+  let vbsSeasonYear = target.vbs_season_year ?? new Date().getFullYear();
+  if (
+    input.vbsSeasonYear !== undefined &&
+    Number.isInteger(input.vbsSeasonYear) &&
+    (canManageOrg(actorMembership?.role ?? null) || platformAdmin)
+  ) {
+    vbsSeasonYear = input.vbsSeasonYear;
+  }
+  const restoreMember = input.restoreMember === true && (canManageOrg(actorMembership?.role ?? null) || platformAdmin);
   await db().query(
-    `UPDATE organization_members SET role = $3 WHERE organization_id = $1 AND username = $2`,
-    [organizationId, memberUsername, input.role],
+    `UPDATE organization_members SET
+       role = $3,
+       vbs_season_year = $4,
+       removed_at = CASE WHEN $5 THEN NULL ELSE removed_at END
+     WHERE organization_id = $1 AND username = $2`,
+    [organizationId, memberUsername, input.role, vbsSeasonYear, restoreMember],
   );
 
   return getOrganization(organizationId, actor, false);
@@ -462,9 +520,10 @@ export async function removeOrganizationMember(organizationId: string, actor: st
       return { error: "Add another org admin before removing the last admin" as const };
     }
   }
-  await db().query("DELETE FROM organization_members WHERE organization_id = $1 AND username = $2", [
-    organizationId,
-    username,
-  ]);
+  await db().query(
+    `UPDATE organization_members SET removed_at = NOW()
+     WHERE organization_id = $1 AND username = $2`,
+    [organizationId, username],
+  );
   return getOrganization(organizationId, actor, false);
 }

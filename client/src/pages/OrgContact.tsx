@@ -1,8 +1,10 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { api } from "../api";
 import { OrgWorkspacePage } from "../OrgWorkspacePage";
 import type { OrgContactOptions } from "../types";
+
+type Audience = "volunteers" | "parents";
 
 export default function OrgContactPage() {
   const { orgId = "" } = useParams();
@@ -10,10 +12,16 @@ export default function OrgContactPage() {
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
+
+  const [audience, setAudience] = useState<Audience>("volunteers");
   const [subject, setSubject] = useState("");
   const [message, setMessage] = useState("");
-  const [scope, setScope] = useState<"organization" | "teams">("teams");
+
+  const [volScope, setVolScope] = useState<"organization" | "teams">("teams");
   const [teamIds, setTeamIds] = useState<string[]>([]);
+
+  const [parentScope, setParentScope] = useState<"all" | "class">("all");
+  const [parentClassId, setParentClassId] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -22,8 +30,10 @@ export default function OrgContactPage() {
       .then((data) => {
         if (!cancelled) {
           setOptions(data);
-          setScope(data.canContactWholeOrg ? "organization" : "teams");
+          setAudience(data.canContactVolunteers ? "volunteers" : "parents");
+          setVolScope(data.canContactWholeOrg ? "organization" : "teams");
           setTeamIds(data.teams.length === 1 ? [data.teams[0].id] : []);
+          setParentClassId(data.registrationClasses[0]?.id ?? "");
           setError("");
         }
       })
@@ -37,21 +47,56 @@ export default function OrgContactPage() {
     };
   }, [orgId]);
 
+  const parentPreview = useMemo(() => {
+    if (!options) {
+      return { studentCount: 0, familyEmailCount: 0 };
+    }
+    if (parentScope === "class" && parentClassId) {
+      const row = options.registrationClasses.find((c) => c.id === parentClassId);
+      return row ?? { studentCount: 0, familyEmailCount: 0 };
+    }
+    return options.parentAll;
+  }, [options, parentScope, parentClassId]);
+
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
+    if (!options) {
+      return;
+    }
+    if (
+      !window.confirm(
+        audience === "parents"
+          ? `Send this email to ${parentPreview.familyEmailCount} parent/guardian address(es)?`
+          : "Send this message to the selected volunteers?",
+      )
+    ) {
+      return;
+    }
     setBusy(true);
     setError("");
     setStatus("");
     try {
-      const result = await api.sendOrgContact(orgId, {
-        subject,
-        message,
-        scope,
-        teamIds: scope === "teams" ? teamIds : [],
-      });
-      setStatus(
-        `Message queued for ${result.recipientCount} member(s). Each person is notified by email and/or SMS only if they turned that on in their notification profile.`,
-      );
+      if (audience === "volunteers") {
+        const result = await api.sendOrgContact(orgId, {
+          subject,
+          message,
+          scope: volScope,
+          teamIds: volScope === "teams" ? teamIds : [],
+        });
+        setStatus(
+          `Message queued for ${result.recipientCount} member(s). Email and SMS follow each person’s notification profile.`,
+        );
+      } else {
+        const result = await api.sendParentContact(orgId, {
+          subject,
+          message,
+          scope: parentScope,
+          classId: parentScope === "class" ? parentClassId : undefined,
+        });
+        setStatus(
+          `Email sent to ${result.recipientCount} parent/guardian address(es). Add contact emails on registrations to reach more families.`,
+        );
+      }
       setSubject("");
       setMessage("");
     } catch (err) {
@@ -65,69 +110,148 @@ export default function OrgContactPage() {
     return <p className="status">{error}</p>;
   }
   if (!options) {
-    return <p className="status">Loading contact options…</p>;
+    return <p className="status">Loading…</p>;
   }
+
+  const showAudiencePicker = options.canContactVolunteers && options.canContactParents;
 
   return (
     <OrgWorkspacePage
       eyebrow="Organization outreach"
-      title="Contact org & teams"
-      tagline="Reach members using their notification profile (email and SMS toggles per org). org_write and org_read cannot use this page."
+      title="Communicate"
+      tagline="Reach volunteers (in-app, email, SMS) or registered families (email on file)."
     >
       <form className="review-form share-form vbs-form-panel" onSubmit={(event) => void onSubmit(event)}>
-        <p className="muted vbs-task-field-hint">
-          Recipients also get an in-app notification. Email and SMS follow each member&apos;s choices under{" "}
-          <strong>Notification profile</strong> for this organization.
-        </p>
-
-        {options.canContactWholeOrg ? (
+        {showAudiencePicker ? (
           <fieldset className="share-targets">
-            <legend>Audience</legend>
+            <legend>Who are you reaching?</legend>
             <label className="checkbox-line">
               <input
                 type="radio"
-                name="scope"
-                checked={scope === "organization"}
-                onChange={() => setScope("organization")}
+                name="audience"
+                checked={audience === "volunteers"}
+                onChange={() => setAudience("volunteers")}
               />
-              Whole organization ({options.memberCount} members)
+              Volunteers & staff (logged-in members)
             </label>
             <label className="checkbox-line">
               <input
                 type="radio"
-                name="scope"
-                checked={scope === "teams"}
-                onChange={() => setScope("teams")}
+                name="audience"
+                checked={audience === "parents"}
+                onChange={() => setAudience("parents")}
               />
-              Selected team(s)
+              Registered families (parent/guardian email)
             </label>
           </fieldset>
-        ) : (
-          <p className="muted vbs-task-field-hint">As a team admin, you can contact members on your assigned teams.</p>
-        )}
+        ) : null}
 
-        {scope === "teams" ? (
-          <fieldset className="share-targets">
-            <legend>Teams</legend>
-            {options.teams.length === 0 ? (
-              <p className="muted">No teams available for you to contact.</p>
-            ) : (
-              options.teams.map((team) => (
-                <label key={team.id} className="checkbox-line">
+        {audience === "volunteers" && options.canContactVolunteers ? (
+          <>
+            <p className="muted vbs-task-field-hint">
+              Recipients get an in-app notification. Email and SMS use each member&apos;s choices under{" "}
+              <strong>Notification profile</strong> for this organization.
+            </p>
+            {options.canContactWholeOrg ? (
+              <fieldset className="share-targets">
+                <legend>Volunteer audience</legend>
+                <label className="checkbox-line">
                   <input
-                    type="checkbox"
-                    checked={teamIds.includes(team.id)}
-                    onChange={(e) =>
-                      setTeamIds((current) =>
-                        e.target.checked ? [...current, team.id] : current.filter((id) => id !== team.id),
-                      )
-                    }
+                    type="radio"
+                    name="volScope"
+                    checked={volScope === "organization"}
+                    onChange={() => setVolScope("organization")}
                   />
-                  {team.name} ({team.memberCount} on roster)
+                  Whole organization ({options.memberCount} members)
                 </label>
-              ))
+                <label className="checkbox-line">
+                  <input
+                    type="radio"
+                    name="volScope"
+                    checked={volScope === "teams"}
+                    onChange={() => setVolScope("teams")}
+                  />
+                  Selected team(s)
+                </label>
+              </fieldset>
+            ) : (
+              <p className="muted vbs-task-field-hint">
+                {options.role === "org_write"
+                  ? "Coordinators can message one or more teams. Org admins can broadcast to the whole organization."
+                  : "Select team(s) you administer."}
+              </p>
             )}
-          </fieldset>
+            {volScope === "teams" ? (
+              <fieldset className="share-targets">
+                <legend>Teams</legend>
+                {options.teams.length === 0 ? (
+                  <p className="muted">No teams available.</p>
+                ) : (
+                  options.teams.map((team) => (
+                    <label key={team.id} className="checkbox-line">
+                      <input
+                        type="checkbox"
+                        checked={teamIds.includes(team.id)}
+                        onChange={(e) =>
+                          setTeamIds((current) =>
+                            e.target.checked ? [...current, team.id] : current.filter((id) => id !== team.id),
+                          )
+                        }
+                      />
+                      {team.name} ({team.memberCount} on roster)
+                    </label>
+                  ))
+                )}
+              </fieldset>
+            ) : null}
+          </>
+        ) : null}
+
+        {audience === "parents" && options.canContactParents ? (
+          <>
+            <p className="muted vbs-task-field-hint">
+              Emails go to primary/secondary contact addresses saved on each registration (deduplicated). Phone-only
+              contacts are skipped — add an email on the student form or parent registration link.
+            </p>
+            <fieldset className="share-targets">
+              <legend>Family audience</legend>
+              <label className="checkbox-line">
+                <input
+                  type="radio"
+                  name="parentScope"
+                  checked={parentScope === "all"}
+                  onChange={() => setParentScope("all")}
+                />
+                All registered students ({options.parentAll.studentCount} students ·{" "}
+                {options.parentAll.familyEmailCount} emails)
+              </label>
+              <label className="checkbox-line">
+                <input
+                  type="radio"
+                  name="parentScope"
+                  checked={parentScope === "class"}
+                  onChange={() => setParentScope("class")}
+                />
+                One class
+              </label>
+            </fieldset>
+            {parentScope === "class" ? (
+              <label className="vbs-task-field">
+                <span className="vbs-task-field-label">Class</span>
+                <select value={parentClassId} onChange={(e) => setParentClassId(e.target.value)} required>
+                  {options.registrationClasses.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name} ({c.familyEmailCount} emails · {c.studentCount} students)
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+            <p className="muted">
+              Ready to send: <strong>{parentPreview.familyEmailCount}</strong> unique email
+              {parentPreview.familyEmailCount === 1 ? "" : "s"} for this selection.
+            </p>
+          </>
         ) : null}
 
         <label className="vbs-task-field">
@@ -141,7 +265,7 @@ export default function OrgContactPage() {
 
         <div className="vbs-form-actions">
           <button type="submit" className="vbs-plan-save" disabled={busy}>
-            {busy ? "Sending…" : "Send message"}
+            {busy ? "Sending…" : audience === "parents" ? "Send email to families" : "Send to volunteers"}
           </button>
         </div>
       </form>

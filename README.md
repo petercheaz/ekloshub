@@ -34,6 +34,10 @@ Task, registration, and reimbursement alerts can send **in-app**, **email**, and
 - Configure `TWILIO_*` for SMS (otherwise logged to the console).
 - `APP_PUBLIC_URL` must match your browser origin so links in email/SMS open the right org pages.
 
+## Deploy to AWS
+
+See **[docs/aws-deploy.md](docs/aws-deploy.md)** for RDS, S3, Docker/ECR, and migrating local Postgres + files. The repo includes a production `Dockerfile`; creating resources in your AWS account still requires your credentials and choices (region, domain, App Runner vs ECS).
+
 ## Other commands
 
 ```bash

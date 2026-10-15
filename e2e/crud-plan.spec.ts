@@ -33,9 +33,16 @@ test.describe("VBS plan CRUD (test_ prefix)", () => {
       const task = plan.tasks.find((t) => t.title === taskTitle);
       expect(task).toBeTruthy();
 
-      await page.goto(`/org/${orgId}/vbs-plan?tab=tasks`);
+      await page.goto(`/org/${orgId}/vbs-plan?tab=prep&prep=tasks`);
+      await expect(page.getByRole("tab", { name: /prep work/i })).toHaveAttribute("aria-selected", "true");
       await captureStep(page, testInfo, "plan-tasks-tab-with-test-task");
       await expect(page.getByText(taskTitle)).toBeVisible({ timeout: 20_000 });
+
+      await page.goto(`/org/${orgId}/vbs-plan?tab=prep&prep=timeline`);
+      await expect(page.getByRole("tab", { name: /All by due date/i })).toHaveAttribute("aria-selected", "true");
+      await expect(page.getByText(taskTitle)).toBeVisible({ timeout: 20_000 });
+      await page.reload();
+      await expect(page.getByRole("tab", { name: /All by due date/i })).toHaveAttribute("aria-selected", "true");
 
       const milestoneLabel = testName("milestone");
       const mileRes = await sessionCall(page, "POST", `/api/orgs/${orgId}/vbs-plan/checklist`, {
@@ -49,13 +56,11 @@ test.describe("VBS plan CRUD (test_ prefix)", () => {
       plan = await fetchVbsPlan(page, orgId);
       const item = plan.checklist.find((c) => c.label === milestoneLabel);
       expect(item).toBeTruthy();
-      await page.goto(`/org/${orgId}/vbs-plan?tab=checklist`);
-      await expect(page.getByRole("tab", { name: /checklist|milestones/i })).toHaveAttribute(
-        "aria-selected",
-        "true",
-      );
+      await page.goto(`/org/${orgId}/vbs-plan?tab=prep&prep=milestones`);
+      await expect(page.getByRole("tab", { name: /prep work/i })).toHaveAttribute("aria-selected", "true");
+      await expect(page.getByRole("tab", { name: /^Milestones$/ })).toHaveAttribute("aria-selected", "true");
+      await expect(page.getByText(milestoneLabel)).toBeVisible({ timeout: 20_000 });
       await captureStep(page, testInfo, "plan-checklist-tab");
-      // Milestone presence is asserted via API; this tab visit confirms routing for checklist CRUD.
 
       const stationName = testName("station");
       const stationRes = await sessionCall(page, "POST", `/api/orgs/${orgId}/vbs-plan/stations`, {
@@ -73,7 +78,9 @@ test.describe("VBS plan CRUD (test_ prefix)", () => {
       await expect(page.getByText(stationName)).toBeVisible({ timeout: 20_000 });
 
       await ensurePlanExists(page, orgId);
-      const dayDate = "2026-07-07";
+      plan = await fetchVbsPlan(page, orgId);
+      const dayDate = plan.plan?.startDate || "2026-07-07";
+      expect(plan.plan?.startDate).toBeTruthy();
       const slotLabel = testName("schedule");
       const slotRes = await sessionCall(page, "POST", `/api/orgs/${orgId}/vbs-plan/schedule`, {
         dayDate,
@@ -89,7 +96,7 @@ test.describe("VBS plan CRUD (test_ prefix)", () => {
       const slot = plan.schedule.find((s) => s.label === slotLabel);
       expect(slot).toBeTruthy();
       await page.goto(`/org/${orgId}/vbs-plan?tab=schedule`);
-      await expect(page.getByRole("tab", { name: /VBS daily schedule/i })).toHaveAttribute(
+      await expect(page.getByRole("tab", { name: /VBS week schedule/i })).toHaveAttribute(
         "aria-selected",
         "true",
       );
@@ -100,10 +107,10 @@ test.describe("VBS plan CRUD (test_ prefix)", () => {
       await expect(page.getByRole("tab", { name: /message board/i })).toHaveAttribute("aria-selected", "true");
       await captureStep(page, testInfo, "plan-board-tab");
 
-      await page.goto(`/org/${orgId}/vbs-plan?tab=adherence`);
-      await expect(page.getByRole("tab", { name: /schedule health/i })).toHaveAttribute("aria-selected", "true");
-      await expect(page.getByText(/schedule health/i).first()).toBeVisible();
-      await expect(page.getByText(/plan workbooks/i)).toBeVisible();
+      await page.goto(`/org/${orgId}/vbs-plan?tab=overview`);
+      await expect(page.getByRole("tab", { name: /overview/i })).toHaveAttribute("aria-selected", "true");
+      await expect(page.getByText(/needs attention/i).first()).toBeVisible();
+      await expect(page.getByRole("button", { name: /export to excel/i })).toBeVisible();
       await captureStep(page, testInfo, "plan-schedule-health-tab");
 
       await sessionCall(page, "DELETE", `/api/orgs/${orgId}/vbs-plan/tasks/${task!.id}`);

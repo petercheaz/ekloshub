@@ -11,6 +11,8 @@ client/dist/
 credentials.json
 **/secrets.json
 
+backups/
+
 # Playwright /validate output (local only)
 e2e-report/
 test-results/

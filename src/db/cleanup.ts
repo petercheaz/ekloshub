@@ -138,6 +138,25 @@ async function purgeStaleAttachmentRows(storedKeys: Set<string>) {
   return removed;
 }
 
+/** E2E schedule slots and activity chips use the test_ prefix (see e2e/test-data.ts). */
+export async function purgeE2eScheduleArtifacts() {
+  const labels = await db().query(
+    `DELETE FROM vbs_schedule_activity_labels
+     WHERE LOWER(TRIM(label)) LIKE 'test_%'`,
+  );
+  const slots = await db().query(
+    `DELETE FROM vbs_schedule_slots s
+     WHERE LOWER(TRIM(s.label)) LIKE 'test_%'`,
+  );
+  const removed = (labels.rowCount ?? 0) + (slots.rowCount ?? 0);
+  if (removed > 0) {
+    console.log(
+      `E2E schedule cleanup: ${labels.rowCount ?? 0} activity label(s), ${slots.rowCount ?? 0} slot(s) removed.`,
+    );
+  }
+  return removed;
+}
+
 export async function purgeOrphanCalendarReminders() {
   await db().query(
     `DELETE FROM vbs_calendar_reminders r
@@ -159,6 +178,7 @@ export async function purgeOrphanCalendarReminders() {
 
 export async function runDataCleanup() {
   await dropLegacyVbsAnnouncements();
+  await purgeE2eScheduleArtifacts();
   await purgeOrphanCalendarReminders();
 
   if (!(await migrationApplied("s3_orphan_purge_v1"))) {

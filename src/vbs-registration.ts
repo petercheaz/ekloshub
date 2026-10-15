@@ -12,6 +12,12 @@ import {
 import { listTeamsForViewer } from "./teams.js";
 import { publisherName } from "./setup.js";
 import { isPlatformAdmin } from "./users.js";
+import {
+  assertRegistrationWrite,
+  registrationStudentVisible,
+  resolveRegistrationViewerSeason,
+  seasonYearForNewRegistration,
+} from "./vbs-org-season.js";
 
 export const COMMON_REGISTRATION_ALLERGIES = [
   "Peanuts",
@@ -38,10 +44,13 @@ export const TSHIRT_SIZES = [
   "Adult XL",
 ] as const;
 
+export type ChildGender = "M" | "F";
+
 export type VbsRegistrationStudent = {
   id: string;
   organizationId: string;
   childFullName: string;
+  childGender: ChildGender | "";
   birthMonth: number;
   birthYear: number;
   ageYears: number;
@@ -51,8 +60,10 @@ export type VbsRegistrationStudent = {
   specialRequests: string;
   contact1Name: string;
   contact1Phone: string;
+  contact1Email: string;
   contact2Name: string;
   contact2Phone: string;
+  contact2Email: string;
   attendMon: boolean;
   attendTue: boolean;
   attendWed: boolean;
@@ -62,6 +73,7 @@ export type VbsRegistrationStudent = {
   assignedTeamId: string;
   assignedTeamName: string;
   classId: string;
+  classIds: string[];
   className: string;
   paymentStatus: "pending" | "paid" | "waived";
   nametagImageKey: string;
@@ -69,6 +81,8 @@ export type VbsRegistrationStudent = {
   nametagExtraInstructions: string;
   createdBy: string;
   source: "staff" | "public";
+  vbsSeasonYear: number;
+  classRosterSort: number;
   createdAt: string;
   updatedAt: string;
 };
@@ -77,6 +91,7 @@ export type RegistrationRow = {
   id: string;
   organization_id: string;
   child_full_name: string;
+  child_gender: string;
   birth_month: number;
   birth_year: number;
   allergies_common: string[];
@@ -85,8 +100,10 @@ export type RegistrationRow = {
   special_requests: string;
   contact1_name: string;
   contact1_phone: string;
+  contact1_email: string;
   contact2_name: string;
   contact2_phone: string;
+  contact2_email: string;
   attend_mon: boolean;
   attend_tue: boolean;
   attend_wed: boolean;
@@ -102,7 +119,17 @@ export type RegistrationRow = {
   source: string;
   created_at: Date;
   updated_at: Date;
+  vbs_season_year: number;
+  class_roster_sort: number;
 };
+
+export const registrationRowReturnSql = `id, organization_id, child_full_name, child_gender, birth_month, birth_year, allergies_common, allergies_other,
+  comments, special_requests, contact1_name, contact1_phone, contact1_email, contact2_name, contact2_phone, contact2_email,
+  attend_mon, attend_tue, attend_wed, attend_thu, attend_fri, tshirt_size, assigned_team_id,
+  nametag_image_key, nametag_extra_instructions, created_by, source, created_at, updated_at, class_id, payment_status,
+  vbs_season_year, COALESCE(class_roster_sort, 0)::int AS class_roster_sort`;
+
+const REGISTRATION_ROW_RETURN = registrationRowReturnSql;
 
 const publisherIds = new Set(publishers.map((publisher) => publisher.id));
 
@@ -168,13 +195,17 @@ export function presentRegistrationStudent(
   row: RegistrationRow,
   teamName: string,
   className = "",
+  classIds: string[] = [],
 ): VbsRegistrationStudent {
+  const resolvedClassIds =
+    classIds.length > 0 ? classIds : row.class_id ? [row.class_id] : [];
   const payment =
     row.payment_status === "paid" || row.payment_status === "waived" ? row.payment_status : "pending";
   return {
     id: row.id,
     organizationId: row.organization_id,
     childFullName: row.child_full_name,
+    childGender: row.child_gender === "M" || row.child_gender === "F" ? row.child_gender : "",
     birthMonth: row.birth_month,
     birthYear: row.birth_year,
     ageYears: ageFromBirthMonthYear(row.birth_month, row.birth_year),
@@ -184,8 +215,10 @@ export function presentRegistrationStudent(
     specialRequests: row.special_requests,
     contact1Name: row.contact1_name,
     contact1Phone: row.contact1_phone,
+    contact1Email: row.contact1_email ?? "",
     contact2Name: row.contact2_name,
     contact2Phone: row.contact2_phone,
+    contact2Email: row.contact2_email ?? "",
     attendMon: row.attend_mon,
     attendTue: row.attend_tue,
     attendWed: row.attend_wed,
@@ -194,7 +227,8 @@ export function presentRegistrationStudent(
     tshirtSize: row.tshirt_size,
     assignedTeamId: row.assigned_team_id ?? "",
     assignedTeamName: teamName,
-    classId: row.class_id ?? "",
+    classId: resolvedClassIds[0] ?? row.class_id ?? "",
+    classIds: resolvedClassIds,
     className,
     paymentStatus: payment,
     nametagImageKey: row.nametag_image_key,
@@ -202,12 +236,27 @@ export function presentRegistrationStudent(
     nametagExtraInstructions: row.nametag_extra_instructions,
     createdBy: row.created_by ?? "",
     source: row.source === "public" ? "public" : "staff",
+    vbsSeasonYear: row.vbs_season_year ?? new Date().getFullYear(),
+    classRosterSort: row.class_roster_sort ?? 0,
     createdAt: row.created_at.toISOString(),
     updatedAt: row.updated_at.toISOString(),
   };
 }
 
 const MAX_NAME = 200;
+const MAX_EMAIL = 254;
+
+/** Basic validation for parent/guardian email stored on registrations. */
+export function normalizeRegistrationEmail(raw: string) {
+  const trimmed = raw.trim().toLowerCase();
+  if (!trimmed || trimmed.length > MAX_EMAIL) {
+    return "";
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+    return "";
+  }
+  return trimmed;
+}
 const MAX_PHONE = 40;
 const MAX_TEXT = 2000;
 
@@ -225,6 +274,12 @@ export function parseRegistrationPayload(
   if (!childFullName) {
     return { error: "Student full name is required" as const };
   }
+  const genderRaw =
+    typeof input.childGender === "string" ? input.childGender.trim().toUpperCase().slice(0, 1) : "";
+  if (genderRaw !== "M" && genderRaw !== "F") {
+    return { error: "Select M (male) or F (female) for the child" as const };
+  }
+  const childGender = genderRaw as ChildGender;
   if (!Number.isInteger(birthMonth) || birthMonth < 1 || birthMonth > 12) {
     return { error: "Birth month must be 1–12" as const };
   }
@@ -237,10 +292,18 @@ export function parseRegistrationPayload(
   const specialRequests = clipText(typeof input.specialRequests === "string" ? input.specialRequests : "", MAX_TEXT);
   const contact1Name = clipText(typeof input.contact1Name === "string" ? input.contact1Name : "", MAX_NAME);
   const contact1Phone = clipText(typeof input.contact1Phone === "string" ? input.contact1Phone : "", MAX_PHONE);
+  const contact1Email = normalizeRegistrationEmail(
+    typeof input.contact1Email === "string" ? input.contact1Email : "",
+  );
   const contact2Name = clipText(typeof input.contact2Name === "string" ? input.contact2Name : "", MAX_NAME);
   const contact2Phone = clipText(typeof input.contact2Phone === "string" ? input.contact2Phone : "", MAX_PHONE);
-  if (options.requirePrimaryContact && (!contact1Name || !contact1Phone)) {
-    return { error: "Primary contact name and phone are required" as const };
+  const contact2Email = normalizeRegistrationEmail(
+    typeof input.contact2Email === "string" ? input.contact2Email : "",
+  );
+  if (options.requirePrimaryContact && (!contact1Name || !contact1Phone || !contact1Email)) {
+    return {
+      error: "Primary parent/guardian name, phone, and email are required" as const,
+    };
   }
   const tshirtSize = clipText(typeof input.tshirtSize === "string" ? input.tshirtSize : "", 32);
   if (tshirtSize && !(TSHIRT_SIZES as readonly string[]).includes(tshirtSize)) {
@@ -252,6 +315,7 @@ export function parseRegistrationPayload(
   );
   return {
     childFullName,
+    childGender,
     birthMonth,
     birthYear,
     allergiesCommon,
@@ -260,8 +324,10 @@ export function parseRegistrationPayload(
     specialRequests,
     contact1Name,
     contact1Phone,
+    contact1Email,
     contact2Name,
     contact2Phone,
+    contact2Email,
     tshirtSize,
     nametagExtraInstructions,
     attendMon: input.attendMon === true,
@@ -312,42 +378,121 @@ export async function getRegistrationWorkspace(organizationId: string, username:
   const platformAdmin = access.platformAdmin;
   const cookingTeamParticipant = await isCookingTeamParticipant(organizationId, username);
   const view = registrationViewFlags(access.membership.role, platformAdmin, cookingTeamParticipant);
+  const seasonAccess = await resolveRegistrationViewerSeason(organizationId, username, platformAdmin);
+  if ("error" in seasonAccess) {
+    return { error: seasonAccess.error };
+  }
   const cookingTeamId = await resolveCookingTeamId(organizationId);
   const teams = await listTeamsForViewer(organizationId, username, platformAdmin);
   const teamMap = new Map(teams.map((team) => [team.id, team.name]));
+  const { CORNERSTONE_ORG_ID_FOR_STUDENTS, ensureCornerstoneDemoStudents } = await import(
+    "./db/seed-cornerstone-students.js",
+  );
+  if (organizationId === CORNERSTONE_ORG_ID_FOR_STUDENTS) {
+    await ensureCornerstoneDemoStudents(organizationId);
+  }
   const result = await db().query<RegistrationRow>(
-    `SELECT id, organization_id, child_full_name, birth_month, birth_year, allergies_common, allergies_other,
-            comments, special_requests, contact1_name, contact1_phone, contact2_name, contact2_phone,
-            attend_mon, attend_tue, attend_wed, attend_thu, attend_fri, tshirt_size, assigned_team_id,
-            nametag_image_key, nametag_extra_instructions, created_by, source, created_at, updated_at,
-            class_id, payment_status
+    `SELECT ${registrationRowReturnSql}
      FROM vbs_registrations
      WHERE organization_id = $1
-     ORDER BY updated_at DESC, child_full_name ASC`,
+     ORDER BY vbs_season_year DESC, updated_at DESC, child_full_name ASC`,
     [organizationId],
   );
-  const { listRegistrationClasses } = await import("./vbs-registration-classes.js");
-  const classes = await listRegistrationClasses(organizationId);
+  const { ensureDefaultRegistrationClasses, listRegistrationClasses } = await import(
+    "./vbs-registration-classes.js",
+  );
+  await ensureDefaultRegistrationClasses(organizationId);
+  const visibleRows = result.rows.filter((row) =>
+    registrationStudentVisible(row.vbs_season_year ?? new Date().getFullYear(), seasonAccess),
+  );
+  const classSeasonYears = new Set<number>([seasonAccess.activeSeason]);
+  for (const row of visibleRows) {
+    classSeasonYears.add(row.vbs_season_year ?? seasonAccess.activeSeason);
+  }
+  const classesById = new Map<string, Awaited<ReturnType<typeof listRegistrationClasses>>[number]>();
+  for (const year of classSeasonYears) {
+    for (const cls of await listRegistrationClasses(organizationId, year)) {
+      classesById.set(cls.id, cls);
+    }
+  }
+  const classes = [...classesById.values()].sort(
+    (a, b) =>
+      a.vbsSeasonYear - b.vbsSeasonYear ||
+      (a.rotationIndex ?? 99) - (b.rotationIndex ?? 99) ||
+      a.minAge - b.minAge ||
+      a.sortOrder - b.sortOrder ||
+      a.name.localeCompare(b.name),
+  );
   const classMap = new Map(classes.map((c) => [c.id, c.name]));
-  const students = result.rows
-    .map((row) =>
-      presentRegistrationStudent(
+  const staffMembersResult = await db().query<{
+    username: string;
+    first_name: string;
+    last_name: string;
+    email: string;
+    role: OrgRole;
+  }>(
+    `SELECT m.username, u.first_name, u.last_name, u.email, m.role
+     FROM organization_members m
+     JOIN users u ON u.username = m.username
+     WHERE m.organization_id = $1 AND m.removed_at IS NULL
+     ORDER BY LOWER(COALESCE(NULLIF(u.last_name, ''), m.username)), LOWER(u.first_name), m.username`,
+    [organizationId],
+  );
+  const staffMembers = staffMembersResult.rows.map((row) => ({
+    username: row.username,
+    firstName: row.first_name ?? "",
+    lastName: row.last_name ?? "",
+    email: row.email ?? "",
+    role: row.role,
+  }));
+  const registrationSeasons = [
+    ...new Set(result.rows.map((row) => row.vbs_season_year ?? new Date().getFullYear())),
+  ].sort((a, b) => b - a);
+  const canWriteSeason =
+    view.canWrite &&
+    (seasonAccess.viewAllSeasons || seasonAccess.viewSeason === seasonAccess.activeSeason);
+  const { classIdsForStudents } = await import("./vbs-registration-classes.js");
+  const classAssignments = await classIdsForStudents(
+    organizationId,
+    visibleRows.map((row) => row.id),
+  );
+  const students = visibleRows
+    .map((row) => {
+      const classIds =
+        classAssignments.get(row.id) ?? (row.class_id ? [row.class_id] : []);
+      const className = classIds
+        .map((id) => classMap.get(id))
+        .filter((name): name is string => Boolean(name))
+        .join(", ");
+      return presentRegistrationStudent(
         row,
         row.assigned_team_id ? (teamMap.get(row.assigned_team_id) ?? "") : "",
-        row.class_id ? (classMap.get(row.class_id) ?? "") : "",
-      ),
-    )
+        className,
+        classIds,
+      );
+    })
     .map((student) => sanitizeRegistrationStudent(student, view));
-  const { getPublicRegistrationSettings } = await import("./vbs-public-registration.js");
+  const { getPublicRegistrationSettings, getPublicFamilySettings } = await import(
+    "./vbs-public-registration.js"
+  );
   const publicRegistration =
     canEditRegistration(access.membership.role) || access.platformAdmin
       ? await getPublicRegistrationSettings(organizationId, username)
       : null;
+  const publicFamily =
+    canEditRegistration(access.membership.role) || access.platformAdmin
+      ? await getPublicFamilySettings(organizationId, username)
+      : null;
 
   return {
     students,
+    staffMembers,
     teams: teams.map((team) => ({ id: team.id, name: team.name })),
-    canWrite: view.canWrite,
+    activeVbsYear: seasonAccess.activeSeason,
+    viewAllSeasons: seasonAccess.viewAllSeasons,
+    viewSeason: seasonAccess.viewAllSeasons ? null : seasonAccess.viewSeason,
+    registrationSeasons: seasonAccess.viewAllSeasons ? registrationSeasons : [seasonAccess.viewSeason],
+    canWrite: canWriteSeason,
     canViewContacts: view.canViewContacts,
     canViewAllergies: view.canViewAllergies,
     canConfigureCooking: view.canConfigureCooking,
@@ -369,24 +514,24 @@ export async function getRegistrationWorkspace(organizationId: string, username:
             link: publicRegistration.link,
           }
         : null,
+    publicFamily:
+      publicFamily && !("error" in publicFamily)
+        ? {
+            enabled: publicFamily.enabled,
+            link: publicFamily.link,
+          }
+        : null,
     classes,
     summary: {
       total: students.length,
       parentOnline: students.filter((s) => s.source === "public").length,
       staffEntered: students.filter((s) => s.source === "staff").length,
-      unassigned: students.filter((s) => !s.classId).length,
+      unassigned: students.filter((s) => s.classIds.length === 0).length,
       paymentPending: students.filter((s) => s.paymentStatus === "pending").length,
     },
     paymentNote: "VBS fees are collected offline by the church (cash, check, or in-person card). Online registration does not charge a card.",
   };
 }
-
-export const registrationRowReturnSql = `id, organization_id, child_full_name, birth_month, birth_year, allergies_common, allergies_other,
-  comments, special_requests, contact1_name, contact1_phone, contact2_name, contact2_phone,
-  attend_mon, attend_tue, attend_wed, attend_thu, attend_fri, tshirt_size, assigned_team_id,
-  nametag_image_key, nametag_extra_instructions, created_by, source, created_at, updated_at, class_id, payment_status`;
-
-const REGISTRATION_ROW_RETURN = registrationRowReturnSql;
 
 export async function saveRegistrationStudent(
   organizationId: string,
@@ -400,7 +545,11 @@ export async function saveRegistrationStudent(
   if (!canEditRegistration(access.membership.role) && !access.platformAdmin) {
     return { error: "You do not have permission to edit registrations" as const };
   }
-  const parsed = parseRegistrationPayload(input);
+  const writeAccess = await assertRegistrationWrite(organizationId, username, access.platformAdmin);
+  if ("error" in writeAccess) {
+    return writeAccess;
+  }
+  const parsed = parseRegistrationPayload(input, { requirePrimaryContact: true });
   if ("error" in parsed) {
     return parsed;
   }
@@ -412,25 +561,39 @@ export async function saveRegistrationStudent(
   if (!assignedTeamId || !teamIds.has(assignedTeamId)) {
     assignedTeamId = suggestTeamId(age, teams, parsed.specialRequests);
   }
-  const { listRegistrationClasses, suggestClassForStudent, checkCapacityAlerts } = await import(
-    "./vbs-registration-classes.js",
-  );
+  const { listRegistrationClasses, checkCapacityAlerts } = await import("./vbs-registration-classes.js");
   const classes = await listRegistrationClasses(organizationId);
   const classMap = new Map(classes.map((c) => [c.id, c.name]));
+  const existingId = typeof input.id === "string" ? input.id.trim() : "";
+  if (existingId) {
+    const existingRow = await db().query<{ vbs_season_year: number }>(
+      `SELECT vbs_season_year FROM vbs_registrations WHERE id = $1 AND organization_id = $2`,
+      [existingId, organizationId],
+    );
+    const seasonYear = existingRow.rows[0]?.vbs_season_year;
+    if (!seasonYear) {
+      return { error: "Registration not found" as const };
+    }
+    if (
+      !registrationStudentVisible(seasonYear, writeAccess.access) &&
+      !writeAccess.access.viewAllSeasons
+    ) {
+      return { error: "You cannot edit registrations from another VBS season" as const };
+    }
+  }
   let classId = typeof input.classId === "string" ? input.classId.trim() : "";
   if (classId && !classes.some((c) => c.id === classId)) {
     classId = "";
   }
-  if (!classId && !input.id) {
-    classId = suggestClassForStudent(classes, age, parsed.specialRequests);
-  }
+  // Staff enter children on the Students tab; class/station assignment is on Classes & roster (drag-and-drop).
+  // Public online registration assigns classes in vbs-public-registration.ts.
   const rawPayment = typeof input.paymentStatus === "string" ? input.paymentStatus : "pending";
   const paymentStatus =
     rawPayment === "paid" || rawPayment === "waived" || rawPayment === "pending" ? rawPayment : "pending";
   const now = new Date();
-  const existingId = typeof input.id === "string" ? input.id.trim() : "";
   const params = [
     parsed.childFullName,
+    parsed.childGender,
     parsed.birthMonth,
     parsed.birthYear,
     parsed.allergiesCommon,
@@ -439,8 +602,10 @@ export async function saveRegistrationStudent(
     parsed.specialRequests,
     parsed.contact1Name,
     parsed.contact1Phone,
+    parsed.contact1Email,
     parsed.contact2Name,
     parsed.contact2Phone,
+    parsed.contact2Email,
     parsed.attendMon,
     parsed.attendTue,
     parsed.attendWed,
@@ -456,11 +621,11 @@ export async function saveRegistrationStudent(
   if (existingId) {
     const updated = await db().query<RegistrationRow>(
       `UPDATE vbs_registrations SET
-        child_full_name = $3, birth_month = $4, birth_year = $5, allergies_common = $6, allergies_other = $7,
-        comments = $8, special_requests = $9, contact1_name = $10, contact1_phone = $11, contact2_name = $12,
-        contact2_phone = $13, attend_mon = $14, attend_tue = $15, attend_wed = $16, attend_thu = $17,
-        attend_fri = $18, tshirt_size = $19, assigned_team_id = $20, class_id = $21, payment_status = $22,
-        nametag_extra_instructions = $23, updated_at = $24
+        child_full_name = $3, child_gender = $4, birth_month = $5, birth_year = $6, allergies_common = $7, allergies_other = $8,
+        comments = $9, special_requests = $10, contact1_name = $11, contact1_phone = $12, contact1_email = $13,
+        contact2_name = $14, contact2_phone = $15, contact2_email = $16, attend_mon = $17, attend_tue = $18,
+        attend_wed = $19, attend_thu = $20, attend_fri = $21, tshirt_size = $22, assigned_team_id = $23,
+        class_id = $24, payment_status = $25, nametag_extra_instructions = $26, updated_at = $27
        WHERE id = $1 AND organization_id = $2
        RETURNING ${REGISTRATION_ROW_RETURN}`,
       [existingId, organizationId, ...params.slice(0, -1), params[params.length - 1]!],
@@ -479,15 +644,16 @@ export async function saveRegistrationStudent(
   }
   const id = crypto.randomUUID();
   const insertedAt = params[params.length - 1]!;
+  const registrationSeason = await seasonYearForNewRegistration(organizationId);
   const inserted = await db().query<RegistrationRow>(
     `INSERT INTO vbs_registrations (
-      id, organization_id, child_full_name, birth_month, birth_year, allergies_common, allergies_other,
-      comments, special_requests, contact1_name, contact1_phone, contact2_name, contact2_phone,
-      attend_mon, attend_tue, attend_wed, attend_thu, attend_fri, tshirt_size, assigned_team_id, class_id,
-      payment_status, nametag_extra_instructions, created_by, source, created_at, updated_at
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,'staff',$25,$25)
+      id, organization_id, child_full_name, child_gender, birth_month, birth_year, allergies_common, allergies_other,
+      comments, special_requests, contact1_name, contact1_phone, contact1_email, contact2_name, contact2_phone,
+      contact2_email, attend_mon, attend_tue, attend_wed, attend_thu, attend_fri, tshirt_size, assigned_team_id,
+      class_id, payment_status, nametag_extra_instructions, created_by, source, created_at, updated_at, vbs_season_year
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,'staff',$28,$28,$29)
     RETURNING ${REGISTRATION_ROW_RETURN}`,
-    [id, organizationId, ...params.slice(0, -1), username, insertedAt],
+    [id, organizationId, ...params.slice(0, -1), username, insertedAt, registrationSeason],
   );
   const row = inserted.rows[0]!;
   if (row.class_id) {
@@ -506,6 +672,21 @@ export async function deleteRegistrationStudent(organizationId: string, username
   }
   if (!canEditRegistration(access.membership.role) && !access.platformAdmin) {
     return { error: "You do not have permission to edit registrations" as const };
+  }
+  const writeAccess = await assertRegistrationWrite(organizationId, username, access.platformAdmin);
+  if ("error" in writeAccess) {
+    return writeAccess;
+  }
+  const existingRow = await db().query<{ vbs_season_year: number }>(
+    `SELECT vbs_season_year FROM vbs_registrations WHERE id = $1 AND organization_id = $2`,
+    [studentId, organizationId],
+  );
+  const seasonYear = existingRow.rows[0]?.vbs_season_year;
+  if (!seasonYear) {
+    return { error: "Registration not found" as const };
+  }
+  if (!registrationStudentVisible(seasonYear, writeAccess.access)) {
+    return { error: "You cannot delete registrations from another VBS season" as const };
   }
   await db().query(`DELETE FROM vbs_registrations WHERE id = $1 AND organization_id = $2`, [
     studentId,
@@ -533,6 +714,10 @@ export async function generateRegistrationNametag(
   if (!canEditRegistration(access.membership.role) && !access.platformAdmin) {
     return { error: "You do not have permission to generate nametags" as const };
   }
+  const writeAccess = await assertRegistrationWrite(organizationId, username, access.platformAdmin);
+  if ("error" in writeAccess) {
+    return writeAccess;
+  }
   if (!isPublisher(input.publisherId) || !Number.isInteger(input.year) || !input.title.trim()) {
     return { error: "Publisher, year, and VBS title are required" as const };
   }
@@ -544,17 +729,16 @@ export async function generateRegistrationNametag(
     return { error: "Choose a VBS title that matches the publisher and year" as const };
   }
   const rowResult = await db().query<RegistrationRow>(
-    `SELECT id, organization_id, child_full_name, birth_month, birth_year, allergies_common, allergies_other,
-            comments, special_requests, contact1_name, contact1_phone, contact2_name, contact2_phone,
-            attend_mon, attend_tue, attend_wed, attend_thu, attend_fri, tshirt_size, assigned_team_id,
-            nametag_image_key, nametag_extra_instructions, created_by, source, created_at, updated_at,
-            class_id, payment_status
+    `SELECT ${registrationRowReturnSql}
      FROM vbs_registrations WHERE id = $1 AND organization_id = $2`,
     [studentId, organizationId],
   );
   const row = rowResult.rows[0];
   if (!row) {
     return { error: "Registration not found" as const };
+  }
+  if (!registrationStudentVisible(row.vbs_season_year ?? new Date().getFullYear(), writeAccess.access)) {
+    return { error: "You cannot edit registrations from another VBS season" as const };
   }
   const platformAdmin = await isPlatformAdmin(username);
   const teams = await listTeamsForViewer(organizationId, username, platformAdmin);

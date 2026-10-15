@@ -1,9 +1,43 @@
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { addDaysToIsoDate, normalizeMilestoneCategory } from "../vbs-plan.js";
 import { dedupeOrgTeamsByName } from "../teams.js";
-import { cornerstoneMemberUsernames } from "./seed-cornerstone-members.js";
+import { ensureDefaultRegistrationClasses } from "../vbs-registration-classes.js";
+import { VBS_ROTATION_STATION_NAMES } from "../vbs-rotation-stations.js";
+import {
+  attachStationIdsToWorkbookNeeds,
+  buildStationCatalogFromWorkbookNeeds,
+  stationNameKey,
+  type WorkbookStationNeedsRow,
+} from "../vbs-workbook-stations.js";
+import { ensureCornerstoneDemoStudents } from "./seed-cornerstone-students.js";
 import { db } from "./pool.js";
 
-const SAMPLE_MARKER = "cornerstone-sample-v2";
+const __seedDir = dirname(fileURLToPath(import.meta.url));
+
+type CornerstoneWorkbookJson = {
+  prayerSchedule: unknown[];
+  volunteerPlacements: unknown;
+  stationNeeds: { preschool: { stationLabel: string; volunteersNeeded: string } }[];
+  scheduleMatrix: unknown[];
+};
+
+function loadCornerstoneWorkbookFromExcel(): CornerstoneWorkbookJson {
+  const raw = JSON.parse(
+    readFileSync(join(__seedDir, "cornerstone-workbook-2026.json"), "utf8"),
+  ) as CornerstoneWorkbookJson;
+  raw.stationNeeds = raw.stationNeeds.filter(
+    (row) =>
+      !(
+        row.preschool.stationLabel === "Preschool" &&
+        row.preschool.volunteersNeeded === "Volunteers needed"
+      ),
+  );
+  return raw;
+}
+
+const SAMPLE_MARKER = "cornerstone-sample-v4";
 const BOARD_MARKER = "cornerstone-board-v1";
 const ORG_ID = "org-cornerstone-seattle";
 const PLAN_ID = "vbs-plan-cornerstone-2026";
@@ -126,7 +160,7 @@ async function applyCornerstoneMilestoneDueDates(planId: string, vbsStart: strin
   }
 }
 
-/** Nov 10–15, 2026 · Group Rainforest Falls · Cornerstone Seattle sample plan. */
+/** Jul 20–24, 2026 · Group Rainforest Falls · Cornerstone Seattle sample plan. */
 export async function ensureCornerstoneSamplePlan(orgId: string, username: string) {
   if (orgId !== ORG_ID) {
     return;
@@ -138,7 +172,6 @@ export async function ensureCornerstoneSamplePlan(orgId: string, username: strin
   }
 
   const now = new Date().toISOString();
-  const roster = [...new Set([username, ...cornerstoneMemberUsernames()])].join("; ");
   const adminOnly = username;
 
   for (const [key, teamId] of Object.entries(TEAM_IDS)) {
@@ -149,7 +182,7 @@ export async function ensureCornerstoneSamplePlan(orgId: string, username: strin
       vbsWeek: "VBS Week Team",
     };
     const name = names[key];
-    const members = key === "vbsWeek" ? roster : adminOnly;
+    const members = adminOnly;
     await db().query(
       `DELETE FROM org_teams
        WHERE organization_id = $1 AND LOWER(TRIM(name)) = LOWER(TRIM($2)) AND id <> $3`,
@@ -164,8 +197,8 @@ export async function ensureCornerstoneSamplePlan(orgId: string, username: strin
   }
   await dedupeOrgTeamsByName(orgId);
 
-  const startDate = isoDate(2026, 11, 10);
-  const endDate = isoDate(2026, 11, 15);
+  const startDate = isoDate(2026, 7, 20);
+  const endDate = isoDate(2026, 7, 24);
   const coordinatorNotes = `Rainforest Falls week at Cornerstone Seattle. ${SAMPLE_MARKER}`;
 
   const existingPlan = await db().query<{ id: string; coordinator_notes: string }>(
@@ -239,11 +272,14 @@ export async function ensureCornerstoneSamplePlan(orgId: string, username: strin
   const sampleComplete =
     coordinatorNotes.includes(SAMPLE_MARKER) &&
     (taskCount.rows[0]?.count ?? 0) >= 25 &&
-    (scheduleCount.rows[0]?.count ?? 0) >= 44 &&
+    (scheduleCount.rows[0]?.count ?? 0) >= 40 &&
     (checklistCount.rows[0]?.count ?? 0) >= 12 &&
     (boardCount.rows[0]?.count ?? 0) >= 5;
   if (sampleComplete) {
     await applyCornerstoneMilestoneDueDates(planId, startDate);
+    await ensureCornerstoneWorkbookExtras(planId);
+    await ensureCornerstoneSampleSupplies(planId);
+    await ensureCornerstoneDemoStudents(orgId);
     return;
   }
 
@@ -255,26 +291,6 @@ export async function ensureCornerstoneSamplePlan(orgId: string, username: strin
   await db().query("DELETE FROM vbs_schedule_slots WHERE plan_id = $1", [planId]);
   await db().query("DELETE FROM vbs_tasks WHERE plan_id = $1", [planId]);
   await db().query("DELETE FROM vbs_checklist_items WHERE plan_id = $1", [planId]);
-
-  const stations: { name: string; teamId: string }[] = [
-    { name: "Registration & nametags", teamId: TEAM_IDS.vbsWeek },
-    { name: "Rainforest opening worship", teamId: TEAM_IDS.building },
-    { name: "Bible story rotation", teamId: TEAM_IDS.planning },
-    { name: "Craft & science station", teamId: TEAM_IDS.building },
-    { name: "Snack station", teamId: TEAM_IDS.setup },
-    { name: "Games & recreation", teamId: TEAM_IDS.setup },
-    { name: "Music & memory verse", teamId: TEAM_IDS.vbsWeek },
-    { name: "Closing rally", teamId: TEAM_IDS.vbsWeek },
-  ];
-  await db().query("DELETE FROM vbs_stations WHERE plan_id = $1", [planId]);
-  for (let i = 0; i < stations.length; i += 1) {
-    const station = stations[i];
-    await db().query(
-      `INSERT INTO vbs_stations (id, plan_id, name, description, default_team_id, sort_order)
-       VALUES ($1,$2,$3,$4,$5,$6)`,
-      [crypto.randomUUID(), planId, station.name, "", station.teamId, i],
-    );
-  }
 
   type TaskSeed = {
     title: string;
@@ -489,11 +505,12 @@ export async function ensureCornerstoneSamplePlan(orgId: string, username: strin
 
   const dayBlocks = [
     ["09:00", "09:20", "Registration & opening worship"],
-    ["09:25", "09:55", "Bible story rotation"],
-    ["10:00", "10:25", "Craft & science station"],
-    ["10:30", "10:55", "Snack & games"],
-    ["11:00", "11:25", "Music & memory verse"],
-    ["11:30", "12:00", "Closing rally & pickup"],
+    ["09:25", "09:50", VBS_ROTATION_STATION_NAMES[0]],
+    ["09:55", "10:20", VBS_ROTATION_STATION_NAMES[1]],
+    ["10:25", "10:40", VBS_ROTATION_STATION_NAMES[4]],
+    ["10:45", "11:10", VBS_ROTATION_STATION_NAMES[3]],
+    ["11:15", "11:40", VBS_ROTATION_STATION_NAMES[2]],
+    ["11:45", "12:00", "Closing rally & pickup"],
   ];
 
   for (let day = 0; day < 6; day += 1) {
@@ -501,7 +518,9 @@ export async function ensureCornerstoneSamplePlan(orgId: string, username: strin
     for (let i = 0; i < dayBlocks.length; i += 1) {
       const [starts, ends, label] = dayBlocks[i];
       let teamId: (typeof TEAM_IDS)[keyof typeof TEAM_IDS] = TEAM_IDS.vbsWeek;
-      if (label.includes("Craft")) {
+      if (label.includes("Bible")) {
+        teamId = TEAM_IDS.planning;
+      } else if (label.includes("Craft")) {
         teamId = TEAM_IDS.building;
       } else if (label.includes("Snack") || label.includes("Games")) {
         teamId = TEAM_IDS.setup;
@@ -678,5 +697,151 @@ export async function ensureCornerstoneSamplePlan(orgId: string, username: strin
         [crypto.randomUUID(), post.id, reply.body, reply.author, reply.createdAt],
       );
     }
+  }
+
+  await ensureDefaultRegistrationClasses(orgId);
+  await ensureCornerstoneWorkbookExtras(planId);
+  await ensureCornerstoneSampleSupplies(planId);
+  await ensureCornerstoneDemoStudents(orgId);
+}
+
+const CORNERSTONE_WORKBOOK_STATIC = {
+  styles: {},
+  notes: {},
+  volunteerTimeline: [
+    {
+      date: "Month of May",
+      time: "",
+      description: "Recruiting — we need Crew Leaders!",
+      who: "All",
+      location: "—",
+    },
+    {
+      date: "Wed. June 3",
+      time: "6:30-8pm",
+      description: "Volunteer Meeting 1 — Intro / Meet the Team / Timeline",
+      who: "ALL volunteers",
+      location: "MC — dinner provided",
+    },
+    {
+      date: "Sat. June 27",
+      time: "1-8:30pm",
+      description: "Work Day 1",
+      who: "Prep Team",
+      location: "MC — dinner provided",
+    },
+    {
+      date: "Tue. June 30",
+      time: "7-8pm",
+      description: "Volunteer Meeting 2 — Station updates; Crew Leaders",
+      who: "VBS Staff",
+      location: "Online",
+    },
+    {
+      date: "Mon. July 6",
+      time: "",
+      description: "VBS Registrations Close",
+      who: "—",
+      location: "—",
+    },
+    {
+      date: "Sat. July 11",
+      time: "1-8:30pm",
+      description: "Work Day 2",
+      who: "Prep Team",
+      location: "MC — dinner provided",
+    },
+    {
+      date: "M-F July 13-17",
+      time: "1-6pm",
+      description: "Set Up Week",
+      who: "Prep Team",
+      location: "MC",
+    },
+    {
+      date: "Sun. July 19",
+      time: "Service",
+      description: "Commissioning & prayer for VBS Staff",
+      who: "VBS Staff",
+      location: "Lake Hills",
+    },
+    {
+      date: "M-F July 20-24",
+      time: "8:30am-12:30pm",
+      description: "VBS Week (kids 9-12); staff huddle before, debrief after",
+      who: "VBS Staff",
+      location: "MC",
+    },
+    {
+      date: "Sun. Aug 9",
+      time: "Service",
+      description: "VBS Sharing & Slideshow",
+      who: "",
+      location: "Lake Hills",
+    },
+  ],
+  notesForNextYear:
+    "Registration — add photo and liability waivers to registration directly.\n" +
+    "Prep — Home Depot Builders Paper; foam boards from Dollar Tree.\n" +
+    "Orders — place t-shirt extras when registration closes.\n" +
+    "Volunteers — discuss child safety protocols; keep crews to max of 5.",
+};
+
+async function ensureCornerstoneWorkbookExtras(planId: string) {
+  await syncCornerstoneWorkbookStations(planId);
+}
+
+async function syncCornerstoneWorkbookStations(planId: string) {
+  const workbook = loadCornerstoneWorkbookFromExcel();
+  const needs = workbook.stationNeeds as WorkbookStationNeedsRow[];
+  const catalog = buildStationCatalogFromWorkbookNeeds(needs);
+
+  await db().query("DELETE FROM vbs_stations WHERE plan_id = $1", [planId]);
+  const nameToId = new Map<string, string>();
+  for (let i = 0; i < catalog.length; i += 1) {
+    const entry = catalog[i]!;
+    const id = crypto.randomUUID();
+    nameToId.set(stationNameKey(entry.name), id);
+    await db().query(
+      `INSERT INTO vbs_stations (id, plan_id, name, description, default_team_id, sort_order)
+       VALUES ($1,$2,$3,$4,NULL,$5)`,
+      [id, planId, entry.name, entry.description, i],
+    );
+  }
+
+  const worksheetData = {
+    ...CORNERSTONE_WORKBOOK_STATIC,
+    ...workbook,
+    stationNeeds: attachStationIdsToWorkbookNeeds(needs, nameToId),
+  };
+  await db().query(
+    `UPDATE vbs_plans SET worksheet_data = $2::jsonb, budget_amount = 6500 WHERE id = $1`,
+    [planId, JSON.stringify(worksheetData)],
+  );
+}
+
+async function ensureCornerstoneSampleSupplies(planId: string) {
+  const existing = await db().query<{ count: number }>(
+    "SELECT COUNT(*)::int AS count FROM vbs_supply_items WHERE plan_id = $1",
+    [planId],
+  );
+  if ((existing.rows[0]?.count ?? 0) >= 5) {
+    return;
+  }
+  await db().query("DELETE FROM vbs_supply_items WHERE plan_id = $1", [planId]);
+  const items = [
+    { name: "Ultimate Starter Kit Plus Digital", qty: "1", cost: 342.23, purchased: true },
+    { name: "Rainforest Refuge Fabric backdrop (20'x9')", qty: "1", cost: 116.99, purchased: true },
+    { name: "Rainforest Falls T-shirts (Child XS)", qty: "12", cost: 77.88, purchased: true },
+    { name: "Rainforest Falls Staff T-shirts (Adult M)", qty: "21", cost: 272.79, purchased: false },
+    { name: "Rocket Balloons (package of 12)", qty: "1", cost: 4.99, purchased: true },
+  ];
+  for (let i = 0; i < items.length; i += 1) {
+    const item = items[i]!;
+    await db().query(
+      `INSERT INTO vbs_supply_items (id, plan_id, name, quantity, estimated_cost, purchased, sort_order)
+       VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+      [crypto.randomUUID(), planId, item.name, item.qty, item.cost, item.purchased, i],
+    );
   }
 }

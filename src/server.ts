@@ -31,6 +31,15 @@ import {
   updateOrganizationMember,
 } from "./orgs.js";
 import { acceptInvite, createInvites, getInvite } from "./invites.js";
+import {
+  copyVbsSeasonFromYear,
+  getSeasonCopyOptions,
+  saveCurrentSeasonSnapshot,
+} from "./vbs-season-copy.js";
+import {
+  listVolunteerCompliance,
+  updateVolunteerBackgroundCheck,
+} from "./vbs-volunteer-compliance.js";
 import { createTeam, deleteTeam, listTeamsForViewer, updateTeam } from "./teams.js";
 import {
   generateRoomIdeaImages,
@@ -71,6 +80,8 @@ import {
   saveVbsWorksheet,
   updateVbsNotificationPrefs,
   upsertVbsPlan,
+  deleteVbsSupplyItem,
+  saveVbsSupplyItem,
 } from "./vbs-plan.js";
 import {
   deleteRegistrationStudent,
@@ -81,8 +92,12 @@ import {
 import {
   assignClassStaff,
   assignStudentClass,
+  autoAssignStudentsByAge,
   deleteRegistrationClass,
   removeClassStaff,
+  reorderClassStaff,
+  reorderClassStudents,
+  reorderRegistrationClasses,
   saveRegistrationClass,
 } from "./vbs-registration-classes.js";
 import { generateSnacksMenu, getCookingWorkspace, saveCookingSettings } from "./vbs-registration-cooking.js";
@@ -101,6 +116,8 @@ import {
   getPublicRegistrationForm,
   submitPublicRegistration,
   updatePublicRegistrationSettings,
+  getPublicFamilyPage,
+  updatePublicFamilySettings,
 } from "./vbs-public-registration.js";
 import { createBoardPost, createBoardReply } from "./vbs-board.js";
 import { getUserContact, saveUserContact } from "./user-contact.js";
@@ -203,6 +220,68 @@ app.get("/api/orgs/:id", requireAuth, async (req, res) => {
   res.json(result);
 });
 
+app.get("/api/orgs/:id/season-copy", requireAuth, async (req, res) => {
+  const result = await getSeasonCopyOptions(String(req.params.id), req.session.user!.username);
+  if ("error" in result) {
+    res.status(403).json(result);
+    return;
+  }
+  res.json(result);
+});
+
+app.post("/api/orgs/:id/season-copy", requireAuth, async (req, res) => {
+  const body = req.body as Record<string, unknown>;
+  const fromYear = Number(body.fromYear);
+  const toYear = Number(body.toYear);
+  const startDate = typeof body.startDate === "string" ? body.startDate : undefined;
+  const endDate = typeof body.endDate === "string" ? body.endDate : undefined;
+  const result = await copyVbsSeasonFromYear(String(req.params.id), req.session.user!.username, {
+    fromYear,
+    toYear,
+    startDate,
+    endDate,
+  });
+  if ("error" in result) {
+    res.status(400).json(result);
+    return;
+  }
+  res.json(result);
+});
+
+app.get("/api/orgs/:id/volunteer-compliance", requireAuth, async (req, res) => {
+  const result = await listVolunteerCompliance(String(req.params.id), req.session.user!.username);
+  if ("error" in result) {
+    res.status(403).json(result);
+    return;
+  }
+  res.json(result);
+});
+
+app.patch("/api/orgs/:id/volunteer-compliance/:username", requireAuth, async (req, res) => {
+  const body = req.body as { status?: unknown };
+  const status = typeof body.status === "string" ? body.status : "";
+  const result = await updateVolunteerBackgroundCheck(
+    String(req.params.id),
+    req.session.user!.username,
+    String(req.params.username),
+    status,
+  );
+  if ("error" in result) {
+    res.status(400).json(result);
+    return;
+  }
+  res.json(result);
+});
+
+app.post("/api/orgs/:id/season-snapshot", requireAuth, async (req, res) => {
+  const result = await saveCurrentSeasonSnapshot(String(req.params.id), req.session.user!.username);
+  if ("error" in result) {
+    res.status(400).json(result);
+    return;
+  }
+  res.json(result);
+});
+
 app.delete("/api/orgs/:id", requireAuth, async (req, res) => {
   const result = await deleteOrganization(String(req.params.id), req.session.user!.username);
   if ("error" in result) {
@@ -247,6 +326,8 @@ app.patch("/api/orgs/:id/members/:username", requireAuth, async (req, res) => {
       teamAdminTeamIds: Array.isArray(body.teamAdminTeamIds)
         ? body.teamAdminTeamIds.filter((id): id is string => typeof id === "string")
         : [],
+      vbsSeasonYear: typeof body.vbsSeasonYear === "number" ? body.vbsSeasonYear : undefined,
+      restoreMember: body.restoreMember === true,
     },
   );
   if ("error" in result) {
@@ -280,6 +361,22 @@ app.post("/api/orgs/:id/contact", requireAuth, async (req, res) => {
     message: typeof body.message === "string" ? body.message : "",
     scope: body.scope === "teams" ? "teams" : "organization",
     teamIds: Array.isArray(body.teamIds) ? body.teamIds.filter((id): id is string => typeof id === "string") : [],
+  });
+  if ("error" in result) {
+    res.status(400).json(result);
+    return;
+  }
+  res.json(result);
+});
+
+app.post("/api/orgs/:id/contact/parents", requireAuth, async (req, res) => {
+  const body = req.body as { subject?: unknown; message?: unknown; scope?: unknown; classId?: unknown };
+  const { sendParentContact } = await import("./org-contact.js");
+  const result = await sendParentContact(String(req.params.id), req.session.user!.username, {
+    subject: typeof body.subject === "string" ? body.subject : "",
+    message: typeof body.message === "string" ? body.message : "",
+    scope: body.scope === "class" ? "class" : "all",
+    classId: typeof body.classId === "string" ? body.classId : "",
   });
   if ("error" in result) {
     res.status(400).json(result);
@@ -518,6 +615,29 @@ app.patch("/api/orgs/:id/vbs-registration/public", requireAuth, async (req, res)
   res.json(result);
 });
 
+app.get("/api/public/family/:token", async (req, res) => {
+  const result = await getPublicFamilyPage(String(req.params.token));
+  if ("error" in result) {
+    res.status(404).json(result);
+    return;
+  }
+  res.json(result);
+});
+
+app.patch("/api/orgs/:id/vbs-registration/family-page", requireAuth, async (req, res) => {
+  const body = req.body as { enabled?: unknown; regenerateToken?: unknown };
+  const result = await updatePublicFamilySettings(String(req.params.id), req.session.user!.username, {
+    enabled: typeof body.enabled === "boolean" ? body.enabled : undefined,
+    regenerateToken: body.regenerateToken === true,
+  });
+  if ("error" in result) {
+    const message = result.error ?? "Error";
+    res.status(message.includes("permission") ? 403 : 400).json(result);
+    return;
+  }
+  res.json(result);
+});
+
 app.get("/api/orgs/:id/vbs-registration", requireAuth, async (req, res) => {
   const result = await getRegistrationWorkspace(String(req.params.id), req.session.user!.username);
   if ("error" in result) {
@@ -678,6 +798,94 @@ app.delete("/api/orgs/:id/vbs-registration/classes/:classId", requireAuth, async
   res.json(result);
 });
 
+app.patch("/api/orgs/:id/vbs-registration/classes/order", requireAuth, async (req, res) => {
+  const body = req.body as { classIds?: unknown };
+  const classIds = Array.isArray(body.classIds)
+    ? body.classIds.filter((id): id is string => typeof id === "string")
+    : [];
+  const result = await reorderRegistrationClasses(
+    String(req.params.id),
+    req.session.user!.username,
+    classIds,
+  );
+  if ("error" in result) {
+    const message = result.error ?? "Error";
+    res.status(message.includes("permission") ? 403 : 400).json(result);
+    return;
+  }
+  res.json(result);
+});
+
+app.post("/api/orgs/:id/vbs-registration/classes/auto-assign-students-by-age", requireAuth, async (req, res) => {
+  const result = await autoAssignStudentsByAge(String(req.params.id), req.session.user!.username);
+  if ("error" in result) {
+    const message = result.error ?? "Error";
+    res.status(message.includes("permission") ? 403 : 400).json(result);
+    return;
+  }
+  res.json(result);
+});
+
+app.patch("/api/orgs/:id/vbs-registration/classes/:classId/students/order", requireAuth, async (req, res) => {
+  const body = req.body as { studentIds?: unknown };
+  const studentIds = Array.isArray(body.studentIds)
+    ? body.studentIds.filter((id): id is string => typeof id === "string")
+    : [];
+  const result = await reorderClassStudents(
+    String(req.params.id),
+    req.session.user!.username,
+    String(req.params.classId),
+    studentIds,
+  );
+  if ("error" in result) {
+    const message = result.error ?? "Error";
+    res.status(message.includes("permission") ? 403 : 400).json(result);
+    return;
+  }
+  res.json(result);
+});
+
+app.patch("/api/orgs/:id/vbs-registration/students/unassigned/order", requireAuth, async (req, res) => {
+  const body = req.body as { studentIds?: unknown };
+  const studentIds = Array.isArray(body.studentIds)
+    ? body.studentIds.filter((id): id is string => typeof id === "string")
+    : [];
+  const result = await reorderClassStudents(
+    String(req.params.id),
+    req.session.user!.username,
+    null,
+    studentIds,
+  );
+  if ("error" in result) {
+    const message = result.error ?? "Error";
+    res.status(message.includes("permission") ? 403 : 400).json(result);
+    return;
+  }
+  res.json(result);
+});
+
+app.patch("/api/orgs/:id/vbs-registration/classes/:classId/staff/order", requireAuth, async (req, res) => {
+  const body = req.body as { role?: unknown; usernames?: unknown };
+  const roleRaw = typeof body.role === "string" ? body.role : "teacher";
+  const role = roleRaw === "leader" ? "leader" : roleRaw === "helper" ? "helper" : "teacher";
+  const usernames = Array.isArray(body.usernames)
+    ? body.usernames.filter((u): u is string => typeof u === "string")
+    : [];
+  const result = await reorderClassStaff(
+    String(req.params.id),
+    req.session.user!.username,
+    String(req.params.classId),
+    role,
+    usernames,
+  );
+  if ("error" in result) {
+    const message = result.error ?? "Error";
+    res.status(message.includes("permission") ? 403 : 400).json(result);
+    return;
+  }
+  res.json(result);
+});
+
 app.patch("/api/orgs/:id/vbs-registration/students/:studentId/class", requireAuth, async (req, res) => {
   const body = req.body as { classId?: unknown };
   const classId =
@@ -719,6 +927,26 @@ app.put("/api/orgs/:id/vbs-registration/classes/:classId/staff", requireAuth, as
   }
   res.json(result);
 });
+
+app.delete(
+  "/api/orgs/:id/vbs-registration/classes/:classId/students/:studentId",
+  requireAuth,
+  async (req, res) => {
+    const { removeStudentFromClass } = await import("./vbs-registration-classes.js");
+    const result = await removeStudentFromClass(
+      String(req.params.id),
+      req.session.user!.username,
+      String(req.params.studentId),
+      String(req.params.classId),
+    );
+    if ("error" in result) {
+      const message = result.error ?? "Error";
+      res.status(message.includes("permission") ? 403 : 400).json(result);
+      return;
+    }
+    res.json(result);
+  },
+);
 
 app.delete(
   "/api/orgs/:id/vbs-registration/classes/:classId/staff/:username",
@@ -834,6 +1062,7 @@ app.put("/api/orgs/:id/vbs-plan", requireAuth, async (req, res) => {
     dailyEnd: text(body.dailyEnd),
     expectedKids: num(body.expectedKids),
     coordinatorNotes: text(body.coordinatorNotes),
+    familyPublicNotes: text(body.familyPublicNotes),
     budgetAmount: num(body.budgetAmount),
     expensesAmount: num(body.expensesAmount),
     seedTemplate: body.seedTemplate !== false,
@@ -936,7 +1165,42 @@ app.post("/api/orgs/:id/vbs-plan/schedule", requireAuth, async (req, res) => {
     stationId: text(body.stationId),
     teamId: text(body.teamId),
     notes: text(body.notes),
+    roleLabel: text(body.roleLabel),
+    assignedUsername: text(body.assignedUsername),
   });
+  if ("error" in result) {
+    res.status(403).json(result);
+    return;
+  }
+  res.json(result);
+});
+
+app.post("/api/orgs/:id/vbs-plan/supplies", requireAuth, async (req, res) => {
+  const body = req.body as Record<string, unknown>;
+  const num = (value: unknown) => (typeof value === "number" && Number.isFinite(value) ? value : Number(value));
+  const text = (value: unknown) => (typeof value === "string" ? value : "");
+  const result = await saveVbsSupplyItem(String(req.params.id), req.session.user!.username, {
+    id: text(body.id) || undefined,
+    name: text(body.name),
+    quantity: text(body.quantity),
+    estimatedCost: num(body.estimatedCost),
+    purchased: body.purchased === true,
+    assignedTeamId: text(body.assignedTeamId),
+    notes: text(body.notes),
+  });
+  if ("error" in result) {
+    res.status(403).json(result);
+    return;
+  }
+  res.json(result);
+});
+
+app.delete("/api/orgs/:id/vbs-plan/supplies/:itemId", requireAuth, async (req, res) => {
+  const result = await deleteVbsSupplyItem(
+    String(req.params.id),
+    req.session.user!.username,
+    String(req.params.itemId),
+  );
   if ("error" in result) {
     res.status(403).json(result);
     return;

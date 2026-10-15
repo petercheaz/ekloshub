@@ -294,7 +294,8 @@ export function OrgVbsBar() {
   if (
     path.endsWith("/vbs-plan") ||
     path.endsWith("/manage") ||
-    path.endsWith("/teams")
+    path.endsWith("/teams") ||
+    /\/org\/[^/]+$/.test(path)
   ) {
     return null;
   }

@@ -10,11 +10,31 @@ import { listBoardPosts } from "./vbs-board.js";
 import { getTeam, listTeamsForViewer } from "./teams.js";
 import { objectUrl, storeUpload } from "./db/s3.js";
 import { findUser } from "./users.js";
+/** Common week-of roles — suggestions for schedule blocks, not an enforced enum. */
+export const SCHEDULE_ROLE_SUGGESTIONS = [
+  "Welcome / check-in",
+  "Worship leader",
+  "Storyteller",
+  "Station leader",
+  "Games",
+  "Crafts",
+  "Snacks",
+  "Registration desk",
+  "Safety / float",
+  "Closing assembly",
+] as const;
 import { MAX_ATTACHMENT_BYTES } from "./media-limits.js";
 import {
   buildFullVbsSchedule,
   DEFAULT_VBS_SCHEDULE_ACTIVITIES,
+  enumerateIsoDays,
 } from "./vbs-schedule-activities.js";
+import {
+  defaultVbsPlanStationNames,
+  rotationBucket,
+  rotationNameMatches,
+  VBS_ROTATION_STATION_NAMES,
+} from "./vbs-rotation-stations.js";
 
 export type VbsTaskStatus = "todo" | "in_progress" | "done" | "blocked";
 export type VbsReimbursementStatus = "none" | "pending" | "submitted" | "reimbursed" | "denied";
@@ -208,6 +228,7 @@ export async function getPlanRow(orgId: string) {
     daily_end: string;
     expected_kids: number;
     coordinator_notes: string;
+    family_public_notes: string;
     budget_amount: string;
     expenses_amount: string;
     worksheet_data: unknown;
@@ -215,7 +236,7 @@ export async function getPlanRow(orgId: string) {
   }>(
     `SELECT id, organization_id, year, title, publisher_id, program_title, location,
             start_date, end_date, daily_start, daily_end, expected_kids, coordinator_notes,
-            budget_amount, expenses_amount, worksheet_data, updated_at
+            family_public_notes, budget_amount, expenses_amount, worksheet_data, updated_at
      FROM vbs_plans WHERE organization_id = $1 ORDER BY year DESC LIMIT 1`,
     [orgId],
   );
@@ -237,6 +258,7 @@ function presentPlan(row: NonNullable<Awaited<ReturnType<typeof getPlanRow>>>) {
     dailyEnd: row.daily_end,
     expectedKids: row.expected_kids,
     coordinatorNotes: row.coordinator_notes,
+    familyPublicNotes: row.family_public_notes ?? "",
     budgetAmount: Number(row.budget_amount) || 0,
     expensesAmount: Number(row.expenses_amount) || 0,
     worksheetData: row.worksheet_data ?? {},
@@ -265,6 +287,8 @@ export async function saveVbsWorksheet(
     JSON.stringify(worksheetData ?? {}),
     new Date().toISOString(),
   ]);
+  const { syncPrayerReminders } = await import("./vbs-prayer-reminders.js");
+  await syncPrayerReminders(orgId, worksheetData.prayerSchedule);
   return { ok: true as const };
 }
 
@@ -273,16 +297,7 @@ async function seedStarterContent(planId: string, orgId: string, planStartDate: 
     planStartDate ||
     addDaysToIsoDate(new Date().toISOString().slice(0, 10), 90);
   const now = new Date().toISOString();
-  const stations = [
-    "Registration & check-in",
-    "Opening worship",
-    "Bible story",
-    "Craft rotation",
-    "Snack station",
-    "Recreation",
-    "Music & memory",
-    "Closing rally",
-  ];
+  const stations = defaultVbsPlanStationNames();
   for (let i = 0; i < stations.length; i += 1) {
     await db().query(
       `INSERT INTO vbs_stations (id, plan_id, name, description, default_team_id, sort_order)
@@ -437,6 +452,71 @@ async function seedWeekSchedule(planId: string, plan: NonNullable<Awaited<Return
   }
 }
 
+/** Keep schedule blocks aligned when Overview start/end dates change (by day index). */
+async function remapScheduleDayDates(
+  planId: string,
+  oldStart: string,
+  oldEnd: string,
+  newStart: string,
+  newEnd: string,
+) {
+  const oldDays = enumerateIsoDays(oldStart, oldEnd);
+  const newDays = enumerateIsoDays(newStart, newEnd);
+  if (oldDays.length === 0 || newDays.length === 0) {
+    return;
+  }
+  const lastNew = newDays[newDays.length - 1]!;
+  for (let i = 0; i < oldDays.length; i++) {
+    const from = oldDays[i]!;
+    const to = newDays[Math.min(i, newDays.length - 1)]!;
+    if (from === to) {
+      continue;
+    }
+    await db().query(
+      `UPDATE vbs_schedule_slots SET day_date = $3 WHERE plan_id = $1 AND day_date = $2`,
+      [planId, from, to],
+    );
+  }
+  for (let i = newDays.length; i < oldDays.length; i++) {
+    const from = oldDays[i]!;
+    if (from === lastNew) {
+      continue;
+    }
+    await db().query(
+      `UPDATE vbs_schedule_slots SET day_date = $3 WHERE plan_id = $1 AND day_date = $2`,
+      [planId, from, lastNew],
+    );
+  }
+}
+
+async function syncScheduleFromOverview(
+  planId: string,
+  plan: NonNullable<Awaited<ReturnType<typeof getPlanRow>>>,
+  previous?: { startDate: string; endDate: string },
+) {
+  const startDate = plan.start_date ? plan.start_date.toISOString().slice(0, 10) : "";
+  const endDate = plan.end_date ? plan.end_date.toISOString().slice(0, 10) : "";
+  if (!startDate || !endDate) {
+    return;
+  }
+  const count = await db().query<{ count: number }>(
+    "SELECT COUNT(*)::int AS count FROM vbs_schedule_slots WHERE plan_id = $1",
+    [planId],
+  );
+  const slotCount = count.rows[0]?.count ?? 0;
+  if (slotCount === 0) {
+    await seedWeekSchedule(planId, plan);
+    return;
+  }
+  if (
+    previous?.startDate &&
+    previous.endDate &&
+    (previous.startDate !== startDate || previous.endDate !== endDate)
+  ) {
+    await remapScheduleDayDates(planId, previous.startDate, previous.endDate, startDate, endDate);
+  }
+}
+
 export async function generateVbsDailySchedule(orgId: string, username: string, replace: boolean) {
   const access = await requireMember(orgId, username);
   if ("error" in access) {
@@ -545,6 +625,40 @@ export async function setOrgVbsCurriculumDefault(
     : { error: "Could not save default VBS" as const };
 }
 
+async function ensurePlanRotationStations(planId: string) {
+  const result = await db().query<{ id: string; name: string; sort_order: number }>(
+    `SELECT id, name, sort_order FROM vbs_stations WHERE plan_id = $1`,
+    [planId],
+  );
+  const rows = result.rows;
+  if (rows.length > 0) {
+    return;
+  }
+  let maxOrder = rows.reduce((max, row) => Math.max(max, row.sort_order), -1);
+
+  for (const row of rows) {
+    const bucket = rotationBucket(row.name);
+    if (bucket !== null) {
+      const canonical = VBS_ROTATION_STATION_NAMES[bucket];
+      if (row.name !== canonical && rotationNameMatches(row.name, canonical)) {
+        await db().query(`UPDATE vbs_stations SET name = $2 WHERE id = $1`, [row.id, canonical]);
+      }
+    }
+  }
+
+  for (const name of defaultVbsPlanStationNames()) {
+    if (rows.some((row) => rotationNameMatches(row.name, name))) {
+      continue;
+    }
+    maxOrder += 1;
+    await db().query(
+      `INSERT INTO vbs_stations (id, plan_id, name, description, default_team_id, sort_order)
+       VALUES ($1,$2,$3,'',NULL,$4)`,
+      [crypto.randomUUID(), planId, name, maxOrder],
+    );
+  }
+}
+
 export async function getVbsWorkspace(orgId: string, username: string) {
   const access = await requireMember(orgId, username);
   if ("error" in access) {
@@ -552,7 +666,17 @@ export async function getVbsWorkspace(orgId: string, username: string) {
   }
   const role = access.membership.role;
   const planRow = await getPlanRow(orgId);
+  if (planRow) {
+    await ensurePlanRotationStations(planRow.id);
+  }
   const plan = planRow ? presentPlan(planRow) : null;
+  if (plan) {
+    const { assertPlanSeasonAccess } = await import("./vbs-org-season.js");
+    const planAccess = await assertPlanSeasonAccess(orgId, username, access.platformAdmin === true, plan.year);
+    if ("error" in planAccess) {
+      return { error: planAccess.error };
+    }
+  }
 
   const prefsResult = await db().query<{ notify_email: boolean; notify_sms: boolean }>(
     `SELECT notify_email, notify_sms FROM organization_members
@@ -579,7 +703,8 @@ export async function getVbsWorkspace(orgId: string, username: string) {
         [planId],
       ),
       db().query(
-        `SELECT id, plan_id, day_date, starts_at, ends_at, label, station_id, team_id, notes
+        `SELECT id, plan_id, day_date, starts_at, ends_at, label, station_id, team_id, notes,
+                role_label, assigned_username
          FROM vbs_schedule_slots WHERE plan_id = $1 ORDER BY day_date, starts_at`,
         [planId],
       ),
@@ -629,6 +754,8 @@ export async function getVbsWorkspace(orgId: string, username: string) {
         stationId: row.station_id ?? "",
         teamId: row.team_id ?? "",
         notes: row.notes,
+        roleLabel: row.role_label ?? "",
+        assignedUsername: row.assigned_username ?? "",
       })),
       checklist: checklist.rows.map((row) => {
         const status = normalizeMilestoneStatus({ status: row.status, done: row.done });
@@ -651,6 +778,7 @@ export async function getVbsWorkspace(orgId: string, username: string) {
   const related = plan
     ? await loadRelated(plan.id)
     : { tasks: [], stations: [], schedule: [], checklist: [] };
+  const supplies = plan ? await listSupplyItems(plan.id) : [];
   const planWithTaskExpenses = plan
     ? { ...plan, expensesAmount: sumTaskExpenseAmounts(related.tasks) }
     : null;
@@ -673,11 +801,13 @@ export async function getVbsWorkspace(orgId: string, username: string) {
   return {
     plan: planWithTaskExpenses,
     ...related,
+    supplies,
     boardPosts,
     teams,
     canWrite: planWriteAllowed(access),
     canAdmin: role === "org_admin" || access.platformAdmin === true,
     scheduleActivityLabels,
+    scheduleRoleSuggestions: [...SCHEDULE_ROLE_SUGGESTIONS],
     notificationPrefs: {
       notifyEmail: prefs?.notify_email ?? true,
       notifySms: prefs?.notify_sms ?? false,
@@ -709,6 +839,7 @@ export async function upsertVbsPlan(
     dailyEnd: string;
     expectedKids: number;
     coordinatorNotes: string;
+    familyPublicNotes?: string;
     budgetAmount: number;
     expensesAmount: number;
     seedTemplate?: boolean;
@@ -725,17 +856,32 @@ export async function upsertVbsPlan(
   if (!input.year) {
     return { error: "Year is required" as const };
   }
+  const { resolveViewerSeason, syncActiveVbsYear } = await import("./vbs-org-season.js");
+  const season = await resolveViewerSeason(orgId, username, access.platformAdmin === true);
+  if ("error" in season) {
+    return { error: season.error };
+  }
+  if (!season.viewAllSeasons && input.year !== season.viewSeason) {
+    return {
+      error: `Your access is for VBS ${season.viewSeason}. You cannot edit the plan for VBS ${input.year}.` as const,
+    };
+  }
 
   const existing = await getPlanRow(orgId);
   const now = new Date().toISOString();
   const startDate = input.startDate || null;
   const endDate = input.endDate || null;
 
+  if (existing && existing.year !== input.year) {
+    const { persistLiveSeasonSnapshot } = await import("./vbs-season-copy.js");
+    await persistLiveSeasonSnapshot(orgId, existing.year);
+  }
+
   if (existing) {
     await db().query(
       `UPDATE vbs_plans SET year=$2, title=$3, publisher_id=$4, program_title=$5, location=$6,
          start_date=$7, end_date=$8, daily_start=$9, daily_end=$10, expected_kids=$11,
-         coordinator_notes=$12, budget_amount=$13, updated_at=$14
+         coordinator_notes=$12, family_public_notes=$13, budget_amount=$14, updated_at=$15
        WHERE id=$1`,
       [
         existing.id,
@@ -750,23 +896,21 @@ export async function upsertVbsPlan(
         input.dailyEnd || "12:00",
         input.expectedKids || 0,
         input.coordinatorNotes.trim(),
+        (input.familyPublicNotes ?? existing.family_public_notes ?? "").trim(),
         Math.max(0, input.budgetAmount || 0),
         now,
       ],
     );
     await syncPlanExpensesFromTasks(existing.id);
-    if (input.seedSchedule && startDate) {
-      const count = await db().query<{ count: number }>(
-        "SELECT COUNT(*)::int AS count FROM vbs_schedule_slots WHERE plan_id = $1",
-        [existing.id],
-      );
-      if ((count.rows[0]?.count ?? 0) === 0) {
-        const planRow = await getPlanRow(orgId);
-        if (planRow) {
-          await seedWeekSchedule(existing.id, planRow);
-        }
-      }
+    const previousOverviewDates = {
+      startDate: existing.start_date ? existing.start_date.toISOString().slice(0, 10) : "",
+      endDate: existing.end_date ? existing.end_date.toISOString().slice(0, 10) : "",
+    };
+    const planRow = await getPlanRow(orgId);
+    if (planRow) {
+      await syncScheduleFromOverview(existing.id, planRow, previousOverviewDates);
     }
+    await syncActiveVbsYear(orgId, input.year);
     const updated = await getPlanRow(orgId);
     return updated ? { plan: presentPlan(updated) } : { error: "Could not update plan" as const };
   }
@@ -776,8 +920,8 @@ export async function upsertVbsPlan(
     `INSERT INTO vbs_plans (
        id, organization_id, year, title, publisher_id, program_title, location,
        start_date, end_date, daily_start, daily_end, expected_kids, coordinator_notes,
-       budget_amount, expenses_amount, updated_at
-     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
+       family_public_notes, budget_amount, expenses_amount, updated_at
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
     [
       id,
       orgId,
@@ -792,6 +936,7 @@ export async function upsertVbsPlan(
       input.dailyEnd || "12:00",
       input.expectedKids || 0,
       input.coordinatorNotes.trim(),
+      (input.familyPublicNotes ?? "").trim(),
       Math.max(0, input.budgetAmount || 0),
       Math.max(0, input.expensesAmount || 0),
       now,
@@ -801,13 +946,12 @@ export async function upsertVbsPlan(
   if (input.seedTemplate !== false) {
     await seedStarterContent(id, orgId, input.startDate || null);
   }
-  if (input.seedSchedule && input.startDate) {
-    const planRow = await getPlanRow(orgId);
-    if (planRow) {
-      await seedWeekSchedule(id, planRow);
-    }
+  const planRow = await getPlanRow(orgId);
+  if (planRow) {
+    await syncScheduleFromOverview(id, planRow);
   }
 
+  await syncActiveVbsYear(orgId, input.year);
   const row = await getPlanRow(orgId);
   return row ? { plan: presentPlan(row) } : { error: "Could not create plan" as const };
 }
@@ -1147,6 +1291,8 @@ export async function saveVbsScheduleSlot(
     stationId: string;
     teamId: string;
     notes: string;
+    roleLabel?: string;
+    assignedUsername?: string;
   },
 ) {
   const access = await requireMember(orgId, username);
@@ -1164,7 +1310,28 @@ export async function saveVbsScheduleSlot(
     return { error: "Day and label are required" as const };
   }
   const stationId = input.stationId.trim() || null;
-  const teamId = input.teamId.trim() || null;
+  const teamIdRaw = input.teamId.trim();
+  let teamId: string | null = null;
+  if (teamIdRaw) {
+    const team = await getTeam(orgId, teamIdRaw);
+    if (!team) {
+      return { error: "Team not found" as const };
+    }
+    teamId = teamIdRaw;
+  }
+  const roleLabel = (input.roleLabel ?? "").trim().slice(0, 120);
+  let assignedUsername = "";
+  if (input.assignedUsername?.trim()) {
+    const resolved = await findUser(input.assignedUsername.trim());
+    if (!resolved) {
+      return { error: "Assigned person was not found" as const };
+    }
+    const member = await getMembership(orgId, resolved);
+    if (!member) {
+      return { error: "Assigned person must be an organization member" as const };
+    }
+    assignedUsername = resolved;
+  }
 
   const trimmedLabel = input.label.trim();
   const labelSaved = await addScheduleActivityLabel(orgId, username, trimmedLabel);
@@ -1175,7 +1342,8 @@ export async function saveVbsScheduleSlot(
   if (input.id) {
     await db().query(
       `UPDATE vbs_schedule_slots SET day_date=$2, starts_at=$3, ends_at=$4, label=$5,
-         station_id=$6, team_id=$7, notes=$8 WHERE id=$1 AND plan_id=$9`,
+         station_id=$6, team_id=$7, notes=$8, role_label=$9, assigned_username=$10
+       WHERE id=$1 AND plan_id=$11`,
       [
         input.id,
         input.dayDate,
@@ -1185,14 +1353,17 @@ export async function saveVbsScheduleSlot(
         stationId,
         teamId,
         input.notes.trim(),
+        roleLabel,
+        assignedUsername,
         plan.id,
       ],
     );
   } else {
     await db().query(
       `INSERT INTO vbs_schedule_slots (
-         id, plan_id, day_date, starts_at, ends_at, label, station_id, team_id, notes
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+         id, plan_id, day_date, starts_at, ends_at, label, station_id, team_id, notes,
+         role_label, assigned_username
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
       [
         crypto.randomUUID(),
         plan.id,
@@ -1203,6 +1374,8 @@ export async function saveVbsScheduleSlot(
         stationId,
         teamId,
         input.notes.trim(),
+        roleLabel,
+        assignedUsername,
       ],
     );
   }
@@ -1329,6 +1502,118 @@ export async function deleteVbsChecklistItem(orgId: string, username: string, it
     return { error: "Plan not found" as const };
   }
   await db().query("DELETE FROM vbs_checklist_items WHERE id = $1 AND plan_id = $2", [itemId, plan.id]);
+  return { ok: true as const };
+}
+
+const MAX_SUPPLY_NAME = 200;
+const MAX_SUPPLY_QUANTITY = 80;
+const MAX_SUPPLY_NOTES = 2000;
+
+export async function listSupplyItems(planId: string) {
+  const result = await db().query<{
+    id: string;
+    plan_id: string;
+    name: string;
+    quantity: string;
+    estimated_cost: string;
+    purchased: boolean;
+    assigned_team_id: string | null;
+    notes: string;
+    sort_order: number;
+  }>(
+    `SELECT id, plan_id, name, quantity, estimated_cost, purchased, assigned_team_id, notes, sort_order
+     FROM vbs_supply_items WHERE plan_id = $1 ORDER BY sort_order, name`,
+    [planId],
+  );
+  return result.rows.map((row) => ({
+    id: row.id,
+    planId: row.plan_id,
+    name: row.name,
+    quantity: row.quantity,
+    estimatedCost: Number(row.estimated_cost) || 0,
+    purchased: row.purchased === true,
+    assignedTeamId: row.assigned_team_id ?? "",
+    notes: row.notes,
+    sortOrder: row.sort_order,
+  }));
+}
+
+export async function saveVbsSupplyItem(
+  orgId: string,
+  username: string,
+  input: {
+    id?: string;
+    name: string;
+    quantity: string;
+    estimatedCost: number;
+    purchased: boolean;
+    assignedTeamId: string;
+    notes: string;
+  },
+) {
+  const access = await requireMember(orgId, username);
+  if ("error" in access) {
+    return access;
+  }
+  if (!planWriteAllowed(access)) {
+    return { error: "You need write access" as const };
+  }
+  const plan = await getPlanRow(orgId);
+  if (!plan) {
+    return { error: "Create a VBS plan first" as const };
+  }
+  const name = input.name.trim().slice(0, MAX_SUPPLY_NAME);
+  if (!name) {
+    return { error: "Item name is required" as const };
+  }
+  const teamIdRaw = input.assignedTeamId.trim();
+  let teamId: string | null = null;
+  if (teamIdRaw) {
+    const team = await getTeam(orgId, teamIdRaw);
+    if (!team) {
+      return { error: "Team not found" as const };
+    }
+    teamId = teamIdRaw;
+  }
+  const cost = Math.max(0, Math.min(input.estimatedCost || 0, 999_999.99));
+  const quantity = input.quantity.trim().slice(0, MAX_SUPPLY_QUANTITY);
+  const notes = input.notes.trim().slice(0, MAX_SUPPLY_NOTES);
+
+  if (input.id) {
+    await db().query(
+      `UPDATE vbs_supply_items SET name=$2, quantity=$3, estimated_cost=$4, purchased=$5,
+         assigned_team_id=$6, notes=$7 WHERE id=$1 AND plan_id=$8`,
+      [input.id, name, quantity, cost, input.purchased === true, teamId, notes, plan.id],
+    );
+  } else {
+    const order = await db().query<{ max: number | null }>(
+      "SELECT MAX(sort_order) AS max FROM vbs_supply_items WHERE plan_id = $1",
+      [plan.id],
+    );
+    const sortOrder = (order.rows[0]?.max ?? -1) + 1;
+    await db().query(
+      `INSERT INTO vbs_supply_items (
+         id, plan_id, name, quantity, estimated_cost, purchased, assigned_team_id, notes, sort_order
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+      [crypto.randomUUID(), plan.id, name, quantity, cost, input.purchased === true, teamId, notes, sortOrder],
+    );
+  }
+  return { ok: true as const };
+}
+
+export async function deleteVbsSupplyItem(orgId: string, username: string, itemId: string) {
+  const access = await requireMember(orgId, username);
+  if ("error" in access) {
+    return access;
+  }
+  if (!planWriteAllowed(access)) {
+    return { error: "You need write access" as const };
+  }
+  const plan = await getPlanRow(orgId);
+  if (!plan) {
+    return { error: "Plan not found" as const };
+  }
+  await db().query("DELETE FROM vbs_supply_items WHERE id = $1 AND plan_id = $2", [itemId, plan.id]);
   return { ok: true as const };
 }
 

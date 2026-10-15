@@ -74,6 +74,8 @@ export async function isVerified(username: string) {
 export type UserSuggestion = {
   username: string;
   email: string;
+  firstName: string;
+  lastName: string;
 };
 
 /** When no email is set, use login id + @gmail.com (skip if username is already an email). */
@@ -101,26 +103,56 @@ export function resolveUserEmail(username: string, email: string | null | undefi
 
 export async function searchUsers(query: string, exclude?: string, tenantId?: string | null) {
   const needle = `%${query.trim().toLowerCase()}%`;
+  type Row = {
+    username: string;
+    email: string;
+    first_name: string;
+    last_name: string;
+  };
   const result = tenantId
-    ? await db().query<UserSuggestion>(
-        `SELECT u.username, COALESCE(NULLIF(TRIM(u.email), ''), '') AS email FROM users u
+    ? await db().query<Row>(
+        `SELECT u.username,
+                COALESCE(NULLIF(TRIM(u.email), ''), '') AS email,
+                COALESCE(u.first_name, '') AS first_name,
+                COALESCE(u.last_name, '') AS last_name
+         FROM users u
          JOIN organization_members m ON m.username = u.username
          WHERE m.organization_id = $3
            AND ($2::text IS NULL OR u.username <> $2)
-           AND ($1 = '%%' OR LOWER(u.username) LIKE $1 OR LOWER(COALESCE(u.email, '')) LIKE $1)
-         ORDER BY u.username`,
+           AND (
+             $1 = '%%'
+             OR LOWER(u.username) LIKE $1
+             OR LOWER(COALESCE(u.email, '')) LIKE $1
+             OR LOWER(COALESCE(u.first_name, '')) LIKE $1
+             OR LOWER(COALESCE(u.last_name, '')) LIKE $1
+             OR LOWER(TRIM(COALESCE(u.first_name, '') || ' ' || COALESCE(u.last_name, ''))) LIKE $1
+           )
+         ORDER BY u.last_name, u.first_name, u.username`,
         [needle, exclude ?? null, tenantId],
       )
-    : await db().query<UserSuggestion>(
-        `SELECT username, COALESCE(email, '') AS email FROM users
+    : await db().query<Row>(
+        `SELECT username,
+                COALESCE(email, '') AS email,
+                COALESCE(first_name, '') AS first_name,
+                COALESCE(last_name, '') AS last_name
+         FROM users
          WHERE ($2::text IS NULL OR username <> $2)
-           AND ($1 = '%%' OR LOWER(username) LIKE $1 OR LOWER(COALESCE(email, '')) LIKE $1)
-         ORDER BY username`,
+           AND (
+             $1 = '%%'
+             OR LOWER(username) LIKE $1
+             OR LOWER(COALESCE(email, '')) LIKE $1
+             OR LOWER(COALESCE(first_name, '')) LIKE $1
+             OR LOWER(COALESCE(last_name, '')) LIKE $1
+             OR LOWER(TRIM(COALESCE(first_name, '') || ' ' || COALESCE(last_name, ''))) LIKE $1
+           )
+         ORDER BY last_name, first_name, username`,
         [needle, exclude ?? null],
       );
   return result.rows.map((row) => ({
     username: row.username,
     email: resolveUserEmail(row.username, row.email),
+    firstName: row.first_name,
+    lastName: row.last_name,
   }));
 }
 
