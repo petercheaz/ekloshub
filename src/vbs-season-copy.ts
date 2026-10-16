@@ -102,6 +102,30 @@ function dayOffset(planStart: string, dayIso: string): number | null {
   return Math.round((day - start) / 86_400_000);
 }
 
+export function copiedPlanTitle(
+  calendarYear: number,
+  programTitle: string,
+  sourceTitle: string,
+  sourceYear: number,
+  userPickedCurriculum: boolean,
+) {
+  const theme = programTitle.trim();
+  if (userPickedCurriculum && theme) {
+    return `VBS ${calendarYear} · ${theme}`;
+  }
+  if (theme && !sourceTitle.trim()) {
+    return `VBS ${calendarYear} · ${theme}`;
+  }
+  const titleBase = sourceTitle.trim() || `VBS ${sourceYear}`;
+  if (titleBase.includes(String(sourceYear))) {
+    return titleBase.replace(String(sourceYear), String(calendarYear));
+  }
+  if (theme) {
+    return `VBS ${calendarYear} · ${theme}`;
+  }
+  return titleBase;
+}
+
 function mapCurriculumToYear(publisherId: string, programTitle: string, toYear: number) {
   const trimmed = programTitle.trim();
   const exact = programs.find(
@@ -810,7 +834,8 @@ export async function copyVbsSeasonToNewEvent(
 
   const chosenPublisher = input.publisherId?.trim() || "";
   const chosenTitle = input.programTitle?.trim() || "";
-  const curriculum = chosenPublisher && chosenTitle
+  const userPickedCurriculum = Boolean(chosenPublisher && chosenTitle);
+  const curriculum = userPickedCurriculum
     ? { publisherId: chosenPublisher, programTitle: chosenTitle }
     : mapCurriculumToYear(
         chosenPublisher || source.plan.publisherId,
@@ -825,8 +850,13 @@ export async function copyVbsSeasonToNewEvent(
     [eventId, organizationId, toYear, name, curriculum.publisherId, curriculum.programTitle],
   );
   await addMemberToVbsEvent(organizationId, username, eventId);
-  const titleBase = source.plan.title.trim() || `VBS ${sourceEvent.year}`;
-  const title = titleBase.replace(String(sourceEvent.year), String(toYear));
+  const title = copiedPlanTitle(
+    toYear,
+    curriculum.programTitle,
+    source.plan.title,
+    sourceEvent.year,
+    userPickedCurriculum,
+  );
   const shiftedWorksheet = shiftPlanWorksheetForSeasonCopy(
     source.plan.worksheetData,
     sourceStart,

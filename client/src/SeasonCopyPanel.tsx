@@ -51,6 +51,11 @@ function fridayOfWeek(iso: string) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
+function eventYearFromStart(start: string, fallback: number) {
+  const parts = parseIsoParts(start);
+  return parts?.year ?? fallback;
+}
+
 function defaultEndFromStart(start: string, sourceStart: string, sourceEnd: string) {
   const span = sourceStart && sourceEnd ? isoDayOffset(sourceStart, sourceEnd) : null;
   if (span !== null && span >= 0) {
@@ -69,7 +74,7 @@ export function SeasonCopyPanel({
   const { events, viewingEvent, publishers, programs, defaultYear } = useOrgVbs();
   const [options, setOptions] = useState<SeasonCopyOptions | null>(null);
   const [fromEventId, setFromEventId] = useState("");
-  const [toYear, setToYear] = useState<number | "">("");
+  const [curriculumYear, setCurriculumYear] = useState<number | "">("");
   const [publisherId, setPublisherId] = useState("");
   const [programTitle, setProgramTitle] = useState("");
   const [startDate, setStartDate] = useState("");
@@ -85,14 +90,17 @@ export function SeasonCopyPanel({
     () => vbsYearOptions(programs, [defaultYear, options?.suggestedTargetYear ?? defaultYear, sourceEvent?.year ?? 0].filter(Boolean)),
     [defaultYear, options?.suggestedTargetYear, programs, sourceEvent?.year],
   );
-  const yearFilter = toYear === "" ? "" : String(toYear);
+  const yearFilter = curriculumYear === "" ? "" : String(curriculumYear);
   const publisherChoices = useMemo(
     () => vbsPublisherOptions(publishers, programs, yearFilter),
     [programs, publishers, yearFilter],
   );
   const titleChoices = useMemo(
-    () => vbsProgramsMatching(programs, publisherId, toYear === "" ? "" : toYear).map((program) => program.theme),
-    [programs, publisherId, toYear],
+    () =>
+      vbsProgramsMatching(programs, publisherId, curriculumYear === "" ? "" : curriculumYear).map(
+        (program) => program.theme,
+      ),
+    [programs, publisherId, curriculumYear],
   );
 
   const applyCurriculumDefaults = useCallback(
@@ -129,7 +137,7 @@ export function SeasonCopyPanel({
           setFromEventId(source.id);
         }
         const year = next.suggestedTargetYear;
-        setToYear(year);
+        setCurriculumYear(year);
         applyCurriculumDefaults(year, source?.publisherId ?? "", source?.programTitle ?? "");
       })
       .catch((err: Error) => {
@@ -145,17 +153,17 @@ export function SeasonCopyPanel({
   function onSourceChange(eventId: string) {
     setFromEventId(eventId);
     const source = events.find((event) => event.id === eventId);
-    if (!source || toYear === "") {
+    if (!source || curriculumYear === "") {
       return;
     }
-    applyCurriculumDefaults(toYear, source.publisherId, source.programTitle);
+    applyCurriculumDefaults(curriculumYear, source.publisherId, source.programTitle);
     if (startDate) {
       setEndDate(defaultEndFromStart(startDate, source.startDate, source.endDate));
     }
   }
 
-  function onYearChange(yearValue: number | "") {
-    setToYear(yearValue);
+  function onCurriculumYearChange(yearValue: number | "") {
+    setCurriculumYear(yearValue);
     if (yearValue === "") {
       return;
     }
@@ -164,11 +172,6 @@ export function SeasonCopyPanel({
 
   function onStartChange(nextStart: string) {
     setStartDate(nextStart);
-    const parts = parseIsoParts(nextStart);
-    if (parts) {
-      setToYear(parts.year);
-      applyCurriculumDefaults(parts.year, publisherId, programTitle);
-    }
     if (!nextStart) {
       return;
     }
@@ -193,11 +196,12 @@ export function SeasonCopyPanel({
   async function submitCopy(event: FormEvent) {
     event.preventDefault();
     const source = sourceEvent;
-    if (!source || toYear === "") {
+    if (!source || curriculumYear === "") {
       return;
     }
+    const eventYear = eventYearFromStart(startDate.trim(), curriculumYear);
     const confirmed = window.confirm(
-      `Copy ${source.name || source.label} into a new ${toYear} project${sessionName.trim() ? ` named ${sessionName.trim()}` : ""}? This copies the plan, schedule, tasks, classes, and staff setup. Dates keep the same weekday relative to the new start (for example, the Friday before a Monday start stays the Friday before). Student registrations are not copied.`,
+      `Copy ${source.name || source.label} into a new ${eventYear} project${sessionName.trim() ? ` named ${sessionName.trim()}` : ""}? This copies the plan, schedule, tasks, classes, and staff setup. Dates keep the same weekday relative to the new start (for example, the Friday before a Monday start stays the Friday before). Student registrations are not copied.`,
     );
     if (!confirmed) {
       return;
@@ -209,7 +213,7 @@ export function SeasonCopyPanel({
       const result = await api.copyVbsSeason(orgId, {
         fromYear: source.year,
         fromEventId: source.id,
-        toYear,
+        toYear: eventYear,
         name: sessionName.trim() || undefined,
         startDate: startDate.trim() || undefined,
         endDate: endDate.trim() || undefined,
@@ -235,7 +239,7 @@ export function SeasonCopyPanel({
     return <p className="muted">Loading season copy options…</p>;
   }
 
-  const canCopy = Boolean(sourceEvent) && toYear !== "";
+  const canCopy = Boolean(sourceEvent) && curriculumYear !== "";
 
   return (
     <section className="vbs-panel vbs-season-copy">
@@ -305,11 +309,15 @@ export function SeasonCopyPanel({
             <span className="muted vbs-task-field-hint">Defaults to the same week as start.</span>
           </label>
         </div>
+        <p className="muted vbs-task-field-hint">
+          The week dates set the VBS calendar year for the new project. Curriculum year only picks publisher and title
+          from the catalog (for example 2024 Scuba while the week is in 2027).
+        </p>
         <label className="vbs-task-field">
-          <span className="vbs-task-field-label">Year</span>
+          <span className="vbs-task-field-label">Curriculum year</span>
           <select
-            value={toYear === "" ? "" : String(toYear)}
-            onChange={(e) => onYearChange(e.target.value ? Number(e.target.value) : "")}
+            value={curriculumYear === "" ? "" : String(curriculumYear)}
+            onChange={(e) => onCurriculumYearChange(e.target.value ? Number(e.target.value) : "")}
             disabled={busy}
           >
             {yearChoices.map((year) => (
@@ -326,8 +334,8 @@ export function SeasonCopyPanel({
             onChange={(e) => {
               const next = e.target.value;
               setPublisherId(next);
-              if (toYear !== "") {
-                const titles = vbsProgramsMatching(programs, next, toYear).map((program) => program.theme);
+              if (curriculumYear !== "") {
+                const titles = vbsProgramsMatching(programs, next, curriculumYear).map((program) => program.theme);
                 setProgramTitle((current) => (titles.includes(current) ? current : (titles[0] ?? "")));
               }
             }}
