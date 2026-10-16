@@ -6020,6 +6020,18 @@ table tr.expandable-row-header {
   }
 }
 
+.vbs-season-copy-make-current {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-start;
+  max-width: 42rem;
+  grid-column: 1 / -1;
+}
+
+.vbs-season-copy-make-current input {
+  margin-top: 0.2rem;
+}
+
 .vbs-season-copy-dates,
 .vbs-season-copy-title {
   grid-column: 1 / -1;

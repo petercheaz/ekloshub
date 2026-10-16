@@ -10,6 +10,7 @@ import {
   sameWeekdayInYear,
   shiftIsoRelativeToStart,
   shiftPlanWorksheetForSeasonCopy,
+  stripVolunteerPeopleFromWorksheet,
 } from "./vbs-worksheet-season-shift.js";
 
 export type SeasonSnapshotPayload = {
@@ -550,8 +551,11 @@ async function writeLivePlanFromSnapshot(
     endDate: string;
     worksheetData: unknown;
     eventId?: string;
+    /** When set, replaces snapshot budget (use 0 for a fresh project copy). */
+    budgetAmount?: number;
   },
 ) {
+  const budgetAmount = fields.budgetAmount ?? snapshot.plan.budgetAmount;
   const client = await db().connect();
   try {
     await client.query("BEGIN");
@@ -581,7 +585,7 @@ async function writeLivePlanFromSnapshot(
           snapshot.plan.expectedKids,
           snapshot.plan.coordinatorNotes,
           snapshot.plan.familyPublicNotes,
-          snapshot.plan.budgetAmount,
+          budgetAmount,
           JSON.stringify(fields.worksheetData ?? {}),
           now,
           fields.eventId ?? null,
@@ -611,7 +615,7 @@ async function writeLivePlanFromSnapshot(
           snapshot.plan.expectedKids,
           snapshot.plan.coordinatorNotes,
           snapshot.plan.familyPublicNotes,
-          snapshot.plan.budgetAmount,
+          budgetAmount,
           JSON.stringify(fields.worksheetData ?? {}),
           now,
         ],
@@ -857,11 +861,8 @@ export async function copyVbsSeasonToNewEvent(
     sourceEvent.year,
     userPickedCurriculum,
   );
-  const shiftedWorksheet = shiftPlanWorksheetForSeasonCopy(
-    source.plan.worksheetData,
-    sourceStart,
-    startDate,
-    endDate,
+  const shiftedWorksheet = stripVolunteerPeopleFromWorksheet(
+    shiftPlanWorksheetForSeasonCopy(source.plan.worksheetData, sourceStart, startDate, endDate),
   );
 
   await writeLivePlanFromSnapshot(organizationId, undefined, source, {
@@ -873,6 +874,7 @@ export async function copyVbsSeasonToNewEvent(
     endDate,
     worksheetData: shiftedWorksheet,
     eventId,
+    budgetAmount: 0,
   });
   await syncEventCurriculum(eventId, {
     year: toYear,
@@ -952,6 +954,6 @@ export async function copyVbsSeasonFromYear(
     endDate: input.endDate,
     publisherId: input.publisherId,
     programTitle: input.programTitle,
-    makeCurrent: input.makeCurrent ?? fromYear !== toYear,
+    makeCurrent: input.makeCurrent === true,
   });
 }

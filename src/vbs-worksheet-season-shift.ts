@@ -175,6 +175,63 @@ function shiftVolunteerTimeline(raw: unknown, sourceStart: string, newStart: str
   });
 }
 
+/** Remove volunteer/student names from workbook grids; keep roles, dates, and schedule shape. */
+export function stripVolunteerPeopleFromWorksheet(worksheetData: Record<string, unknown>) {
+  const next: Record<string, unknown> = { ...worksheetData };
+
+  if (Array.isArray(next.prayerSchedule)) {
+    next.prayerSchedule = next.prayerSchedule.map((entry) => {
+      if (!entry || typeof entry !== "object") {
+        return entry;
+      }
+      return { ...(entry as LooseRecord), person1: "", person2: "", person3: "" };
+    });
+  }
+
+  if (Array.isArray(next.prayer)) {
+    next.prayer = next.prayer.map((entry) => {
+      if (!entry || typeof entry !== "object") {
+        return entry;
+      }
+      return { ...(entry as LooseRecord), name: "" };
+    });
+  }
+
+  if (Array.isArray(next.volunteerTimeline)) {
+    next.volunteerTimeline = next.volunteerTimeline.map((entry) => {
+      if (!entry || typeof entry !== "object") {
+        return entry;
+      }
+      return { ...(entry as LooseRecord), who: "" };
+    });
+  }
+
+  const placements = next.volunteerPlacements;
+  if (placements && typeof placements === "object" && !Array.isArray(placements)) {
+    const data = placements as { dayDates?: unknown; rows?: unknown };
+    const dayDates = Array.isArray(data.dayDates)
+      ? data.dayDates.filter((d): d is string => typeof d === "string" && Boolean(d.trim()))
+      : [];
+    const emptyByDate = Object.fromEntries(dayDates.map((date) => [date, ""]));
+    const rows = Array.isArray(data.rows)
+      ? data.rows.map((entry) => {
+          if (!entry || typeof entry !== "object") {
+            return entry;
+          }
+          const row = entry as { roleLabel?: string; assignmentsByDate?: Record<string, string> };
+          const cells: Record<string, string> = { ...emptyByDate };
+          for (const date of dayDates) {
+            cells[date] = "";
+          }
+          return { ...row, assignmentsByDate: cells };
+        })
+      : [];
+    next.volunteerPlacements = { dayDates, rows };
+  }
+
+  return next;
+}
+
 /** Shift date-bearing workbook fields so they keep the same weekday offset from VBS start. */
 export function shiftPlanWorksheetForSeasonCopy(
   worksheetData: unknown,

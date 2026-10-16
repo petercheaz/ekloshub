@@ -360,6 +360,7 @@ app.post("/api/orgs/:id/season-copy", requireAuth, async (req, res) => {
     endDate,
     publisherId,
     programTitle,
+    makeCurrent: body.makeCurrent === true,
   });
   if ("error" in result) {
     res.status(400).json(result);

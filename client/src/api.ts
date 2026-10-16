@@ -146,10 +146,13 @@ export const api = {
       endDate?: string;
       publisherId?: string;
       programTitle?: string;
+      makeCurrent?: boolean;
     },
   ) =>
     request<{
       ok: boolean;
+      eventId: string;
+      name: string;
       fromYear: number;
       toYear: number;
       startDate: string;

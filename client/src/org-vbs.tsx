@@ -546,7 +546,7 @@ export function OrgVbsBar() {
             Rename
           </button>
         ) : null}
-        {canMakeCurrent && hasSessionOverride ? (
+        {canMakeCurrent && !viewingIsCurrent ? (
           <button type="button" className="primary" disabled={busy} onClick={() => void run(makeCurrent)}>
             Make this the current VBS
           </button>
@@ -602,9 +602,10 @@ export function OrgVbsBar() {
         </form>
       ) : null}
       <p className="vbs-filter-note muted">
-        Plan, schedule, registration, and volunteers show only this project. Edits save here automatically. Open any
-        past project from the list, or use New project / Save as to keep another week in the same year. New family
-        sign-ups still go to the current VBS until you switch it.
+        Everything you see is for the open project only. Use the list to browse past VBS weeks.{" "}
+        <strong>Make this the current VBS</strong> controls family sign-ups and public registration.{" "}
+        <strong>Save as…</strong> duplicates this week in the same year; for a new week, year, or curriculum use{" "}
+        <strong>Start another VBS</strong> on Director home or Plan overview.
       </p>
       {error ? <p className="error">{error}</p> : null}
     </section>

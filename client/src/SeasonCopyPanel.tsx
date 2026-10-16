@@ -71,7 +71,8 @@ export function SeasonCopyPanel({
   orgId: string;
   onCopied?: () => void;
 }) {
-  const { events, viewingEvent, publishers, programs, defaultYear } = useOrgVbs();
+  const { events, viewingEvent, publishers, programs, defaultYear, setViewingEventId, refreshEvents } =
+    useOrgVbs();
   const [options, setOptions] = useState<SeasonCopyOptions | null>(null);
   const [fromEventId, setFromEventId] = useState("");
   const [curriculumYear, setCurriculumYear] = useState<number | "">("");
@@ -80,6 +81,7 @@ export function SeasonCopyPanel({
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [sessionName, setSessionName] = useState("");
+  const [makeCurrentAfterCopy, setMakeCurrentAfterCopy] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -102,6 +104,17 @@ export function SeasonCopyPanel({
       ),
     [programs, publisherId, curriculumYear],
   );
+
+  const applySourceWeekDates = useCallback((source: (typeof events)[number]) => {
+    if (!source.startDate) {
+      return;
+    }
+    setStartDate(source.startDate);
+    setEndDate(
+      source.endDate ||
+        defaultEndFromStart(source.startDate, source.startDate, source.endDate || source.startDate),
+    );
+  }, []);
 
   const applyCurriculumDefaults = useCallback(
     (year: number, nextPublisher = "", nextTitle = "") => {
@@ -135,6 +148,7 @@ export function SeasonCopyPanel({
         const source = viewingEvent ?? events[0] ?? null;
         if (source) {
           setFromEventId(source.id);
+          applySourceWeekDates(source);
         }
         const year = next.suggestedTargetYear;
         setCurriculumYear(year);
@@ -148,17 +162,17 @@ export function SeasonCopyPanel({
     return () => {
       cancelled = true;
     };
-  }, [applyCurriculumDefaults, events, orgId, viewingEvent]);
+  }, [applyCurriculumDefaults, applySourceWeekDates, events, orgId, viewingEvent]);
 
   function onSourceChange(eventId: string) {
     setFromEventId(eventId);
     const source = events.find((event) => event.id === eventId);
-    if (!source || curriculumYear === "") {
+    if (!source) {
       return;
     }
-    applyCurriculumDefaults(curriculumYear, source.publisherId, source.programTitle);
-    if (startDate) {
-      setEndDate(defaultEndFromStart(startDate, source.startDate, source.endDate));
+    applySourceWeekDates(source);
+    if (curriculumYear !== "") {
+      applyCurriculumDefaults(curriculumYear, source.publisherId, source.programTitle);
     }
   }
 
@@ -199,9 +213,13 @@ export function SeasonCopyPanel({
     if (!source || curriculumYear === "") {
       return;
     }
+    if (!startDate.trim()) {
+      setError("Choose a week start date for the new VBS.");
+      return;
+    }
     const eventYear = eventYearFromStart(startDate.trim(), curriculumYear);
     const confirmed = window.confirm(
-      `Copy ${source.name || source.label} into a new ${eventYear} project${sessionName.trim() ? ` named ${sessionName.trim()}` : ""}? This copies the plan, schedule, tasks, classes, and staff setup. Dates keep the same weekday relative to the new start (for example, the Friday before a Monday start stays the Friday before). Student registrations are not copied.`,
+      `Copy ${source.name || source.label} into a new ${eventYear} project${sessionName.trim() ? ` named ${sessionName.trim()}` : ""}? You get schedules, tasks, milestones, supplies, class templates, and workbook layout with dates shifted by weekday from your new start. We do not copy students, volunteers, receipts, or background checks; budget starts at $0 for you to edit.`,
     );
     if (!confirmed) {
       return;
@@ -219,9 +237,16 @@ export function SeasonCopyPanel({
         endDate: endDate.trim() || undefined,
         publisherId: publisherId || undefined,
         programTitle: programTitle.trim() || undefined,
+        makeCurrent: makeCurrentAfterCopy,
       });
+      await refreshEvents();
+      if (result.eventId) {
+        setViewingEventId(result.eventId);
+      }
       setMessage(
-        `A new VBS ${result.toYear} project is ready — copied ${result.copied.tasks} tasks, ${result.copied.scheduleSlots} schedule blocks, ${result.copied.registrationClasses} classes, and more from ${source.name || `VBS ${result.fromYear}`}. Dates follow the new week. The source project is unchanged.`,
+        `Opened “${result.name}” — ${result.copied.tasks} tasks, ${result.copied.scheduleSlots} schedule blocks, ${result.copied.checklistItems} milestones, ${result.copied.registrationClasses} class templates. Adjust the week on plan overview; add tasks and milestones anytime.${
+          makeCurrentAfterCopy ? " This is now the current VBS for family sign-ups." : " Use “Make this the current VBS” in the project bar when you are ready for sign-ups."
+        }`,
       );
       onCopied?.();
       await reload();
@@ -239,17 +264,17 @@ export function SeasonCopyPanel({
     return <p className="muted">Loading season copy options…</p>;
   }
 
-  const canCopy = Boolean(sourceEvent) && curriculumYear !== "";
+  const canCopy = Boolean(sourceEvent) && curriculumYear !== "" && Boolean(startDate.trim());
 
   return (
     <section className="vbs-panel vbs-season-copy">
       <h2 className="vbs-task-team-section-title">Start another VBS</h2>
       <p className="muted vbs-task-field-hint">
         Active season: <strong>VBS {options.activeVbsYear}</strong>
-        {options.planYear !== null ? ` · Plan year: VBS ${options.planYear}` : ""}. Copy everything from a saved
-        project into a new week. Task, schedule, and workbook dates keep the same weekday offset from start — the
-        Friday before a Monday start stays the Friday before the new start. Parent and student records are not copied.
-        Leave the name blank to save it as the week dates.
+        {options.planYear !== null ? ` · Plan year: VBS ${options.planYear}` : ""}. Pick a strong past project, set a
+        new week and curriculum, and we copy schedules, tasks, milestones, supplies, and class templates. Prep and
+        workbook dates move with the same weekday offset from your new start (Friday-before-Monday stays
+        Friday-before-Monday). Students, volunteers, receipts, and checks stay behind; budget resets to $0.
       </p>
       {events.length === 0 && options.sourceYears.length === 0 ? (
         <p className="vbs-plan-callout vbs-plan-callout-readonly">
@@ -363,10 +388,22 @@ export function SeasonCopyPanel({
             ))}
           </select>
         </label>
+        <label className="vbs-task-field vbs-season-copy-make-current">
+          <input
+            type="checkbox"
+            checked={makeCurrentAfterCopy}
+            onChange={(e) => setMakeCurrentAfterCopy(e.target.checked)}
+            disabled={busy}
+          />
+          <span>
+            Make this the church&apos;s <strong>current VBS</strong> after copy (family sign-ups and public links follow
+            the current project)
+          </span>
+        </label>
         <div className="vbs-task-add-actions">
           <AddActionButton
             type="submit"
-            label={busy ? "Copying…" : "Copy into a new event"}
+            label={busy ? "Copying…" : "Copy into a new project"}
             disabled={busy || !canCopy}
           />
         </div>
