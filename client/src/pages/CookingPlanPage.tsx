@@ -12,7 +12,7 @@ import { CookingPlanMenuBoard } from "./CookingPlanMenuBoard";
 export default function CookingPlanPage() {
   const { orgId = "" } = useParams();
   const { current: org } = useOrgs();
-  const { filterDefault, working, prefsReady } = useOrgVbs();
+  const { filterDefault, working, prefsReady, viewingYear, viewingEventId, eventsReady, orgEventEpoch } = useOrgVbs();
   const [data, setData] = useState<CookingPlanWorkspace | null>(null);
   const [plan, setPlan] = useState<CookingPlanDocument | null>(null);
   const [error, setError] = useState("");
@@ -26,17 +26,20 @@ export default function CookingPlanPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
 
   const reload = useCallback(async () => {
-    const workspace = await api.cookingPlan(orgId);
+    const workspace = await api.cookingPlan(orgId, viewingYear ?? undefined);
     setData(workspace);
     setPlan(workspace.plan);
     setExtraInstructions(workspace.extraInstructions);
     setCookingTeamId(workspace.cookingTeamId);
     setError("");
-  }, [orgId]);
+  }, [orgId, viewingEventId, viewingYear]);
 
   useEffect(() => {
+    if (!eventsReady) {
+      return;
+    }
     void reload().catch((err: Error) => setError(err.message));
-  }, [reload]);
+  }, [eventsReady, orgEventEpoch, reload]);
 
   useEffect(() => {
     if (!data?.publishers.length) {

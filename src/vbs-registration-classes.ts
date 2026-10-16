@@ -94,14 +94,17 @@ async function assertStudentSeasonEdit(
   return { ok: true as const };
 }
 
-async function enrollmentCounts(organizationId: string, seasonYear: number) {
+async function enrollmentCounts(organizationId: string, seasonYear: number, eventId?: string | null) {
   const result = await db().query<{ class_id: string; count: number }>(
     `SELECT cs.class_id, COUNT(*)::int AS count
      FROM vbs_registration_class_students cs
      JOIN vbs_registrations r ON r.id = cs.student_id
-     WHERE r.organization_id = $1 AND r.vbs_season_year = $2
+     WHERE r.organization_id = $1 AND (
+       ($3::text IS NOT NULL AND r.vbs_event_id = $3)
+       OR ($3::text IS NULL AND r.vbs_season_year = $2)
+     )
      GROUP BY cs.class_id`,
-    [organizationId, seasonYear],
+    [organizationId, seasonYear, eventId ?? null],
   );
   return new Map(result.rows.map((row) => [row.class_id, row.count]));
 }
@@ -259,12 +262,17 @@ function resolveRotationIndexForLegacyRow(row: ClassRow, rowIndex: number, rowCo
 
 /** Map every existing class to a VBS rotation station and canonical title. */
 async function normalizeRegistrationClassesToStations(organizationId: string, seasonYear: number) {
+  const { resolveRequestedVbsEvent } = await import("./vbs-event-context.js");
+  const viewingEvent = await resolveRequestedVbsEvent(organizationId);
   const result = await db().query<ClassRow>(
     `SELECT ${CLASS_ROW_COLUMNS}
      FROM vbs_registration_classes
-     WHERE organization_id = $1 AND COALESCE(vbs_season_year, $2) = $2
+     WHERE organization_id = $1 AND (
+       ($3::text IS NOT NULL AND vbs_event_id = $3)
+       OR ($3::text IS NULL AND COALESCE(vbs_season_year, $2) = $2)
+     )
      ORDER BY sort_order, name`,
-    [organizationId, seasonYear],
+    [organizationId, seasonYear, viewingEvent?.id ?? null],
   );
   const rows = result.rows;
   for (let i = 0; i < rows.length; i += 1) {
@@ -323,17 +331,23 @@ function parseClassStationInput(input: Record<string, unknown>) {
 
 export async function listRegistrationClasses(organizationId: string, seasonYearOverride?: number) {
   const { getActiveVbsYear } = await import("./vbs-org-season.js");
-  const seasonYear = seasonYearOverride ?? (await getActiveVbsYear(organizationId));
+  const { resolveRequestedVbsEvent } = await import("./vbs-event-context.js");
+  const viewingEvent = await resolveRequestedVbsEvent(organizationId);
+  const seasonYear = seasonYearOverride ?? viewingEvent?.year ?? (await getActiveVbsYear(organizationId));
+  const eventId = viewingEvent?.id;
   await normalizeRegistrationClassesToStations(organizationId, seasonYear);
   const result = await db().query<ClassRow>(
     `SELECT ${CLASS_ROW_COLUMNS}
      FROM vbs_registration_classes
-     WHERE organization_id = $1 AND COALESCE(vbs_season_year, $2) = $2
+     WHERE organization_id = $1 AND (
+       ($3::text IS NOT NULL AND vbs_event_id = $3)
+       OR ($3::text IS NULL AND COALESCE(vbs_season_year, $2) = $2)
+     )
      ORDER BY COALESCE(board_order, 0), COALESCE(rotation_index, 99), min_age, section_label, sort_order, name`,
-    [organizationId, seasonYear],
+    [organizationId, seasonYear, eventId ?? null],
   );
   const classIds = result.rows.map((row) => row.id);
-  const counts = await enrollmentCounts(organizationId, seasonYear);
+  const counts = await enrollmentCounts(organizationId, seasonYear, eventId);
   const staffMap = await staffForClasses(classIds);
   const studentMap = await studentsForClasses(classIds);
   return result.rows.map((row) =>
@@ -356,11 +370,17 @@ export async function syncRegistrationClassesWithRotations(organizationId: strin
 /** Seed rotation-aligned classes when an org has none; otherwise sync missing rotations. */
 export async function ensureDefaultRegistrationClasses(organizationId: string) {
   const { getActiveVbsYear } = await import("./vbs-org-season.js");
-  const seasonYear = await getActiveVbsYear(organizationId);
+  const { resolveRequestedVbsEvent } = await import("./vbs-event-context.js");
+  const viewingEvent = await resolveRequestedVbsEvent(organizationId);
+  const seasonYear = viewingEvent?.year ?? (await getActiveVbsYear(organizationId));
+  const eventId = viewingEvent?.id ?? null;
   const existing = await db().query<{ count: number }>(
     `SELECT COUNT(*)::int AS count FROM vbs_registration_classes
-     WHERE organization_id = $1 AND COALESCE(vbs_season_year, $2) = $2`,
-    [organizationId, seasonYear],
+     WHERE organization_id = $1 AND (
+       ($3::text IS NOT NULL AND vbs_event_id = $3)
+       OR ($3::text IS NULL AND COALESCE(vbs_season_year, $2) = $2)
+     )`,
+    [organizationId, seasonYear, eventId],
   );
   if ((existing.rows[0]?.count ?? 0) === 0) {
     const { minAge, maxAge, capacityMax } = DEFAULT_REGISTRATION_CLASS_DEFAULTS;
@@ -368,9 +388,9 @@ export async function ensureDefaultRegistrationClasses(organizationId: string) {
       const name = VBS_ROTATION_STATION_NAMES[i]!;
       await db().query(
         `INSERT INTO vbs_registration_classes (
-          id, organization_id, name, rotation_index, section_label, min_age, max_age, capacity_max, registration_closed, sort_order, vbs_season_year, created_at, updated_at
-        ) VALUES ($1,$2,$3,$4,'',$5,$6,$7,FALSE,$8,$9,NOW(),NOW())`,
-        [crypto.randomUUID(), organizationId, name, i, minAge, maxAge, capacityMax, i, seasonYear],
+          id, organization_id, name, rotation_index, section_label, min_age, max_age, capacity_max, registration_closed, sort_order, vbs_season_year, vbs_event_id, created_at, updated_at
+        ) VALUES ($1,$2,$3,$4,'',$5,$6,$7,FALSE,$8,$9,$10,NOW(),NOW())`,
+        [crypto.randomUUID(), organizationId, name, i, minAge, maxAge, capacityMax, i, seasonYear, eventId],
       );
     }
     return;
@@ -522,12 +542,14 @@ export async function saveRegistrationClass(
     );
   } else {
     const { getActiveVbsYear } = await import("./vbs-org-season.js");
-    const seasonYear = await getActiveVbsYear(organizationId);
+    const { resolveRequestedVbsEvent } = await import("./vbs-event-context.js");
+    const viewingEvent = await resolveRequestedVbsEvent(organizationId);
+    const seasonYear = viewingEvent?.year ?? (await getActiveVbsYear(organizationId));
     const newId = crypto.randomUUID();
     await db().query(
       `INSERT INTO vbs_registration_classes (
-        id, organization_id, name, rotation_index, section_label, min_age, max_age, capacity_max, registration_closed, sort_order, vbs_season_year, created_at, updated_at
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW(),NOW())`,
+        id, organization_id, name, rotation_index, section_label, min_age, max_age, capacity_max, registration_closed, sort_order, vbs_season_year, vbs_event_id, created_at, updated_at
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,NOW(),NOW())`,
       [
         newId,
         organizationId,
@@ -540,6 +562,7 @@ export async function saveRegistrationClass(
         registrationClosed,
         sortOrder,
         seasonYear,
+        viewingEvent?.id ?? null,
       ],
     );
   }

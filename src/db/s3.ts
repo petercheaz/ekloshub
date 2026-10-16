@@ -56,7 +56,7 @@ export async function getObject(key: string) {
   return s3Client.send(new GetObjectCommand({ Bucket: s3.bucket, Key: key }));
 }
 
-export async function waitForS3(tries = 40) {
+export async function waitForS3(tries = 90) {
   let lastError: unknown;
   for (let attempt = 0; attempt < tries; attempt += 1) {
     try {

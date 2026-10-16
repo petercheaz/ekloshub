@@ -40,8 +40,11 @@ const statements = [
   )`,
   `ALTER TABLE org_invites ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'org_read'`,
   `ALTER TABLE org_invites DROP CONSTRAINT IF EXISTS org_invites_role_check`,
-  `ALTER TABLE org_invites ADD CONSTRAINT org_invites_role_check
-     CHECK (role IN ('org_admin', 'registration_admin', 'org_team_admin', 'org_write', 'org_read'))`,
+  `DO $$ BEGIN
+     ALTER TABLE org_invites ADD CONSTRAINT org_invites_role_check
+       CHECK (role IN ('org_admin', 'registration_admin', 'org_team_admin', 'org_write', 'org_read'));
+   EXCEPTION WHEN duplicate_object THEN NULL;
+   END $$`,
   `CREATE TABLE IF NOT EXISTS org_teams (
     id TEXT PRIMARY KEY,
     organization_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
@@ -409,16 +412,16 @@ const statements = [
     sort_order INT NOT NULL DEFAULT 0,
     PRIMARY KEY (class_id, student_id)
   )`,
-  `INSERT INTO vbs_registration_class_students (class_id, student_id, sort_order)
-     SELECT class_id, id, class_roster_sort FROM vbs_registrations
-     WHERE class_id IS NOT NULL
-     ON CONFLICT DO NOTHING`,
+  `ALTER TABLE vbs_registrations ADD COLUMN IF NOT EXISTS class_id TEXT REFERENCES vbs_registration_classes(id) ON DELETE SET NULL`,
   `ALTER TABLE vbs_registrations ADD COLUMN IF NOT EXISTS class_roster_sort INT NOT NULL DEFAULT 0`,
+  `INSERT INTO vbs_registration_class_students (class_id, student_id, sort_order)
+     SELECT r.class_id, r.id, r.class_roster_sort FROM vbs_registrations r
+     WHERE r.class_id IS NOT NULL
+     ON CONFLICT DO NOTHING`,
   `ALTER TABLE vbs_registration_classes ADD COLUMN IF NOT EXISTS board_order INT NOT NULL DEFAULT 0`,
   `ALTER TABLE vbs_registration_classes ADD COLUMN IF NOT EXISTS capacity_warn_notified_count INT NOT NULL DEFAULT 0`,
   `ALTER TABLE vbs_registration_classes ADD COLUMN IF NOT EXISTS rotation_index INT`,
   `ALTER TABLE vbs_registration_classes ADD COLUMN IF NOT EXISTS section_label TEXT NOT NULL DEFAULT ''`,
-  `ALTER TABLE vbs_registrations ADD COLUMN IF NOT EXISTS class_id TEXT REFERENCES vbs_registration_classes(id) ON DELETE SET NULL`,
   `ALTER TABLE vbs_registrations ADD COLUMN IF NOT EXISTS payment_status TEXT NOT NULL DEFAULT 'pending'`,
   `ALTER TABLE vbs_registrations DROP CONSTRAINT IF EXISTS vbs_registrations_payment_status_check`,
   `ALTER TABLE vbs_registrations ADD CONSTRAINT vbs_registrations_payment_status_check
@@ -489,6 +492,32 @@ const statements = [
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     PRIMARY KEY (organization_id, season_year)
   )`,
+  `CREATE TABLE IF NOT EXISTS vbs_events (
+    id TEXT PRIMARY KEY,
+    organization_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    year INT NOT NULL,
+    name TEXT NOT NULL DEFAULT '',
+    publisher_id TEXT NOT NULL DEFAULT '',
+    program_title TEXT NOT NULL DEFAULT '',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS vbs_events_org_year ON vbs_events (organization_id, year DESC, name)`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS vbs_events_org_year_name ON vbs_events (organization_id, year, name)`,
+  `CREATE TABLE IF NOT EXISTS vbs_event_members (
+    event_id TEXT NOT NULL REFERENCES vbs_events(id) ON DELETE CASCADE,
+    username TEXT NOT NULL REFERENCES users(username) ON DELETE CASCADE,
+    organization_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    PRIMARY KEY (event_id, username)
+  )`,
+  `CREATE INDEX IF NOT EXISTS vbs_event_members_org_user ON vbs_event_members (organization_id, username)`,
+  `ALTER TABLE vbs_plans ADD COLUMN IF NOT EXISTS event_id TEXT REFERENCES vbs_events(id) ON DELETE CASCADE`,
+  `ALTER TABLE vbs_plans DROP CONSTRAINT IF EXISTS vbs_plans_organization_id_key`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS vbs_plans_event_id_unique ON vbs_plans (event_id) WHERE event_id IS NOT NULL`,
+  `ALTER TABLE vbs_registrations ADD COLUMN IF NOT EXISTS vbs_event_id TEXT REFERENCES vbs_events(id) ON DELETE SET NULL`,
+  `ALTER TABLE vbs_registration_classes ADD COLUMN IF NOT EXISTS vbs_event_id TEXT REFERENCES vbs_events(id) ON DELETE SET NULL`,
+  `ALTER TABLE organization_members ADD COLUMN IF NOT EXISTS default_vbs_event_id TEXT REFERENCES vbs_events(id) ON DELETE SET NULL`,
+  `ALTER TABLE organizations ADD COLUMN IF NOT EXISTS active_vbs_event_id TEXT REFERENCES vbs_events(id) ON DELETE SET NULL`,
 ];
 
 const TEAM_NAME_UNIQUE_INDEX = `CREATE UNIQUE INDEX IF NOT EXISTS org_teams_org_name_unique
@@ -506,6 +535,8 @@ export async function applySchema() {
   await db().query(TEAM_NAME_UNIQUE_INDEX);
   const { migrateAllUsersToBrowseAllVbsDefault } = await import("../user-vbs.js");
   await migrateAllUsersToBrowseAllVbsDefault();
+  const { migrateVbsEvents } = await import("./migrate-vbs-events.js");
+  await migrateVbsEvents();
   const { runDataCleanup } = await import("./cleanup.js");
   await runDataCleanup();
 }

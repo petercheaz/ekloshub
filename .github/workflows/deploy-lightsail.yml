@@ -1,0 +1,43 @@
+name: Deploy Lightsail
+
+on:
+  push:
+    branches: [main, initialrevision]
+  workflow_dispatch:
+
+concurrency:
+  group: lightsail-demo
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy over SSH
+        env:
+          HOST: ${{ secrets.LIGHTSAIL_HOST }}
+          SSH_KEY: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/lightsail.pem
+          chmod 600 ~/.ssh/lightsail.pem
+          rsync -az --delete \
+            --exclude .git \
+            --exclude node_modules \
+            --exclude dist \
+            --exclude client/dist \
+            --exclude e2e-report \
+            --exclude test-results \
+            --exclude playwright-report \
+            --exclude backups \
+            --exclude deploy/lightsail/.env \
+            --exclude deploy/lightsail/.credentials.local \
+            -e "ssh -i ~/.ssh/lightsail.pem -o StrictHostKeyChecking=accept-new -o IdentitiesOnly=yes" \
+            ./ "ubuntu@${HOST}:/opt/vbs/"
+          ssh -i ~/.ssh/lightsail.pem -o StrictHostKeyChecking=accept-new -o IdentitiesOnly=yes \
+            "ubuntu@${HOST}" "bash /opt/vbs/scripts/aws/lightsail-remote-update.sh"

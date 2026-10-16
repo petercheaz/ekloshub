@@ -118,6 +118,36 @@ documentedTest(
     await captureStep(page, testInfo, "manage-org");
     await expect(page.locator("body")).toContainText(/member|organization/i);
 
+    const eventsRes = await sessionCall(page, "GET", `/api/orgs/${orgId}/vbs-events`);
+    expect(eventsRes.ok).toBeTruthy();
+    const eventsPayload = eventsRes.json as { events: { id: string }[]; currentEventId: string | null };
+    const fromId = eventsPayload.currentEventId ?? eventsPayload.events[0]?.id;
+    expect(fromId).toBeTruthy();
+    const dupName = testName("vbs_dup");
+    const createRes = await sessionCall(page, "POST", `/api/orgs/${orgId}/vbs-events`, {
+      fromEventId: fromId,
+      name: dupName,
+    });
+    expect(createRes.ok).toBeTruthy();
+    const createdId = (createRes.json as { createdEventId?: string })?.createdEventId;
+    expect(createdId).toBeTruthy();
+    const delRes = await sessionCall(
+      page,
+      "DELETE",
+      `/api/orgs/${orgId}/vbs-events/${encodeURIComponent(createdId!)}`,
+    );
+    expect(delRes.ok).toBeTruthy();
+    const afterEvents = await sessionCall(page, "GET", `/api/orgs/${orgId}/vbs-events`);
+    expect(afterEvents.ok).toBeTruthy();
+    const remaining = (afterEvents.json as { events: { id: string }[] }).events;
+    expect(remaining.some((event) => event.id === createdId)).toBeFalsy();
+
+    await page.goto(`/org/${orgId}`);
+    await expect(page.getByRole("heading", { name: /director home/i })).toBeVisible();
+    if (remaining.length > 1) {
+      await expect(page.getByRole("heading", { name: /delete vbs project/i })).toBeVisible();
+    }
+
     await purgeTestArtifacts(page, orgId);
   },
 );

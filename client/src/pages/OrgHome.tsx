@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { orgPath } from "../orgs";
 import { api } from "../api";
 import { useAuth } from "../auth";
+import { useOrgVbs } from "../org-vbs";
 import { OrgUserListInput } from "../OrgUserListInput";
 import { OrgWorkspacePage } from "../OrgWorkspacePage";
 import { useOrgs } from "../orgs";
@@ -45,6 +46,8 @@ export default function OrgHomePage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
   const { canAdmin, canManageMembers, refreshOrgs } = useOrgs();
+  const { viewingYear, viewingEventId, eventsReady, orgEventEpoch } = useOrgVbs();
+  const [showAllYears, setShowAllYears] = useState(false);
   const [detail, setDetail] = useState<OrgDetail | null>(null);
   const [error, setError] = useState("");
   const [username, setUsername] = useState("");
@@ -73,7 +76,7 @@ export default function OrgHomePage() {
     return () => {
       cancelled = true;
     };
-  }, [orgId]);
+  }, [orgId, orgEventEpoch, eventsReady]);
 
   const focusMember = useCallback(
     (username: string | null, options?: { syncUrl?: boolean }) => {
@@ -188,6 +191,14 @@ export default function OrgHomePage() {
 
   const org = detail.organization;
   const defaultPasswordLabel = detail.vbsDefaultPassword ?? defaultVbsPassword();
+  const eventYear = viewingYear ?? detail.activeVbsYear;
+  const visibleMembers = showAllYears
+    ? detail.members
+    : detail.members.filter((member) =>
+        viewingEventId && member.vbsEventIds && member.vbsEventIds.length > 0
+          ? member.vbsEventIds.includes(viewingEventId)
+          : member.vbsSeasonYear === eventYear,
+      );
   return (
     <OrgWorkspacePage
       eyebrow="Manage organization"
@@ -211,11 +222,24 @@ export default function OrgHomePage() {
           Assign them to <Link to={orgPath(orgId, "/teams")}>teams</Link>, then place them in roles on the{" "}
           <Link to={orgPath(orgId, "/vbs-plan?tab=workbook&workbook=placements")}>plan workbook · Placements</Link>{" "}
           tab.
-          Active season: <strong>VBS {detail.activeVbsYear}</strong>. Default password for unset accounts:{" "}
-          <strong>{defaultPasswordLabel}</strong>.
+          Current VBS: <strong>VBS {detail.activeVbsYear}</strong>
+          {eventYear !== detail.activeVbsYear ? (
+            <>
+              . Showing staff for <strong>VBS {eventYear}</strong>
+            </>
+          ) : null}
+          . Default password for unset accounts: <strong>{defaultPasswordLabel}</strong>.
         </p>
+        <label className="checkbox-line vbs-members-year-toggle">
+          <input
+            type="checkbox"
+            checked={showAllYears}
+            onChange={(event) => setShowAllYears(event.target.checked)}
+          />
+          <span>Show members from every VBS event</span>
+        </label>
         <ul className="vbs-task-list org-member-list">
-          {detail.members.map((member) => (
+          {visibleMembers.map((member) => (
             <OrgMemberRow
               key={member.username}
               member={member}

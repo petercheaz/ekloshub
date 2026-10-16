@@ -18,19 +18,15 @@ export type E2EPersona = {
   role: string;
 };
 
-function pass(envKey: string, fallbackUser?: string) {
-  const v = process.env[envKey]?.trim();
-  if (v) {
-    return v;
+function pass(envKey: string) {
+  const value =
+    process.env[envKey]?.trim() ||
+    process.env.E2E_DEFAULT_PASSWORD?.trim() ||
+    process.env.AUTH_PASSWORD?.trim();
+  if (!value) {
+    throw new Error(`Set ${envKey}, E2E_DEFAULT_PASSWORD, or AUTH_PASSWORD in .env`);
   }
-  const shared = process.env.E2E_DEFAULT_PASSWORD?.trim();
-  if (shared) {
-    return shared;
-  }
-  if (fallbackUser === "admin") {
-    return process.env.AUTH_PASSWORD?.trim() ?? "vbs-dev";
-  }
-  return process.env.AUTH_PASSWORD?.trim() ?? "vbs-dev";
+  return value;
 }
 
 function user(envKey: string, defaultUsername: string) {
@@ -45,7 +41,7 @@ export const e2e = {
     platformAdmin: {
       key: "platformAdmin" as const,
       username: user("E2E_PLATFORM_ADMIN_USERNAME", "admin"),
-      password: pass("E2E_PLATFORM_ADMIN_PASSWORD", "admin"),
+      password: pass("E2E_PLATFORM_ADMIN_PASSWORD"),
       role: "platform_admin",
     },
     orgAdmin: {

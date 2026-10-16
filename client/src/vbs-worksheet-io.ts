@@ -68,7 +68,7 @@ function applyStyle(cell: ExcelJS.Cell, style: { bold?: boolean; italic?: boolea
 }
 
 function setWorkbookDefaults(workbook: ExcelJS.Workbook) {
-  workbook.creator = "VBS Resources";
+  workbook.creator = "EklosHub";
   workbook.created = new Date();
 }
 

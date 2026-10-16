@@ -246,7 +246,7 @@ export default function SharePage() {
   return (
     <OrgWorkspacePage
       eyebrow="Give leftover kits a second church"
-      title="Share VBS Resources"
+      title="Share Resources"
       tagline="List items you are willing to gift. Expand a listing for details. Filter by year, publisher, or VBS name."
       actions={
         canWrite ? (

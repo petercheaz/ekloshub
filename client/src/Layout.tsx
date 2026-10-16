@@ -64,9 +64,9 @@ function Shell() {
     <div className={collapsed ? "shell rail-collapsed" : "shell"}>
       <aside className={collapsed ? "sidenav collapsed" : "sidenav"}>
         <div className="sidenav-top">
-          <NavLink to="/" className="brand-lockup" end title="VBS Resources">
+          <NavLink to="/" className="brand-lockup" end title="EklosHub">
             <BrandLogo />
-            {collapsed ? null : <span className="brand-wordmark">VBS Resources</span>}
+            {collapsed ? null : <span className="brand-wordmark">EklosHub</span>}
           </NavLink>
           <button
             type="button"
@@ -105,7 +105,7 @@ function Shell() {
                 <RailLink
                   to="/share"
                   icon={ICONS.share}
-                  label="Share VBS Resources"
+                  label="Share Resources"
                   collapsed={collapsed}
                 />
                 <RailLink

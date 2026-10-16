@@ -9,6 +9,15 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 WORKDIR="${TMPDIR:-/tmp}/vbs-s3mock-export"
 MC_ALIAS="${MC_ALIAS:-localmock}"
 
+if [[ -f "$ROOT/.env" ]]; then
+  set -a
+  # shellcheck disable=SC1091
+  source "$ROOT/.env"
+  set +a
+fi
+: "${S3_ACCESS_KEY:?Set S3_ACCESS_KEY in .env}"
+: "${S3_SECRET_KEY:?Set S3_SECRET_KEY in .env}"
+
 if ! command -v mc >/dev/null 2>&1; then
   echo "Install MinIO Client (mc): https://min.io/docs/minio/linux/reference/minio-mc.html" >&2
   exit 1
@@ -22,7 +31,7 @@ fi
 rm -rf "$WORKDIR"
 mkdir -p "$WORKDIR"
 
-mc alias set "$MC_ALIAS" http://127.0.0.1:9000 vbs vbssecret 2>/dev/null || true
+mc alias set "$MC_ALIAS" http://127.0.0.1:9000 "$S3_ACCESS_KEY" "$S3_SECRET_KEY" 2>/dev/null || true
 mc cp --recursive "${MC_ALIAS}/vbs/" "$WORKDIR/"
 
 export AWS_DEFAULT_REGION="$AWS_REGION"

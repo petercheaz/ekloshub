@@ -4,9 +4,13 @@ import { db } from "./db/pool.js";
 import { canManageOrg } from "./org-permissions.js";
 import { getMembership } from "./orgs.js";
 import { isPlatformAdmin } from "./users.js";
-import { getActiveVbsYear, syncActiveVbsYear } from "./vbs-org-season.js";
+import { getActiveVbsYear } from "./vbs-org-season.js";
 import { addDaysToIsoDate, getPlanRow, listScheduleActivityLabels } from "./vbs-plan.js";
-import { shiftPlanWorksheetForSeasonCopy } from "./vbs-worksheet-season-shift.js";
+import {
+  sameWeekdayInYear,
+  shiftIsoRelativeToStart,
+  shiftPlanWorksheetForSeasonCopy,
+} from "./vbs-worksheet-season-shift.js";
 
 export type SeasonSnapshotPayload = {
   version: 1;
@@ -98,17 +102,6 @@ function dayOffset(planStart: string, dayIso: string): number | null {
   return Math.round((day - start) / 86_400_000);
 }
 
-function shiftIsoYear(iso: string, yearDelta: number) {
-  if (!iso) {
-    return "";
-  }
-  const [year, month, day] = iso.split("-").map(Number);
-  if (!year || !month || !day) {
-    return iso;
-  }
-  return `${year + yearDelta}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-}
-
 function mapCurriculumToYear(publisherId: string, programTitle: string, toYear: number) {
   const trimmed = programTitle.trim();
   const exact = programs.find(
@@ -138,9 +131,12 @@ async function requireOrgAdmin(organizationId: string, username: string) {
 export async function captureLiveSeasonSnapshot(
   organizationId: string,
   seasonYear: number,
+  eventId?: string,
 ): Promise<SeasonSnapshotPayload | null> {
-  const plan = await getPlanRow(organizationId);
-  if (!plan || plan.year !== seasonYear) {
+  const plan = eventId
+    ? await getPlanRow(organizationId, eventId)
+    : await getPlanRow(organizationId);
+  if (!plan || (plan.year !== seasonYear && !eventId)) {
     return null;
   }
   const planStart = isoFromDate(plan.start_date);
@@ -276,9 +272,12 @@ export async function captureLiveSeasonSnapshot(
   }>(
     `SELECT name, rotation_index, section_label, min_age, max_age, capacity_max, registration_closed, sort_order
      FROM vbs_registration_classes
-     WHERE organization_id = $1 AND COALESCE(vbs_season_year, $2) = $2
+     WHERE organization_id = $1 AND (
+       ($3::text IS NOT NULL AND vbs_event_id = $3)
+       OR ($3::text IS NULL AND COALESCE(vbs_season_year, $2) = $2)
+     )
      ORDER BY sort_order, name`,
-    [organizationId, seasonYear],
+    [organizationId, seasonYear, eventId ?? plan.event_id ?? null],
   );
   const registrationClasses = classesResult.rows.map((row) => ({
     name: row.name,
@@ -456,8 +455,8 @@ async function replaceRegistrationClassesForSeason(
     await db().query(
       `INSERT INTO vbs_registration_classes (
         id, organization_id, name, rotation_index, section_label, min_age, max_age, capacity_max,
-        registration_closed, sort_order, vbs_season_year, created_at, updated_at
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW(),NOW())`,
+        registration_closed, sort_order, vbs_season_year, vbs_event_id, created_at, updated_at
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,NOW(),NOW())`,
       [
         crypto.randomUUID(),
         organizationId,
@@ -470,70 +469,75 @@ async function replaceRegistrationClassesForSeason(
         false,
         cls.sortOrder,
         seasonYear,
+        null,
       ],
     );
   }
 }
 
-export async function copyVbsSeasonFromYear(
-  organizationId: string,
-  username: string,
-  input: { fromYear: number; toYear: number; startDate?: string; endDate?: string },
-) {
-  const access = await requireOrgAdmin(organizationId, username);
-  if ("error" in access) {
-    return access;
-  }
-  const fromYear = input.fromYear;
-  const toYear = input.toYear;
-  if (!Number.isInteger(fromYear) || !Number.isInteger(toYear) || fromYear < 2000 || toYear < 2000) {
-    return { error: "Valid from and to VBS years are required" as const };
-  }
-  if (fromYear === toYear) {
-    return { error: "Choose a different target year than the source year" as const };
-  }
-
-  const source = await loadSnapshotForYear(organizationId, fromYear);
-  if (!source) {
-    return {
-      error: `No saved setup found for VBS ${fromYear}. Open the plan for that year first, or pick another source year.` as const,
-    };
-  }
-
-  const plan = await getPlanRow(organizationId);
-  if (plan) {
-    await persistLiveSeasonSnapshot(organizationId, plan.year);
-  }
-
-  const yearDelta = toYear - fromYear;
-  const startDate =
-    input.startDate?.trim() ||
-    shiftIsoYear(source.plan.startDate, yearDelta) ||
-    `${toYear}-06-01`;
-  const endDate =
-    input.endDate?.trim() ||
-    shiftIsoYear(source.plan.endDate, yearDelta) ||
-    addDaysToIsoDate(startDate, 4);
-
-  const curriculum = mapCurriculumToYear(source.plan.publisherId, source.plan.programTitle, toYear);
-  const titleBase = source.plan.title.trim() || `VBS ${fromYear}`;
-  const title = titleBase.replace(String(fromYear), String(toYear));
-  const shiftedWorksheet = shiftPlanWorksheetForSeasonCopy(
-    source.plan.worksheetData,
-    yearDelta,
-    startDate,
-    endDate,
+export async function loadStoredSeasonSnapshot(organizationId: string, seasonYear: number) {
+  const stored = await db().query<{ snapshot: SeasonSnapshotPayload }>(
+    `SELECT snapshot FROM org_vbs_season_snapshots WHERE organization_id = $1 AND season_year = $2`,
+    [organizationId, seasonYear],
   );
+  return stored.rows[0]?.snapshot ?? null;
+}
 
+async function insertRegistrationClassesForEvent(
+  organizationId: string,
+  eventId: string,
+  seasonYear: number,
+  classes: SeasonSnapshotPayload["registrationClasses"],
+) {
+  for (const cls of classes) {
+    await db().query(
+      `INSERT INTO vbs_registration_classes (
+        id, organization_id, name, rotation_index, section_label, min_age, max_age, capacity_max,
+        registration_closed, sort_order, vbs_season_year, vbs_event_id, created_at, updated_at
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,NOW(),NOW())`,
+      [
+        crypto.randomUUID(),
+        organizationId,
+        cls.name,
+        cls.rotationIndex,
+        cls.sectionLabel,
+        cls.minAge,
+        cls.maxAge,
+        cls.capacityMax,
+        false,
+        cls.sortOrder,
+        seasonYear,
+        eventId,
+      ],
+    );
+  }
+}
+
+async function writeLivePlanFromSnapshot(
+  organizationId: string,
+  existingPlanId: string | undefined,
+  snapshot: SeasonSnapshotPayload,
+  fields: {
+    year: number;
+    title: string;
+    publisherId: string;
+    programTitle: string;
+    startDate: string;
+    endDate: string;
+    worksheetData: unknown;
+    eventId?: string;
+  },
+) {
   const client = await db().connect();
   try {
     await client.query("BEGIN");
-    let planId = plan?.id;
+    let planId = existingPlanId;
     const now = new Date().toISOString();
     if (planId) {
       await clearPlanChildren(planId);
       await client.query(
         `UPDATE vbs_plans SET
+           event_id = COALESCE($17, event_id),
            year = $2, title = $3, publisher_id = $4, program_title = $5, location = $6,
            start_date = $7, end_date = $8, daily_start = $9, daily_end = $10, expected_kids = $11,
            coordinator_notes = $12, family_public_notes = $13, budget_amount = $14,
@@ -541,56 +545,58 @@ export async function copyVbsSeasonFromYear(
          WHERE id = $1`,
         [
           planId,
-          toYear,
-          title,
-          curriculum.publisherId,
-          curriculum.programTitle,
-          source.plan.location,
-          startDate,
-          endDate,
-          source.plan.dailyStart,
-          source.plan.dailyEnd,
-          source.plan.expectedKids,
-          source.plan.coordinatorNotes,
-          source.plan.familyPublicNotes,
-          source.plan.budgetAmount,
-          JSON.stringify(shiftedWorksheet),
+          fields.year,
+          fields.title,
+          fields.publisherId,
+          fields.programTitle,
+          snapshot.plan.location,
+          fields.startDate,
+          fields.endDate,
+          snapshot.plan.dailyStart,
+          snapshot.plan.dailyEnd,
+          snapshot.plan.expectedKids,
+          snapshot.plan.coordinatorNotes,
+          snapshot.plan.familyPublicNotes,
+          snapshot.plan.budgetAmount,
+          JSON.stringify(fields.worksheetData ?? {}),
           now,
+          fields.eventId ?? null,
         ],
       );
     } else {
       planId = crypto.randomUUID();
       await client.query(
         `INSERT INTO vbs_plans (
-           id, organization_id, year, title, publisher_id, program_title, location,
+           id, organization_id, event_id, year, title, publisher_id, program_title, location,
            start_date, end_date, daily_start, daily_end, expected_kids, coordinator_notes,
            family_public_notes, budget_amount, expenses_amount, worksheet_data, updated_at
-         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,0,$16::jsonb,$17)`,
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,0,$17::jsonb,$18)`,
         [
           planId,
           organizationId,
-          toYear,
-          title,
-          curriculum.publisherId,
-          curriculum.programTitle,
-          source.plan.location,
-          startDate,
-          endDate,
-          source.plan.dailyStart,
-          source.plan.dailyEnd,
-          source.plan.expectedKids,
-          source.plan.coordinatorNotes,
-          source.plan.familyPublicNotes,
-          source.plan.budgetAmount,
-          JSON.stringify(shiftedWorksheet),
+          fields.eventId ?? null,
+          fields.year,
+          fields.title,
+          fields.publisherId,
+          fields.programTitle,
+          snapshot.plan.location,
+          fields.startDate,
+          fields.endDate,
+          snapshot.plan.dailyStart,
+          snapshot.plan.dailyEnd,
+          snapshot.plan.expectedKids,
+          snapshot.plan.coordinatorNotes,
+          snapshot.plan.familyPublicNotes,
+          snapshot.plan.budgetAmount,
+          JSON.stringify(fields.worksheetData ?? {}),
           now,
         ],
       );
     }
 
     const stationKeyToId = new Map<string, string>();
-    for (let i = 0; i < source.stations.length; i += 1) {
-      const station = source.stations[i]!;
+    for (let i = 0; i < snapshot.stations.length; i += 1) {
+      const station = snapshot.stations[i]!;
       const id = crypto.randomUUID();
       stationKeyToId.set(`s${i}`, id);
       await client.query(
@@ -607,9 +613,9 @@ export async function copyVbsSeasonFromYear(
       );
     }
 
-    for (const task of source.tasks) {
+    for (const task of snapshot.tasks) {
       const dueDate =
-        task.dueDayOffset !== null ? addDaysToIsoDate(startDate, task.dueDayOffset) : null;
+        task.dueDayOffset !== null ? addDaysToIsoDate(fields.startDate, task.dueDayOffset) : null;
       await client.query(
         `INSERT INTO vbs_tasks (
            id, plan_id, title, description, notes, category, status, due_date,
@@ -631,9 +637,9 @@ export async function copyVbsSeasonFromYear(
       );
     }
 
-    for (const item of source.checklist) {
+    for (const item of snapshot.checklist) {
       const dueDate =
-        item.dueDayOffset !== null ? addDaysToIsoDate(startDate, item.dueDayOffset) : null;
+        item.dueDayOffset !== null ? addDaysToIsoDate(fields.startDate, item.dueDayOffset) : null;
       await client.query(
         `INSERT INTO vbs_checklist_items (
            id, plan_id, category, label, done, status, assigned_team_id, due_date, sort_order, notes
@@ -650,8 +656,8 @@ export async function copyVbsSeasonFromYear(
       );
     }
 
-    for (const slot of source.schedule) {
-      const dayDate = addDaysToIsoDate(startDate, slot.dayOffset);
+    for (const slot of snapshot.schedule) {
+      const dayDate = addDaysToIsoDate(fields.startDate, slot.dayOffset);
       const stationId = slot.stationKey ? (stationKeyToId.get(slot.stationKey) ?? null) : null;
       await client.query(
         `INSERT INTO vbs_schedule_slots (
@@ -672,7 +678,7 @@ export async function copyVbsSeasonFromYear(
       );
     }
 
-    for (const supply of source.supplies) {
+    for (const supply of snapshot.supplies) {
       await client.query(
         `INSERT INTO vbs_supply_items (
            id, plan_id, name, quantity, estimated_cost, purchased, assigned_team_id, notes, sort_order
@@ -697,17 +703,167 @@ export async function copyVbsSeasonFromYear(
   } finally {
     client.release();
   }
+}
 
-  await replaceRegistrationClassesForSeason(organizationId, toYear, source.registrationClasses);
-  await syncActiveVbsYear(organizationId, toYear);
-  await persistSeasonSnapshot(organizationId, fromYear, source);
+export async function restoreSeasonSnapshotToLivePlan(organizationId: string, snapshot: SeasonSnapshotPayload) {
+  const plan = await getPlanRow(organizationId);
+  const startDate = snapshot.plan.startDate || `${snapshot.seasonYear}-06-01`;
+  const endDate =
+    snapshot.plan.endDate || addDaysToIsoDate(startDate, 4);
+  await writeLivePlanFromSnapshot(organizationId, plan?.id, snapshot, {
+    year: snapshot.seasonYear,
+    title: snapshot.plan.title.trim() || `VBS ${snapshot.seasonYear}`,
+    publisherId: snapshot.plan.publisherId,
+    programTitle: snapshot.plan.programTitle,
+    startDate,
+    endDate,
+    worksheetData: snapshot.plan.worksheetData,
+    eventId: plan?.event_id ?? undefined,
+  });
+  const { syncPrayerReminders } = await import("./vbs-prayer-reminders.js");
+  const worksheet = snapshot.plan.worksheetData as { prayerSchedule?: unknown } | null;
+  await syncPrayerReminders(organizationId, worksheet?.prayerSchedule);
+}
+
+export async function restoreSeasonSnapshotToEventPlan(
+  organizationId: string,
+  eventId: string,
+  snapshot: SeasonSnapshotPayload,
+) {
+  const existing = await db().query<{ id: string }>(`SELECT id FROM vbs_plans WHERE event_id = $1`, [eventId]);
+  const startDate = snapshot.plan.startDate || `${snapshot.seasonYear}-06-01`;
+  const endDate = snapshot.plan.endDate || addDaysToIsoDate(startDate, 4);
+  await writeLivePlanFromSnapshot(organizationId, existing.rows[0]?.id, snapshot, {
+    year: snapshot.seasonYear,
+    title: snapshot.plan.title.trim() || `VBS ${snapshot.seasonYear}`,
+    publisherId: snapshot.plan.publisherId,
+    programTitle: snapshot.plan.programTitle,
+    startDate,
+    endDate,
+    worksheetData: snapshot.plan.worksheetData,
+    eventId,
+  });
+}
+
+export async function copyVbsSeasonToNewEvent(
+  organizationId: string,
+  username: string,
+  input: {
+    fromEventId: string;
+    toYear: number;
+    name?: string;
+    startDate?: string;
+    endDate?: string;
+    publisherId?: string;
+    programTitle?: string;
+    makeCurrent?: boolean;
+  },
+) {
+  const access = await requireOrgAdmin(organizationId, username);
+  if ("error" in access) {
+    return access;
+  }
+  const {
+    addMemberToVbsEvent,
+    getVbsEvent,
+    sessionNameFromDates,
+    setActiveVbsEvent,
+    syncEventCurriculum,
+    uniqueEventName,
+  } = await import("./vbs-event-context.js");
+  const sourceEvent = await getVbsEvent(organizationId, input.fromEventId);
+  if (!sourceEvent) {
+    return { error: "Choose a VBS to copy from" as const };
+  }
+  const toYear = input.toYear;
+  if (!Number.isInteger(toYear) || toYear < 2000) {
+    return { error: "A valid VBS year is required" as const };
+  }
+  const source =
+    (await captureLiveSeasonSnapshot(organizationId, sourceEvent.year, sourceEvent.id)) ??
+    (await loadSnapshotForYear(organizationId, sourceEvent.year));
+  if (!source) {
+    return {
+      error: `No saved setup found for ${sourceEvent.year}. Open that plan first, then copy it.` as const,
+    };
+  }
+
+  const sourceStart = source.plan.startDate;
+  const startDate =
+    input.startDate?.trim() ||
+    (sourceStart
+      ? toYear === sourceEvent.year
+        ? sourceStart
+        : sameWeekdayInYear(sourceStart, toYear)
+      : `${toYear}-06-01`);
+  const endDate =
+    input.endDate?.trim() ||
+    (source.plan.endDate && sourceStart
+      ? shiftIsoRelativeToStart(source.plan.endDate, sourceStart, startDate)
+      : addDaysToIsoDate(startDate, 4));
+  const preferred =
+    (input.name ?? "").trim() ||
+    sessionNameFromDates(startDate, endDate) ||
+    source.plan.programTitle.trim() ||
+    "Session";
+  const name = await uniqueEventName(organizationId, toYear, preferred);
+
+  const chosenPublisher = input.publisherId?.trim() || "";
+  const chosenTitle = input.programTitle?.trim() || "";
+  const curriculum = chosenPublisher && chosenTitle
+    ? { publisherId: chosenPublisher, programTitle: chosenTitle }
+    : mapCurriculumToYear(
+        chosenPublisher || source.plan.publisherId,
+        chosenTitle || source.plan.programTitle,
+        toYear,
+      );
+
+  const eventId = crypto.randomUUID();
+  await db().query(
+    `INSERT INTO vbs_events (id, organization_id, year, name, publisher_id, program_title, created_at, updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6,NOW(),NOW())`,
+    [eventId, organizationId, toYear, name, curriculum.publisherId, curriculum.programTitle],
+  );
+  await addMemberToVbsEvent(organizationId, username, eventId);
+  const titleBase = source.plan.title.trim() || `VBS ${sourceEvent.year}`;
+  const title = titleBase.replace(String(sourceEvent.year), String(toYear));
+  const shiftedWorksheet = shiftPlanWorksheetForSeasonCopy(
+    source.plan.worksheetData,
+    sourceStart,
+    startDate,
+    endDate,
+  );
+
+  await writeLivePlanFromSnapshot(organizationId, undefined, source, {
+    year: toYear,
+    title,
+    publisherId: curriculum.publisherId,
+    programTitle: curriculum.programTitle,
+    startDate,
+    endDate,
+    worksheetData: shiftedWorksheet,
+    eventId,
+  });
+  await syncEventCurriculum(eventId, {
+    year: toYear,
+    publisherId: curriculum.publisherId,
+    programTitle: curriculum.programTitle,
+    name,
+  });
+  await insertRegistrationClassesForEvent(organizationId, eventId, toYear, source.registrationClasses);
+  if (input.makeCurrent) {
+    await setActiveVbsEvent(organizationId, eventId);
+  }
   const { syncPrayerReminders } = await import("./vbs-prayer-reminders.js");
   await syncPrayerReminders(organizationId, shiftedWorksheet.prayerSchedule);
 
   return {
     ok: true as const,
+    eventId,
+    fromEventId: sourceEvent.id,
+    fromYear: sourceEvent.year,
     toYear,
-    fromYear,
+    name,
     startDate,
     endDate,
     copied: {
@@ -719,4 +875,53 @@ export async function copyVbsSeasonFromYear(
       registrationClasses: source.registrationClasses.length,
     },
   };
+}
+
+export async function copyVbsSeasonFromYear(
+  organizationId: string,
+  username: string,
+  input: {
+    fromYear: number;
+    toYear: number;
+    name?: string;
+    fromEventId?: string;
+    startDate?: string;
+    endDate?: string;
+    publisherId?: string;
+    programTitle?: string;
+    makeCurrent?: boolean;
+  },
+) {
+  const fromYear = input.fromYear;
+  const toYear = input.toYear;
+  if (!Number.isInteger(fromYear) || !Number.isInteger(toYear) || fromYear < 2000 || toYear < 2000) {
+    return { error: "Valid from and to VBS years are required" as const };
+  }
+  let fromEventId = input.fromEventId?.trim() ?? "";
+  if (!fromEventId) {
+    const match = await db().query<{ id: string }>(
+      `SELECT e.id FROM vbs_events e
+       LEFT JOIN vbs_plans p ON p.event_id = e.id
+       WHERE e.organization_id = $1 AND e.year = $2
+       ORDER BY CASE WHEN p.id IS NULL THEN 1 ELSE 0 END, e.name
+       LIMIT 1`,
+      [organizationId, fromYear],
+    );
+    fromEventId = match.rows[0]?.id ?? "";
+  }
+  if (!fromEventId) {
+    return {
+      error: `No saved setup found for VBS ${fromYear}. Open the plan for that year first, or pick another source.` as const,
+    };
+  }
+  return copyVbsSeasonToNewEvent(organizationId, username, {
+    fromEventId,
+    toYear,
+    name: input.name,
+    startDate: input.startDate,
+    endDate: input.endDate,
+    publisherId: input.publisherId,
+    programTitle: input.programTitle,
+    makeCurrent: input.makeCurrent ?? fromYear !== toYear,
+  });
 }

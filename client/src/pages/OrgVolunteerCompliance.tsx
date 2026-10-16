@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { api } from "../api";
 import { OrgWorkspacePage } from "../OrgWorkspacePage";
+import { useOrgVbs } from "../org-vbs";
 import { useOrgs } from "../orgs";
 import type { VolunteerComplianceVolunteer, VolunteerComplianceWorkspace } from "../types";
 import { orgRoleLabels } from "@org-permissions";
@@ -20,20 +21,24 @@ function displayName(v: VolunteerComplianceVolunteer) {
 export default function OrgVolunteerCompliancePage() {
   const { orgId = "" } = useParams();
   const { current: org, canManageMembers } = useOrgs();
+  const { viewingYear, viewingEventId, eventsReady, orgEventEpoch } = useOrgVbs();
   const [data, setData] = useState<VolunteerComplianceWorkspace | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
-    const next = await api.volunteerCompliance(orgId);
+    const next = await api.volunteerCompliance(orgId, viewingYear ?? undefined);
     setData(next);
     setError("");
-  }, [orgId]);
+  }, [orgId, viewingEventId, viewingYear]);
 
   useEffect(() => {
+    if (!eventsReady) {
+      return;
+    }
     let cancelled = false;
     api
-      .volunteerCompliance(orgId)
+      .volunteerCompliance(orgId, viewingYear ?? undefined)
       .then((next) => {
         if (!cancelled) {
           setData(next);
@@ -47,12 +52,17 @@ export default function OrgVolunteerCompliancePage() {
     return () => {
       cancelled = true;
     };
-  }, [orgId]);
+  }, [eventsReady, orgEventEpoch, orgId, viewingEventId, viewingYear]);
 
   async function setStatus(volunteer: VolunteerComplianceVolunteer, status: string) {
     setBusy(volunteer.username);
     try {
-      const next = await api.updateVolunteerBackgroundCheck(orgId, volunteer.username, status);
+      const next = await api.updateVolunteerBackgroundCheck(
+        orgId,
+        volunteer.username,
+        status,
+        viewingYear ?? undefined,
+      );
       setData(next);
       setError("");
     } catch (err) {
@@ -76,7 +86,7 @@ export default function OrgVolunteerCompliancePage() {
     <OrgWorkspacePage
       eyebrow={org?.name ?? "Organization"}
       title="Volunteer background checks"
-      tagline="Track child-safety screening for every org member in one place. Update status inline — no need to open each profile."
+      tagline="Track child-safety screening for staff in this VBS event. Update status inline — no need to open each profile."
     >
       <section className="vbs-panel">
         <ul className="vbs-plan-snapshot" aria-label="Background check summary">
@@ -113,7 +123,10 @@ export default function OrgVolunteerCompliancePage() {
           </thead>
           <tbody>
             {data.volunteers.map((volunteer) => (
-              <tr key={volunteer.username}>
+              <tr
+                key={volunteer.username}
+                className={`vbs-volunteer-compliance-row is-${volunteer.backgroundCheckStatus}`}
+              >
                 <td>{displayName(volunteer)}</td>
                 <td className="muted">{volunteer.username}</td>
                 <td>{orgRoleLabels[volunteer.role] ?? volunteer.role}</td>

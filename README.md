@@ -1,6 +1,6 @@
-# VBS
+# EklosHub
 
-Local app for VBS reviews, leftover sharing, setup photos, and messages. Runtime data lives in Docker Postgres and S3 (s3mock).
+Local app for VBS reviews, leftover sharing, setup photos, and church planning. Runtime data lives in Docker Postgres and S3 (s3mock).
 
 ## Prerequisites
 
@@ -18,10 +18,10 @@ npm run dev
 
 - App: http://localhost:5173
 - API: http://localhost:3000
-- Postgres: `127.0.0.1:5432` (`vbs` / `vbs`)
+- Postgres: `127.0.0.1:5432` (user `vbs`; password from `POSTGRES_PASSWORD` in `.env`)
 - S3: `http://127.0.0.1:9000`
 
-Sign in with a seeded username such as `admin` or `pcheaz@gmail.com` and the password in `.env` (`AUTH_PASSWORD`, default `vbs-dev`). `pcheaz@gmail.com` is org admin of Cornerstone Seattle.
+Sign in with a seeded username such as `admin` or `pcheaz@gmail.com` and the password from `.env` (`AUTH_PASSWORD`). `pcheaz@gmail.com` is org admin of Cornerstone Seattle. Do not commit `.env` or real passwords.
 
 First boot applies the schema and seeds users, reviews, shares, setups, and messages if the `users` table is empty.
 

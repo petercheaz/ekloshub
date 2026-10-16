@@ -190,15 +190,17 @@ export async function submitPublicRegistration(
 
   const id = crypto.randomUUID();
   const now = new Date();
-  const registrationSeason = await seasonYearForNewRegistration(org.id);
+  const { getActiveVbsEvent } = await import("./vbs-event-context.js");
+  const activeEvent = await getActiveVbsEvent(org.id);
+  const registrationSeason = activeEvent?.year ?? (await seasonYearForNewRegistration(org.id));
   const inserted = await db().query<RegistrationRow>(
     `INSERT INTO vbs_registrations (
       id, organization_id, child_full_name, child_gender, birth_month, birth_year, allergies_common, allergies_other,
       comments, special_requests, contact1_name, contact1_phone, contact1_email, contact2_name, contact2_phone,
       contact2_email,
       attend_mon, attend_tue, attend_wed, attend_thu, attend_fri, tshirt_size, assigned_team_id, class_id,
-      payment_status, nametag_extra_instructions, created_by, source, created_at, updated_at, vbs_season_year
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,'pending','',NULL,'public',$25,$25,$26)
+      payment_status, nametag_extra_instructions, created_by, source, created_at, updated_at, vbs_season_year, vbs_event_id
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,'pending','',NULL,'public',$25,$25,$26,$27)
     RETURNING ${registrationRowReturnSql}`,
     [
       id,
@@ -227,6 +229,7 @@ export async function submitPublicRegistration(
       classId || null,
       now,
       registrationSeason,
+      activeEvent?.id ?? null,
     ],
   );
   const row = inserted.rows[0]!;

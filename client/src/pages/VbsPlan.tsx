@@ -174,16 +174,21 @@ export default function VbsPlanPage() {
 
   const [busy, setBusy] = useState(false);
 
+  const { viewingYear, viewingEventId, orgEventEpoch, refreshEvents, eventsReady } = useOrgVbs();
+
   const reload = useCallback(async () => {
-    const workspace = await api.vbsPlan(orgId);
+    const workspace = await api.vbsPlan(orgId, viewingYear ?? undefined);
     setData(workspace);
     setError("");
-  }, [orgId]);
+  }, [orgId, viewingEventId, viewingYear]);
 
   useEffect(() => {
+    if (!eventsReady) {
+      return;
+    }
     let cancelled = false;
     api
-      .vbsPlan(orgId)
+      .vbsPlan(orgId, viewingYear ?? undefined)
       .then((workspace) => {
         if (!cancelled) {
           setData(workspace);
@@ -198,7 +203,7 @@ export default function VbsPlanPage() {
     return () => {
       cancelled = true;
     };
-  }, [orgId]);
+  }, [eventsReady, orgEventEpoch, orgId, viewingEventId, viewingYear]);
 
   async function run(action: () => Promise<unknown>) {
     setBusy(true);
@@ -234,6 +239,16 @@ export default function VbsPlanPage() {
 
   return (
     <div className="reviews vbs-plan vbs-workspace">
+      {data.isArchiveView ? (
+        <div className="vbs-plan-callout">
+          <p>
+            This is not the current VBS for this church. You are editing{" "}
+            <strong>VBS {data.viewingYear}</strong>
+            {data.plan?.programTitle ? ` · ${data.plan.programTitle}` : ""}. Family sign-ups still go to the
+            current event until an org admin switches it.
+          </p>
+        </div>
+      ) : null}
       <header className="vbs-plan-masthead" aria-label="VBS plan summary">
         <div className="vbs-plan-masthead-main">
           {org ? (
@@ -375,10 +390,17 @@ export default function VbsPlanPage() {
             {tab === "overview" ? (
               <>
                 {data.canAdmin ? (
-                  <SeasonCopyPanel orgId={orgId} onCopied={() => void reload()} />
+                  <SeasonCopyPanel
+                    orgId={orgId}
+                    onCopied={() => {
+                      void refreshEvents();
+                      void reload();
+                    }}
+                  />
                 ) : null}
                 <VbsPlanAdherence data={data} orgId={orgId} />
                 <OverviewTab
+                  key={`${data.plan?.id ?? "none"}-${data.viewingYear ?? ""}`}
                   orgId={orgId}
                   data={data}
                   busy={busy}
@@ -536,15 +558,9 @@ function OverviewTab({
       <div className="vbs-plan-overview-block">
         <h2 className="vbs-plan-section-title">Curriculum on this plan</h2>
         <p className="vbs-plan-section-lead muted">
-          Year, publisher, and VBS title are saved with this organization&apos;s plan — not with your personal
-          browsing filters elsewhere.
+          Year, publisher, and VBS title are saved with this organization&apos;s plan. Use Open project above to load
+          a different VBS.
         </p>
-        <div className="vbs-plan-callout">
-          <p>
-            <strong>Save as my default VBS</strong> (below) is optional. It only sets what you see on Share, Setup,
-            and Reviews — it does not change this plan until you save the overview form.
-          </p>
-        </div>
         <VbsFilterPanel
           mode="pick"
           programs={data.programs}
@@ -553,7 +569,7 @@ function OverviewTab({
           onChange={onCurriculumChange}
           ariaLabel="Plan curriculum"
           disabled={!data.canWrite}
-          showSaveDefault
+          showSaveDefault={false}
         />
       </div>
 

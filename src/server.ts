@@ -32,6 +32,16 @@ import {
 } from "./orgs.js";
 import { acceptInvite, createInvites, getInvite } from "./invites.js";
 import {
+  activateOrgVbsEvent,
+  createOrgVbsEvent,
+  deleteOrgVbsEvent,
+  listOrgVbsEvents,
+  renameOrgVbsEvent,
+  setPersonalVbsEventDefault,
+} from "./vbs-events.js";
+import { attachVbsEvent } from "./vbs-event-context.js";
+import { parseSeasonYear } from "./vbs-org-season.js";
+import {
   copyVbsSeasonFromYear,
   getSeasonCopyOptions,
   saveCurrentSeasonSnapshot,
@@ -153,11 +163,13 @@ app.use(
     cookie: {
       httpOnly: true,
       sameSite: "lax",
-      secure: isProduction,
+      secure: isProduction ? "auto" : false,
       maxAge: 7 * 24 * 60 * 60 * 1000,
     },
   }),
 );
+
+app.use(attachVbsEvent);
 
 app.post("/api/login", login);
 app.post("/api/logout", logout);
@@ -220,6 +232,106 @@ app.get("/api/orgs/:id", requireAuth, async (req, res) => {
   res.json(result);
 });
 
+app.get("/api/orgs/:id/vbs-events", requireAuth, async (req, res) => {
+  const result = await listOrgVbsEvents(String(req.params.id), req.session.user!.username);
+  if ("error" in result) {
+    res.status(403).json(result);
+    return;
+  }
+  res.json(result);
+});
+
+app.post("/api/orgs/:id/vbs-events/current", requireAuth, async (req, res) => {
+  const body = req.body as { year?: unknown; eventId?: unknown };
+  const result = await activateOrgVbsEvent(
+    String(req.params.id),
+    req.session.user!.username,
+    body.eventId ?? body.year,
+  );
+  if ("error" in result) {
+    const message = result.error ?? "Error";
+    res.status(message.includes("Only org admins") ? 403 : 400).json(result);
+    return;
+  }
+  res.json(result);
+});
+
+app.put("/api/orgs/:id/vbs-events/default", requireAuth, async (req, res) => {
+  const body = req.body as { eventId?: unknown };
+  const result = await setPersonalVbsEventDefault(
+    String(req.params.id),
+    req.session.user!.username,
+    body.eventId,
+  );
+  if ("error" in result) {
+    const message = result.error ?? "Error";
+    res.status(message.includes("Only") || message.includes("belong") ? 403 : 400).json(result);
+    return;
+  }
+  res.json(result);
+});
+
+app.put("/api/orgs/:id/vbs-events/:eventId", requireAuth, async (req, res) => {
+  const body = req.body as { name?: unknown };
+  const result = await renameOrgVbsEvent(
+    String(req.params.id),
+    req.session.user!.username,
+    req.params.eventId,
+    body.name,
+  );
+  if ("error" in result) {
+    const message = result.error ?? "Error";
+    res.status(message.includes("Only org admins") ? 403 : 400).json(result);
+    return;
+  }
+  res.json(result);
+});
+
+app.delete("/api/orgs/:id/vbs-events/:eventId", requireAuth, async (req, res) => {
+  const result = await deleteOrgVbsEvent(
+    String(req.params.id),
+    req.session.user!.username,
+    req.params.eventId,
+  );
+  if ("error" in result) {
+    const message = result.error ?? "Error";
+    res.status(
+      message.includes("Only org admins")
+        ? 403
+        : message.includes("Keep at least one")
+          ? 400
+          : 400,
+    ).json(result);
+    return;
+  }
+  res.json(result);
+});
+
+app.post("/api/orgs/:id/vbs-events", requireAuth, async (req, res) => {
+  const body = req.body as {
+    fromEventId?: unknown;
+    year?: unknown;
+    name?: unknown;
+    startDate?: unknown;
+    endDate?: unknown;
+    makeCurrent?: unknown;
+  };
+  const result = await createOrgVbsEvent(String(req.params.id), req.session.user!.username, {
+    fromEventId: typeof body.fromEventId === "string" ? body.fromEventId : undefined,
+    year: typeof body.year === "number" ? body.year : Number(body.year),
+    name: typeof body.name === "string" ? body.name : undefined,
+    startDate: typeof body.startDate === "string" ? body.startDate : undefined,
+    endDate: typeof body.endDate === "string" ? body.endDate : undefined,
+    makeCurrent: body.makeCurrent === true,
+  });
+  if ("error" in result) {
+    const message = result.error ?? "Error";
+    res.status(message.includes("Only org admins") ? 403 : 400).json(result);
+    return;
+  }
+  res.status(201).json(result);
+});
+
 app.get("/api/orgs/:id/season-copy", requireAuth, async (req, res) => {
   const result = await getSeasonCopyOptions(String(req.params.id), req.session.user!.username);
   if ("error" in result) {
@@ -235,11 +347,19 @@ app.post("/api/orgs/:id/season-copy", requireAuth, async (req, res) => {
   const toYear = Number(body.toYear);
   const startDate = typeof body.startDate === "string" ? body.startDate : undefined;
   const endDate = typeof body.endDate === "string" ? body.endDate : undefined;
+  const name = typeof body.name === "string" ? body.name : undefined;
+  const fromEventId = typeof body.fromEventId === "string" ? body.fromEventId : undefined;
+  const publisherId = typeof body.publisherId === "string" ? body.publisherId : undefined;
+  const programTitle = typeof body.programTitle === "string" ? body.programTitle : undefined;
   const result = await copyVbsSeasonFromYear(String(req.params.id), req.session.user!.username, {
     fromYear,
     toYear,
+    name,
+    fromEventId,
     startDate,
     endDate,
+    publisherId,
+    programTitle,
   });
   if ("error" in result) {
     res.status(400).json(result);
@@ -249,7 +369,11 @@ app.post("/api/orgs/:id/season-copy", requireAuth, async (req, res) => {
 });
 
 app.get("/api/orgs/:id/volunteer-compliance", requireAuth, async (req, res) => {
-  const result = await listVolunteerCompliance(String(req.params.id), req.session.user!.username);
+  const result = await listVolunteerCompliance(
+    String(req.params.id),
+    req.session.user!.username,
+    parseSeasonYear(req.query.year),
+  );
   if ("error" in result) {
     res.status(403).json(result);
     return;
@@ -265,6 +389,7 @@ app.patch("/api/orgs/:id/volunteer-compliance/:username", requireAuth, async (re
     req.session.user!.username,
     String(req.params.username),
     status,
+    parseSeasonYear(req.query.year),
   );
   if ("error" in result) {
     res.status(400).json(result);
@@ -639,7 +764,11 @@ app.patch("/api/orgs/:id/vbs-registration/family-page", requireAuth, async (req,
 });
 
 app.get("/api/orgs/:id/vbs-registration", requireAuth, async (req, res) => {
-  const result = await getRegistrationWorkspace(String(req.params.id), req.session.user!.username);
+  const result = await getRegistrationWorkspace(
+    String(req.params.id),
+    req.session.user!.username,
+    parseSeasonYear(req.query.year),
+  );
   if ("error" in result) {
     res.status(403).json(result);
     return;
@@ -672,7 +801,11 @@ app.patch("/api/orgs/:id/vbs-registration/cooking", requireAuth, async (req, res
 });
 
 app.get("/api/orgs/:id/cooking-plan", requireAuth, async (req, res) => {
-  const result = await getCookingPlanWorkspace(String(req.params.id), req.session.user!.username);
+  const result = await getCookingPlanWorkspace(
+    String(req.params.id),
+    req.session.user!.username,
+    parseSeasonYear(req.query.year),
+  );
   if ("error" in result) {
     const message = result.error ?? "Error";
     res.status(message.includes("permission") ? 403 : 400).json(result);
@@ -1004,7 +1137,11 @@ app.post("/api/orgs/:id/vbs-registration/students/:studentId/nametag", requireAu
 });
 
 app.get("/api/orgs/:id/vbs-plan", requireAuth, async (req, res) => {
-  const result = await getVbsWorkspace(String(req.params.id), req.session.user!.username);
+  const result = await getVbsWorkspace(
+    String(req.params.id),
+    req.session.user!.username,
+    parseSeasonYear(req.query.year),
+  );
   if ("error" in result) {
     res.status(403).json(result);
     return;
@@ -1876,8 +2013,8 @@ app.get("/{*path}", (_req, res, next) => {
 
 async function start() {
   await waitForDb();
-  await applySchema();
   await waitForS3();
+  await applySchema();
   await seedIfEmpty();
   await ensureKnownAccounts();
   app.listen(port, () => {

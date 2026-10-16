@@ -213,10 +213,13 @@ function planWriteAllowed(access: MemberAccess) {
   return canWrite(access.membership.role) || access.platformAdmin === true;
 }
 
-export async function getPlanRow(orgId: string) {
+export async function getPlanRow(orgId: string, eventId?: string) {
+  const { requestedVbsEventId } = await import("./vbs-event-context.js");
+  const resolvedEventId = eventId ?? requestedVbsEventId();
   const result = await db().query<{
     id: string;
     organization_id: string;
+    event_id: string | null;
     year: number;
     title: string;
     publisher_id: string;
@@ -234,11 +237,20 @@ export async function getPlanRow(orgId: string) {
     worksheet_data: unknown;
     updated_at: Date;
   }>(
-    `SELECT id, organization_id, year, title, publisher_id, program_title, location,
+    resolvedEventId
+      ? `SELECT id, organization_id, event_id, year, title, publisher_id, program_title, location,
             start_date, end_date, daily_start, daily_end, expected_kids, coordinator_notes,
             family_public_notes, budget_amount, expenses_amount, worksheet_data, updated_at
-     FROM vbs_plans WHERE organization_id = $1 ORDER BY year DESC LIMIT 1`,
-    [orgId],
+         FROM vbs_plans WHERE event_id = $1 LIMIT 1`
+      : `SELECT p.id, p.organization_id, p.event_id, p.year, p.title, p.publisher_id, p.program_title, p.location,
+            p.start_date, p.end_date, p.daily_start, p.daily_end, p.expected_kids, p.coordinator_notes,
+            p.family_public_notes, p.budget_amount, p.expenses_amount, p.worksheet_data, p.updated_at
+         FROM vbs_plans p
+         JOIN organizations o ON o.id = p.organization_id
+         WHERE p.organization_id = $1
+         ORDER BY CASE WHEN p.event_id IS NOT DISTINCT FROM o.active_vbs_event_id THEN 0 ELSE 1 END, p.year DESC
+         LIMIT 1`,
+    [resolvedEventId ?? orgId],
   );
   return result.rows[0] ?? null;
 }
@@ -247,6 +259,7 @@ function presentPlan(row: NonNullable<Awaited<ReturnType<typeof getPlanRow>>>) {
   return {
     id: row.id,
     organizationId: row.organization_id,
+    eventId: row.event_id ?? "",
     year: row.year,
     title: row.title,
     publisherId: row.publisher_id,
@@ -659,24 +672,167 @@ async function ensurePlanRotationStations(planId: string) {
   }
 }
 
-export async function getVbsWorkspace(orgId: string, username: string) {
+function programsForYear(year: number) {
+  return programs
+    .filter((p) => p.year === year)
+    .map((p) => ({
+      id: p.id,
+      year: p.year,
+      publisherId: p.publisherId,
+      theme: p.theme,
+    }));
+}
+
+function archiveWorkspaceFromSnapshot(
+  orgId: string,
+  snapshot: import("./vbs-season-copy.js").SeasonSnapshotPayload,
+) {
+  const planId = `archive-${snapshot.seasonYear}`;
+  const startDate = snapshot.plan.startDate || `${snapshot.seasonYear}-06-01`;
+  const stationIds = snapshot.stations.map((_, index) => `s${index}`);
+  const tasks = snapshot.tasks.map((task, index) => ({
+    id: `archive-task-${index}`,
+    planId,
+    title: task.title,
+    description: task.description,
+    notes: task.notes,
+    category: task.category as VbsTaskCategory,
+    status: "todo" as VbsTaskStatus,
+    dueDate: task.dueDayOffset !== null ? addDaysToIsoDate(startDate, task.dueDayOffset) : "",
+    assignedUsername: "",
+    assignedTeamId: task.assignedTeamId,
+    sortOrder: task.sortOrder,
+    createdAt: snapshot.capturedAt,
+    expenseAmount: 0,
+    reimbursementStatus: "none" as VbsReimbursementStatus,
+    reimbursementArchived: false,
+    attachments: [] as { id: string; name: string; type: string; size: number; dataUrl: string }[],
+  }));
+  const stations = snapshot.stations.map((station, index) => ({
+    id: stationIds[index]!,
+    planId,
+    name: station.name,
+    description: station.description,
+    defaultTeamId: station.defaultTeamId,
+    sortOrder: station.sortOrder,
+  }));
+  const schedule = snapshot.schedule.map((slot, index) => ({
+    id: `archive-slot-${index}`,
+    planId,
+    dayDate: addDaysToIsoDate(startDate, slot.dayOffset),
+    startsAt: slot.startsAt,
+    endsAt: slot.endsAt,
+    label: slot.label,
+    stationId: slot.stationKey ? (stationIds[Number(slot.stationKey.slice(1))] ?? "") : "",
+    teamId: slot.teamId,
+    notes: slot.notes,
+    roleLabel: slot.roleLabel,
+    assignedUsername: "",
+  }));
+  const checklist = snapshot.checklist.map((item, index) => ({
+    id: `archive-check-${index}`,
+    planId,
+    category: item.category,
+    label: item.label,
+    status: "not_started" as const,
+    done: false,
+    assignedTeamId: "",
+    dueDate: item.dueDayOffset !== null ? addDaysToIsoDate(startDate, item.dueDayOffset) : "",
+    sortOrder: item.sortOrder,
+    notes: item.notes,
+  }));
+  const supplies = snapshot.supplies.map((supply, index) => ({
+    id: `archive-supply-${index}`,
+    planId,
+    name: supply.name,
+    quantity: supply.quantity,
+    estimatedCost: supply.estimatedCost,
+    purchased: false,
+    assignedTeamId: supply.assignedTeamId,
+    notes: supply.notes,
+    sortOrder: supply.sortOrder,
+  }));
+  return {
+    plan: {
+      id: planId,
+      organizationId: orgId,
+      year: snapshot.seasonYear,
+      title: snapshot.plan.title,
+      publisherId: snapshot.plan.publisherId,
+      programTitle: snapshot.plan.programTitle,
+      location: snapshot.plan.location,
+      startDate,
+      endDate: snapshot.plan.endDate,
+      dailyStart: snapshot.plan.dailyStart,
+      dailyEnd: snapshot.plan.dailyEnd,
+      expectedKids: snapshot.plan.expectedKids,
+      coordinatorNotes: snapshot.plan.coordinatorNotes,
+      familyPublicNotes: snapshot.plan.familyPublicNotes,
+      budgetAmount: snapshot.plan.budgetAmount,
+      expensesAmount: sumTaskExpenseAmounts(tasks),
+      worksheetData: snapshot.plan.worksheetData ?? {},
+      updatedAt: snapshot.capturedAt,
+    },
+    tasks,
+    stations,
+    schedule,
+    checklist,
+    supplies,
+    scheduleActivityLabels: snapshot.scheduleActivityLabels ?? [],
+  };
+}
+
+export async function getVbsWorkspace(orgId: string, username: string, viewingYear?: number) {
   const access = await requireMember(orgId, username);
   if ("error" in access) {
     return access;
   }
   const role = access.membership.role;
-  const planRow = await getPlanRow(orgId);
+  const { getActiveVbsYear, parseSeasonYear, isOrgSeasonAdmin } = await import("./vbs-org-season.js");
+  const {
+    getActiveVbsEvent,
+    listMemberEventIds,
+    requestedVbsEventId,
+    resolveRequestedVbsEvent,
+  } = await import("./vbs-event-context.js");
+  const currentVbsYear = await getActiveVbsYear(orgId);
+  const activeEvent = await getActiveVbsEvent(orgId);
+  let event = await resolveRequestedVbsEvent(orgId);
+  if (!requestedVbsEventId() && parseSeasonYear(viewingYear)) {
+    const yearMatch = await db().query<{
+      id: string;
+      organization_id: string;
+      year: number;
+      name: string;
+      publisher_id: string;
+      program_title: string;
+    }>(
+      `SELECT e.id, e.organization_id, e.year, e.name, e.publisher_id, e.program_title
+       FROM vbs_events e
+       LEFT JOIN organizations o ON o.id = e.organization_id
+       WHERE e.organization_id = $1 AND e.year = $2
+       ORDER BY CASE WHEN e.id IS NOT DISTINCT FROM o.active_vbs_event_id THEN 0 ELSE 1 END, e.name
+       LIMIT 1`,
+      [orgId, viewingYear],
+    );
+    if (yearMatch.rows[0]) {
+      event = yearMatch.rows[0];
+    }
+  }
+  if (event && !isOrgSeasonAdmin(role, access.platformAdmin === true)) {
+    const memberEvents = await listMemberEventIds(orgId, username);
+    if (memberEvents.length > 0 && !memberEvents.includes(event.id)) {
+      return { error: "You are not on this VBS event" as const };
+    }
+  }
+  const planRow = event ? await getPlanRow(orgId, event.id) : await getPlanRow(orgId);
+  const year = event?.year ?? planRow?.year ?? parseSeasonYear(viewingYear) ?? currentVbsYear;
+  const isArchiveView = Boolean(event && activeEvent && event.id !== activeEvent.id);
+
   if (planRow) {
     await ensurePlanRotationStations(planRow.id);
   }
-  const plan = planRow ? presentPlan(planRow) : null;
-  if (plan) {
-    const { assertPlanSeasonAccess } = await import("./vbs-org-season.js");
-    const planAccess = await assertPlanSeasonAccess(orgId, username, access.platformAdmin === true, plan.year);
-    if ("error" in planAccess) {
-      return { error: planAccess.error };
-    }
-  }
+  const livePlan = planRow ? presentPlan(planRow) : null;
 
   const prefsResult = await db().query<{ notify_email: boolean; notify_sms: boolean }>(
     `SELECT notify_email, notify_sms FROM organization_members
@@ -775,10 +931,14 @@ export async function getVbsWorkspace(orgId: string, username: string) {
     };
   };
 
-  const related = plan
+  let plan = livePlan;
+  let related = plan
     ? await loadRelated(plan.id)
     : { tasks: [], stations: [], schedule: [], checklist: [] };
-  const supplies = plan ? await listSupplyItems(plan.id) : [];
+  let supplies = plan ? await listSupplyItems(plan.id) : [];
+  let scheduleActivityLabels = await listScheduleActivityLabels(orgId);
+  let archiveCapturedAt = "";
+
   const planWithTaskExpenses = plan
     ? { ...plan, expensesAmount: sumTaskExpenseAmounts(related.tasks) }
     : null;
@@ -786,17 +946,7 @@ export async function getVbsWorkspace(orgId: string, username: string) {
   const boardPosts = "boardPosts" in boardPayload ? boardPayload.boardPosts : [];
   const { isPlatformAdmin } = await import("./users.js");
   const teams = await listTeamsForViewer(orgId, username, await isPlatformAdmin(username));
-  const year = plan?.year ?? defaultCurriculumYear;
-  const programList = programs
-    .filter((p) => p.year === year)
-    .map((p) => ({
-      id: p.id,
-      year: p.year,
-      publisherId: p.publisherId,
-      theme: p.theme,
-    }));
-
-  const scheduleActivityLabels = await listScheduleActivityLabels(orgId);
+  const programList = programsForYear(plan?.year ?? year);
 
   return {
     plan: planWithTaskExpenses,
@@ -806,6 +956,13 @@ export async function getVbsWorkspace(orgId: string, username: string) {
     teams,
     canWrite: planWriteAllowed(access),
     canAdmin: role === "org_admin" || access.platformAdmin === true,
+    isArchiveView,
+    viewingYear: year,
+    viewingEventId: event?.id ?? null,
+    currentVbsYear,
+    currentEventId: activeEvent?.id ?? null,
+    livePlanYear: planRow?.year ?? null,
+    archiveCapturedAt,
     scheduleActivityLabels,
     scheduleRoleSuggestions: [...SCHEDULE_ROLE_SUGGESTIONS],
     notificationPrefs: {
@@ -856,7 +1013,15 @@ export async function upsertVbsPlan(
   if (!input.year) {
     return { error: "Year is required" as const };
   }
-  const { resolveViewerSeason, syncActiveVbsYear } = await import("./vbs-org-season.js");
+  const { resolveViewerSeason } = await import("./vbs-org-season.js");
+  const {
+    ensureEventHasUniqueName,
+    getActiveVbsEvent,
+    getVbsEvent,
+    resolveRequestedVbsEvent,
+    seedOrgVbsEvent,
+    syncEventCurriculum,
+  } = await import("./vbs-event-context.js");
   const season = await resolveViewerSeason(orgId, username, access.platformAdmin === true);
   if ("error" in season) {
     return { error: season.error };
@@ -867,15 +1032,12 @@ export async function upsertVbsPlan(
     };
   }
 
-  const existing = await getPlanRow(orgId);
+  const event = (await resolveRequestedVbsEvent(orgId)) ?? (await getActiveVbsEvent(orgId));
+  const eventId = event?.id ?? (await seedOrgVbsEvent(orgId, input.year, username));
+  const existing = await getPlanRow(orgId, eventId);
   const now = new Date().toISOString();
   const startDate = input.startDate || null;
   const endDate = input.endDate || null;
-
-  if (existing && existing.year !== input.year) {
-    const { persistLiveSeasonSnapshot } = await import("./vbs-season-copy.js");
-    await persistLiveSeasonSnapshot(orgId, existing.year);
-  }
 
   if (existing) {
     await db().query(
@@ -906,25 +1068,34 @@ export async function upsertVbsPlan(
       startDate: existing.start_date ? existing.start_date.toISOString().slice(0, 10) : "",
       endDate: existing.end_date ? existing.end_date.toISOString().slice(0, 10) : "",
     };
-    const planRow = await getPlanRow(orgId);
+    const planRow = await getPlanRow(orgId, eventId);
     if (planRow) {
       await syncScheduleFromOverview(existing.id, planRow, previousOverviewDates);
     }
-    await syncActiveVbsYear(orgId, input.year);
-    const updated = await getPlanRow(orgId);
+    await syncEventCurriculum(eventId, {
+      year: input.year,
+      publisherId: input.publisherId,
+      programTitle: input.programTitle.trim(),
+    });
+    const named = await getVbsEvent(orgId, eventId);
+    if (named) {
+      await ensureEventHasUniqueName(orgId, named, { startDate, endDate });
+    }
+    const updated = await getPlanRow(orgId, eventId);
     return updated ? { plan: presentPlan(updated) } : { error: "Could not update plan" as const };
   }
 
   const id = crypto.randomUUID();
   await db().query(
     `INSERT INTO vbs_plans (
-       id, organization_id, year, title, publisher_id, program_title, location,
+       id, organization_id, event_id, year, title, publisher_id, program_title, location,
        start_date, end_date, daily_start, daily_end, expected_kids, coordinator_notes,
        family_public_notes, budget_amount, expenses_amount, updated_at
-     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,
     [
       id,
       orgId,
+      eventId,
       input.year,
       input.title.trim() || `VBS ${input.year}`,
       input.publisherId,
@@ -946,13 +1117,21 @@ export async function upsertVbsPlan(
   if (input.seedTemplate !== false) {
     await seedStarterContent(id, orgId, input.startDate || null);
   }
-  const planRow = await getPlanRow(orgId);
+  const planRow = await getPlanRow(orgId, eventId);
   if (planRow) {
     await syncScheduleFromOverview(id, planRow);
   }
 
-  await syncActiveVbsYear(orgId, input.year);
-  const row = await getPlanRow(orgId);
+  await syncEventCurriculum(eventId, {
+    year: input.year,
+    publisherId: input.publisherId,
+    programTitle: input.programTitle.trim(),
+  });
+  const named = await getVbsEvent(orgId, eventId);
+  if (named) {
+    await ensureEventHasUniqueName(orgId, named, { startDate, endDate });
+  }
+  const row = await getPlanRow(orgId, eventId);
   return row ? { plan: presentPlan(row) } : { error: "Could not create plan" as const };
 }
 

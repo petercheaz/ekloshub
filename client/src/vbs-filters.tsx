@@ -47,24 +47,24 @@ export function VbsFilterDefaultNote() {
   if (filterSource === "user" && userDefault?.allFilters) {
     return (
       <p className="vbs-filter-note muted">
-        Started from your default: <strong>All years · All publishers · All curriculum</strong>. Change filters
-        anytime, or save a new default below.
+        Started from your default: <strong>All years · All publishers · All curriculum</strong>. This remembers
+        Share, Setup, and Reviews filters — not the church&apos;s current VBS.
       </p>
     );
   }
   if (filterSource === "user" && userDefault) {
     return (
       <p className="vbs-filter-note muted">
-        Started from your default VBS: {userDefault.publisherName} · {userDefault.year} ·{" "}
-        {userDefault.programTitle}. Change filters anytime, or save a new default below.
+        Started from your default: {userDefault.publisherName} · {userDefault.year} · {userDefault.programTitle}.
+        This remembers Share, Setup, and Reviews filters — not the church&apos;s current VBS.
       </p>
     );
   }
   return (
     <p className="vbs-filter-note muted">
-      Pick year, publisher, and curriculum to narrow results—or set all three to <strong>All</strong> and save that
-      as your default. Check <strong>Save as my default VBS</strong> to remember your choice on Share, Setup,
-      Reviews, and your org plan.
+      Pick year, publisher, and curriculum to narrow Share, Setup, and Reviews. Check{" "}
+      <strong>Save as my default VBS</strong> to remember those catalog filters. Org plan, registration, and
+      volunteers use Open project instead.
     </p>
   );
 }

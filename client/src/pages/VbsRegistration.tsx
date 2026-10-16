@@ -81,7 +81,7 @@ function tabFromSearch(params: URLSearchParams, allowed: Tab[]): Tab {
 export default function VbsRegistrationPage() {
   const { orgId = "" } = useParams();
   const { current: org } = useOrgs();
-  const { filterDefault, working, prefsReady } = useOrgVbs();
+  const { filterDefault, working, prefsReady, viewingYear, viewingEventId, eventsReady, orgEventEpoch } = useOrgVbs();
   const [data, setData] = useState<VbsRegistrationWorkspace | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -97,30 +97,9 @@ export default function VbsRegistrationPage() {
   const [nametagTeamId, setNametagTeamId] = useState("");
   const [nametagInstructions, setNametagInstructions] = useState("");
   const [nametagStatus, setNametagStatus] = useState("");
-  const [seasonFilter, setSeasonFilter] = useState<number | "all">("all");
-
   const sections = useMemo(() => (data ? sectionsForWorkspace(data) : allSections), [data]);
 
-  useEffect(() => {
-    if (!data) {
-      return;
-    }
-    if (data.viewAllSeasons) {
-      setSeasonFilter("all");
-    } else if (data.viewSeason !== null) {
-      setSeasonFilter(data.viewSeason);
-    }
-  }, [data?.viewAllSeasons, data?.viewSeason]);
-
-  const displayStudents = useMemo(() => {
-    if (!data) {
-      return [];
-    }
-    if (seasonFilter === "all") {
-      return data.students;
-    }
-    return data.students.filter((student) => student.vbsSeasonYear === seasonFilter);
-  }, [data, seasonFilter]);
+  const displayStudents = useMemo(() => data?.students ?? [], [data]);
 
   const displaySummary = useMemo(() => {
     return {
@@ -132,15 +111,7 @@ export default function VbsRegistrationPage() {
     };
   }, [displayStudents]);
 
-  const displayClasses = useMemo(() => {
-    if (!data) {
-      return [];
-    }
-    if (seasonFilter === "all") {
-      return data.classes;
-    }
-    return data.classes.filter((cls) => cls.vbsSeasonYear === seasonFilter);
-  }, [data, seasonFilter]);
+  const displayClasses = useMemo(() => data?.classes ?? [], [data]);
 
   const rosterData = useMemo(() => {
     if (!data) {
@@ -202,15 +173,18 @@ export default function VbsRegistrationPage() {
   }, [searchParams, data, focusStudent]);
 
   const reload = useCallback(async () => {
-    const workspace = await api.vbsRegistration(orgId);
+    const workspace = await api.vbsRegistration(orgId, viewingYear ?? undefined);
     setData(workspace);
     setError("");
-  }, [orgId]);
+  }, [orgId, viewingEventId, viewingYear]);
 
   useEffect(() => {
+    if (!eventsReady) {
+      return;
+    }
     let cancelled = false;
     api
-      .vbsRegistration(orgId)
+      .vbsRegistration(orgId, viewingYear ?? undefined)
       .then((workspace) => {
         if (!cancelled) {
           setData(workspace);
@@ -227,7 +201,7 @@ export default function VbsRegistrationPage() {
     return () => {
       cancelled = true;
     };
-  }, [orgId]);
+  }, [eventsReady, orgEventEpoch, orgId, viewingEventId, viewingYear]);
 
   useEffect(() => {
     const pick = working?.programTitle && working.programTitle !== "all" ? working : filterDefault;
@@ -248,8 +222,8 @@ export default function VbsRegistrationPage() {
 
   const activeSection = sections.find((section) => section.id === tab);
   const vbsAgeOn = useMemo(
-    () => vbsSeasonAgeReferenceDate(data?.activeVbsYear ?? new Date().getFullYear()),
-    [data?.activeVbsYear],
+    () => vbsSeasonAgeReferenceDate(viewingYear ?? data?.activeVbsYear ?? new Date().getFullYear()),
+    [data?.activeVbsYear, viewingYear],
   );
   const draftAge = ageFromBirthMonthYear(draft.birthMonth, draft.birthYear, vbsAgeOn);
 
@@ -290,7 +264,11 @@ export default function VbsRegistrationPage() {
       return;
     }
     await run(async () => {
-      const result = await api.saveVbsRegistrationStudent(orgId, { ...draft, id: "" });
+      const result = await api.saveVbsRegistrationStudent(orgId, {
+        ...draft,
+        id: "",
+        vbsSeasonYear: viewingYear ?? data.activeVbsYear,
+      });
       setDraft(emptyRegistrationStudentDraft());
       focusStudent(result.student.id);
     });
@@ -380,25 +358,6 @@ export default function VbsRegistrationPage() {
             Register children on <strong>Students</strong>, then assign them to station classes on{" "}
             <strong>Classes & roster</strong>. Volunteers come from Members & invites — not the student list.
           </p>
-          {data.viewAllSeasons && data.registrationSeasons.length > 0 ? (
-            <label className="vbs-task-field vbs-registration-season-filter">
-              <span className="vbs-task-field-label">Show students for</span>
-              <select
-                value={seasonFilter === "all" ? "all" : String(seasonFilter)}
-                onChange={(e) =>
-                  setSeasonFilter(e.target.value === "all" ? "all" : Number(e.target.value))
-                }
-              >
-                <option value="all">All VBS seasons</option>
-                {data.registrationSeasons.map((year) => (
-                  <option key={year} value={year}>
-                    VBS {year}
-                    {year === data.activeVbsYear ? " (active)" : ""}
-                  </option>
-                ))}
-              </select>
-            </label>
-          ) : null}
           {!data.viewAllSeasons && data.viewSeason !== null ? (
             <p className="muted">
               Your access is limited to <strong>VBS {data.viewSeason}</strong> students.
@@ -500,7 +459,7 @@ export default function VbsRegistrationPage() {
                 <VbsRegistrationClassesBoard
                   orgId={orgId}
                   data={rosterData}
-                  vbsAgeOn={vbsSeasonAgeReferenceDate(rosterData.activeVbsYear)}
+                  vbsAgeOn={vbsAgeOn}
                   canWrite={data.canWrite}
                   onReload={reload}
                 />

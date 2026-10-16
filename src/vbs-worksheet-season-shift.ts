@@ -1,15 +1,56 @@
 import crypto from "node:crypto";
 
-function shiftIsoYear(iso: string, yearDelta: number): string {
-  const trimmed = iso.trim();
-  if (!trimmed || !/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
-    return trimmed;
+function parseIsoUtc(iso: string) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso.trim());
+  if (!match) {
+    return null;
   }
-  const [year, month, day] = trimmed.split("-").map(Number);
-  if (!year || !month || !day) {
-    return trimmed;
+  return Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+}
+
+export function isoDayOffset(fromIso: string, toIso: string) {
+  const from = parseIsoUtc(fromIso);
+  const to = parseIsoUtc(toIso);
+  if (from === null || to === null) {
+    return null;
   }
-  return `${year + yearDelta}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  return Math.round((to - from) / 86_400_000);
+}
+
+export function addIsoDays(iso: string, days: number) {
+  const from = parseIsoUtc(iso);
+  if (from === null) {
+    return iso;
+  }
+  const next = new Date(from);
+  next.setUTCDate(next.getUTCDate() + days);
+  return next.toISOString().slice(0, 10);
+}
+
+/** Move a date by the same day-of-week offset it had from the source start. */
+export function shiftIsoRelativeToStart(iso: string, sourceStart: string, newStart: string) {
+  const offset = isoDayOffset(sourceStart, iso);
+  if (offset === null) {
+    return iso;
+  }
+  return addIsoDays(newStart, offset);
+}
+
+/** Same month/day in `year`, then nudge so the weekday matches the source date. */
+export function sameWeekdayInYear(iso: string, year: number) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso.trim());
+  if (!match || !Number.isInteger(year) || year < 2000) {
+    return iso;
+  }
+  const target = `${year}-${match[2]}-${match[3]}`;
+  const sourceUtc = parseIsoUtc(iso);
+  const targetUtc = parseIsoUtc(target);
+  if (sourceUtc === null || targetUtc === null) {
+    return target;
+  }
+  const sourceDow = new Date(sourceUtc).getUTCDay();
+  const targetDow = new Date(targetUtc).getUTCDay();
+  return addIsoDays(target, sourceDow - targetDow);
 }
 
 function defaultPlacementDayDates(planStart: string, planEnd: string): string[] {
@@ -34,7 +75,14 @@ function sortDayDates(dayDates: string[]) {
 
 type LooseRecord = Record<string, unknown>;
 
-function shiftPrayerSchedule(raw: unknown, yearDelta: number): unknown {
+function shiftDateString(iso: string, sourceStart: string, newStart: string) {
+  if (!sourceStart || !newStart) {
+    return iso;
+  }
+  return shiftIsoRelativeToStart(iso, sourceStart, newStart);
+}
+
+function shiftPrayerSchedule(raw: unknown, sourceStart: string, newStart: string): unknown {
   if (!Array.isArray(raw)) {
     return raw;
   }
@@ -43,7 +91,8 @@ function shiftPrayerSchedule(raw: unknown, yearDelta: number): unknown {
       return entry;
     }
     const row = entry as LooseRecord;
-    const prayDate = typeof row.prayDate === "string" ? shiftIsoYear(row.prayDate, yearDelta) : row.prayDate;
+    const prayDate =
+      typeof row.prayDate === "string" ? shiftDateString(row.prayDate, sourceStart, newStart) : row.prayDate;
     return {
       ...row,
       id: typeof crypto.randomUUID === "function" ? crypto.randomUUID() : row.id,
@@ -52,7 +101,13 @@ function shiftPrayerSchedule(raw: unknown, yearDelta: number): unknown {
   });
 }
 
-function shiftVolunteerPlacements(raw: unknown, yearDelta: number, planStart: string, planEnd: string): unknown {
+function shiftVolunteerPlacements(
+  raw: unknown,
+  sourceStart: string,
+  newStart: string,
+  planStart: string,
+  planEnd: string,
+): unknown {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
     return raw;
   }
@@ -67,7 +122,7 @@ function shiftVolunteerPlacements(raw: unknown, yearDelta: number, planStart: st
   } else {
     const map = new Map<string, string>();
     for (const oldDate of dayDates) {
-      map.set(oldDate, shiftIsoYear(oldDate, yearDelta));
+      map.set(oldDate, shiftDateString(oldDate, sourceStart, newStart));
     }
     dayDates = sortDayDates([...map.values()]);
     const shiftedRows = rows.map((entry) => {
@@ -77,8 +132,8 @@ function shiftVolunteerPlacements(raw: unknown, yearDelta: number, planStart: st
       const row = entry as { roleLabel?: string; assignmentsByDate?: Record<string, string> };
       const oldCells = row.assignmentsByDate ?? {};
       const cells: Record<string, string> = {};
-      for (const [oldDate, newDate] of map.entries()) {
-        cells[newDate] = oldCells[oldDate] ?? oldCells[newDate] ?? "";
+      for (const [oldDate, mapped] of map.entries()) {
+        cells[mapped] = oldCells[oldDate] ?? oldCells[mapped] ?? "";
       }
       for (const date of dayDates) {
         if (cells[date] === undefined) {
@@ -104,7 +159,7 @@ function shiftVolunteerPlacements(raw: unknown, yearDelta: number, planStart: st
   return { dayDates, rows: normalizedRows };
 }
 
-function shiftVolunteerTimeline(raw: unknown, yearDelta: number): unknown {
+function shiftVolunteerTimeline(raw: unknown, sourceStart: string, newStart: string): unknown {
   if (!Array.isArray(raw)) {
     return raw;
   }
@@ -116,15 +171,15 @@ function shiftVolunteerTimeline(raw: unknown, yearDelta: number): unknown {
     if (typeof row.date !== "string" || !row.date.trim()) {
       return entry;
     }
-    return { ...row, date: shiftIsoYear(row.date, yearDelta) };
+    return { ...row, date: shiftDateString(row.date, sourceStart, newStart) };
   });
 }
 
-/** Shift date-bearing workbook fields when copying a VBS season to a new year. */
+/** Shift date-bearing workbook fields so they keep the same weekday offset from VBS start. */
 export function shiftPlanWorksheetForSeasonCopy(
   worksheetData: unknown,
-  yearDelta: number,
-  planStart: string,
+  sourceStart: string,
+  newStart: string,
   planEnd: string,
 ): Record<string, unknown> {
   if (!worksheetData || typeof worksheetData !== "object" || Array.isArray(worksheetData)) {
@@ -133,8 +188,14 @@ export function shiftPlanWorksheetForSeasonCopy(
   const source = worksheetData as Record<string, unknown>;
   return {
     ...source,
-    prayerSchedule: shiftPrayerSchedule(source.prayerSchedule, yearDelta),
-    volunteerPlacements: shiftVolunteerPlacements(source.volunteerPlacements, yearDelta, planStart, planEnd),
-    volunteerTimeline: shiftVolunteerTimeline(source.volunteerTimeline, yearDelta),
+    prayerSchedule: shiftPrayerSchedule(source.prayerSchedule, sourceStart, newStart),
+    volunteerPlacements: shiftVolunteerPlacements(
+      source.volunteerPlacements,
+      sourceStart,
+      newStart,
+      newStart,
+      planEnd,
+    ),
+    volunteerTimeline: shiftVolunteerTimeline(source.volunteerTimeline, sourceStart, newStart),
   };
 }

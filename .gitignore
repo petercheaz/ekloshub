@@ -6,6 +6,7 @@ client/dist/
 .env
 .env.*
 !.env.example
+deploy/lightsail/.credentials.local
 *.pem
 *.p12
 credentials.json

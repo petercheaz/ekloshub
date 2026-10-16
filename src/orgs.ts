@@ -165,6 +165,16 @@ export async function getOrganization(organizationId: string, username: string, 
   );
   const { getActiveVbsYear } = await import("./vbs-org-season.js");
   const activeVbsYear = await getActiveVbsYear(organizationId);
+  const eventMemberships = await db().query<{ username: string; event_id: string }>(
+    `SELECT username, event_id FROM vbs_event_members WHERE organization_id = $1`,
+    [organizationId],
+  );
+  const eventIdsByUser = new Map<string, string[]>();
+  for (const row of eventMemberships.rows) {
+    const list = eventIdsByUser.get(row.username) ?? [];
+    list.push(row.event_id);
+    eventIdsByUser.set(row.username, list);
+  }
   const invitations =
     org.role === "org_admin" || org.role === "registration_admin"
       ? (
@@ -225,6 +235,7 @@ export async function getOrganization(organizationId: string, username: string, 
     members: members.rows.map((row) => ({
       ...presentMember(row),
       teamAdminTeamIds: teamAdminByUser.get(row.username) ?? [],
+      vbsEventIds: eventIdsByUser.get(row.username) ?? [],
     })),
     invitations,
     teams: await listTeamsForViewer(organizationId, username, platformAdmin),
@@ -252,10 +263,15 @@ export async function createOrganization(
      VALUES ($1,$2,$3,$4,$5,$6,$7)`,
     [id, name, address, contact, username, createdAt, year],
   );
+  const { seedOrgVbsEvent } = await import("./vbs-event-context.js");
+  const eventId = await seedOrgVbsEvent(id, year, username);
   await db().query(
-    `INSERT INTO organization_members (organization_id, username, role, vbs_season_year, added_at)
-     VALUES ($1,$2,'org_admin',$3,NOW())`,
-    [id, username, year],
+    `INSERT INTO organization_members (organization_id, username, role, vbs_season_year, default_vbs_event_id, added_at)
+     VALUES ($1,$2,'org_admin',$3,$4,NOW())
+     ON CONFLICT (organization_id, username) DO UPDATE SET
+       role = 'org_admin',
+       default_vbs_event_id = COALESCE(organization_members.default_vbs_event_id, EXCLUDED.default_vbs_event_id)`,
+    [id, username, year, eventId],
   );
   return {
     organization: {
@@ -324,16 +340,22 @@ export async function addOrganizationMember(
       }
     }
     const { seasonYearForNewMember } = await import("./vbs-org-season.js");
+    const { addMemberToVbsEvent, getActiveVbsEvent } = await import("./vbs-event-context.js");
     const seasonYear = await seasonYearForNewMember(organizationId);
+    const activeEvent = await getActiveVbsEvent(organizationId);
     await db().query(
-      `INSERT INTO organization_members (organization_id, username, role, vbs_season_year, added_at, removed_at)
-       VALUES ($1,$2,$3,$4,NOW(),NULL)
+      `INSERT INTO organization_members (organization_id, username, role, vbs_season_year, default_vbs_event_id, added_at, removed_at)
+       VALUES ($1,$2,$3,$4,$5,NOW(),NULL)
        ON CONFLICT (organization_id, username) DO UPDATE SET
          role = EXCLUDED.role,
          removed_at = NULL,
-         vbs_season_year = EXCLUDED.vbs_season_year`,
-      [organizationId, name, role, seasonYear],
+         vbs_season_year = EXCLUDED.vbs_season_year,
+         default_vbs_event_id = COALESCE(organization_members.default_vbs_event_id, EXCLUDED.default_vbs_event_id)`,
+      [organizationId, name, role, seasonYear, activeEvent?.id ?? null],
     );
+    if (activeEvent) {
+      await addMemberToVbsEvent(organizationId, name, activeEvent.id);
+    }
   }
   return getOrganization(organizationId, actor, false);
 }

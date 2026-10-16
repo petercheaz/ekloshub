@@ -16,6 +16,7 @@ import {
   assertRegistrationWrite,
   registrationStudentVisible,
   resolveRegistrationViewerSeason,
+  parseSeasonYear,
   seasonYearForNewRegistration,
 } from "./vbs-org-season.js";
 
@@ -120,6 +121,7 @@ export type RegistrationRow = {
   created_at: Date;
   updated_at: Date;
   vbs_season_year: number;
+  vbs_event_id: string | null;
   class_roster_sort: number;
 };
 
@@ -127,7 +129,7 @@ export const registrationRowReturnSql = `id, organization_id, child_full_name, c
   comments, special_requests, contact1_name, contact1_phone, contact1_email, contact2_name, contact2_phone, contact2_email,
   attend_mon, attend_tue, attend_wed, attend_thu, attend_fri, tshirt_size, assigned_team_id,
   nametag_image_key, nametag_extra_instructions, created_by, source, created_at, updated_at, class_id, payment_status,
-  vbs_season_year, COALESCE(class_roster_sort, 0)::int AS class_roster_sort`;
+  vbs_season_year, vbs_event_id, COALESCE(class_roster_sort, 0)::int AS class_roster_sort`;
 
 const REGISTRATION_ROW_RETURN = registrationRowReturnSql;
 
@@ -370,7 +372,11 @@ function firstName(fullName: string) {
   return trimmed.split(/\s+/)[0] ?? trimmed;
 }
 
-export async function getRegistrationWorkspace(organizationId: string, username: string) {
+export async function getRegistrationWorkspace(
+  organizationId: string,
+  username: string,
+  viewingYear?: number,
+) {
   const access = await requireMember(organizationId, username);
   if (!access.ok) {
     return { error: access.error };
@@ -383,6 +389,10 @@ export async function getRegistrationWorkspace(organizationId: string, username:
     return { error: seasonAccess.error };
   }
   const cookingTeamId = await resolveCookingTeamId(organizationId);
+  const { resolveRequestedVbsEvent } = await import("./vbs-event-context.js");
+  const viewingEvent = await resolveRequestedVbsEvent(organizationId);
+  const eventYear = viewingEvent?.year ?? parseSeasonYear(viewingYear);
+  const eventId = viewingEvent?.id;
   const teams = await listTeamsForViewer(organizationId, username, platformAdmin);
   const teamMap = new Map(teams.map((team) => [team.id, team.name]));
   const { CORNERSTONE_ORG_ID_FOR_STUDENTS, ensureCornerstoneDemoStudents } = await import(
@@ -402,10 +412,21 @@ export async function getRegistrationWorkspace(organizationId: string, username:
     "./vbs-registration-classes.js",
   );
   await ensureDefaultRegistrationClasses(organizationId);
-  const visibleRows = result.rows.filter((row) =>
+  let visibleRows = result.rows.filter((row) =>
     registrationStudentVisible(row.vbs_season_year ?? new Date().getFullYear(), seasonAccess),
   );
-  const classSeasonYears = new Set<number>([seasonAccess.activeSeason]);
+  if (eventId) {
+    visibleRows = visibleRows.filter(
+      (row) =>
+        row.vbs_event_id === eventId ||
+        (!row.vbs_event_id && (row.vbs_season_year ?? seasonAccess.activeSeason) === eventYear),
+    );
+  } else if (eventYear && seasonAccess.viewAllSeasons) {
+    visibleRows = visibleRows.filter(
+      (row) => (row.vbs_season_year ?? seasonAccess.activeSeason) === eventYear,
+    );
+  }
+  const classSeasonYears = new Set<number>([eventYear ?? seasonAccess.activeSeason]);
   for (const row of visibleRows) {
     classSeasonYears.add(row.vbs_season_year ?? seasonAccess.activeSeason);
   }
@@ -430,21 +451,40 @@ export async function getRegistrationWorkspace(organizationId: string, username:
     last_name: string;
     email: string;
     role: OrgRole;
+    vbs_season_year: number;
   }>(
-    `SELECT m.username, u.first_name, u.last_name, u.email, m.role
+    `SELECT m.username, u.first_name, u.last_name, u.email, m.role, m.vbs_season_year
      FROM organization_members m
      JOIN users u ON u.username = m.username
      WHERE m.organization_id = $1 AND m.removed_at IS NULL
      ORDER BY LOWER(COALESCE(NULLIF(u.last_name, ''), m.username)), LOWER(u.first_name), m.username`,
     [organizationId],
   );
-  const staffMembers = staffMembersResult.rows.map((row) => ({
-    username: row.username,
-    firstName: row.first_name ?? "",
-    lastName: row.last_name ?? "",
-    email: row.email ?? "",
-    role: row.role,
-  }));
+  const eventMemberNames = eventId
+    ? new Set(
+        (
+          await db().query<{ username: string }>(
+            `SELECT username FROM vbs_event_members WHERE event_id = $1`,
+            [eventId],
+          )
+        ).rows.map((row) => row.username),
+      )
+    : null;
+  const staffMembers = staffMembersResult.rows
+    .filter((row) => {
+      if (eventMemberNames && eventMemberNames.size > 0) {
+        return eventMemberNames.has(row.username);
+      }
+      return !eventYear || row.vbs_season_year === eventYear;
+    })
+    .map((row) => ({
+      username: row.username,
+      firstName: row.first_name ?? "",
+      lastName: row.last_name ?? "",
+      email: row.email ?? "",
+      role: row.role,
+      vbsSeasonYear: row.vbs_season_year,
+    }));
   const registrationSeasons = [
     ...new Set(result.rows.map((row) => row.vbs_season_year ?? new Date().getFullYear())),
   ].sort((a, b) => b - a);
@@ -489,6 +529,8 @@ export async function getRegistrationWorkspace(organizationId: string, username:
     staffMembers,
     teams: teams.map((team) => ({ id: team.id, name: team.name })),
     activeVbsYear: seasonAccess.activeSeason,
+    viewingYear: eventYear ?? (seasonAccess.viewAllSeasons ? seasonAccess.activeSeason : seasonAccess.viewSeason),
+    viewingEventId: eventId ?? null,
     viewAllSeasons: seasonAccess.viewAllSeasons,
     viewSeason: seasonAccess.viewAllSeasons ? null : seasonAccess.viewSeason,
     registrationSeasons: seasonAccess.viewAllSeasons ? registrationSeasons : [seasonAccess.viewSeason],
@@ -644,16 +686,30 @@ export async function saveRegistrationStudent(
   }
   const id = crypto.randomUUID();
   const insertedAt = params[params.length - 1]!;
-  const registrationSeason = await seasonYearForNewRegistration(organizationId);
+  const { getActiveVbsEvent, resolveRequestedVbsEvent } = await import("./vbs-event-context.js");
+  const viewingEvent = (await resolveRequestedVbsEvent(organizationId)) ?? (await getActiveVbsEvent(organizationId));
+  const requestedSeason = parseSeasonYear(input.vbsSeasonYear);
+  const registrationSeason =
+    requestedSeason && writeAccess.access.viewAllSeasons
+      ? requestedSeason
+      : (viewingEvent?.year ?? (await seasonYearForNewRegistration(organizationId)));
   const inserted = await db().query<RegistrationRow>(
     `INSERT INTO vbs_registrations (
       id, organization_id, child_full_name, child_gender, birth_month, birth_year, allergies_common, allergies_other,
       comments, special_requests, contact1_name, contact1_phone, contact1_email, contact2_name, contact2_phone,
       contact2_email, attend_mon, attend_tue, attend_wed, attend_thu, attend_fri, tshirt_size, assigned_team_id,
-      class_id, payment_status, nametag_extra_instructions, created_by, source, created_at, updated_at, vbs_season_year
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,'staff',$28,$28,$29)
+      class_id, payment_status, nametag_extra_instructions, created_by, source, created_at, updated_at, vbs_season_year, vbs_event_id
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,'staff',$28,$28,$29,$30)
     RETURNING ${REGISTRATION_ROW_RETURN}`,
-    [id, organizationId, ...params.slice(0, -1), username, insertedAt, registrationSeason],
+    [
+      id,
+      organizationId,
+      ...params.slice(0, -1),
+      username,
+      insertedAt,
+      registrationSeason,
+      viewingEvent?.id ?? null,
+    ],
   );
   const row = inserted.rows[0]!;
   if (row.class_id) {

@@ -17,6 +17,7 @@ import {
 import { publisherName } from "./setup.js";
 import { isPlatformAdmin } from "./users.js";
 import { isCookingTeamParticipant, resolveCookingTeamId } from "./vbs-registration-access.js";
+import { getActiveVbsYear, parseSeasonYear } from "./vbs-org-season.js";
 import {
   COMMON_REGISTRATION_ALLERGIES,
   formatAllergiesSummary,
@@ -190,9 +191,16 @@ export async function generateSnacksMenu(
     return { error: "Choose a VBS title that matches the publisher and year" as const };
   }
   const org = await db().query<{ name: string }>(`SELECT name FROM organizations WHERE id = $1`, [organizationId]);
+  const { resolveRequestedVbsEvent } = await import("./vbs-event-context.js");
+  const viewingEvent = await resolveRequestedVbsEvent(organizationId);
+  const year = viewingEvent?.year ?? parseSeasonYear(input.year) ?? (await getActiveVbsYear(organizationId));
   const registrations = await db().query<RegistrationRow>(
-    `SELECT child_full_name, allergies_common, allergies_other FROM vbs_registrations WHERE organization_id = $1`,
-    [organizationId],
+    `SELECT child_full_name, allergies_common, allergies_other FROM vbs_registrations
+     WHERE organization_id = $1 AND (
+       ($3::text IS NOT NULL AND vbs_event_id = $3)
+       OR ($3::text IS NULL AND COALESCE(vbs_season_year, $2) = $2)
+     )`,
+    [organizationId, year, viewingEvent?.id ?? null],
   );
   const menuRow = await db().query<{ extra_instructions: string; menu_text: string }>(
     `SELECT extra_instructions, menu_text FROM vbs_registration_snacks_menu WHERE organization_id = $1`,

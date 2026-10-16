@@ -12,19 +12,15 @@ import { defaultEmailForUsername } from "../src/users.js";
 import { assignPrimaryTeamAdmin } from "../src/team-admin.js";
 import { hashUserPassword } from "../src/vbs-password.js";
 
-function passwordFor(envKey: string, fallbackUser?: string) {
-  const specific = process.env[envKey]?.trim();
-  if (specific) {
-    return specific;
+function passwordFor(envKey: string) {
+  const value =
+    process.env[envKey]?.trim() ||
+    process.env.E2E_DEFAULT_PASSWORD?.trim() ||
+    process.env.AUTH_PASSWORD?.trim();
+  if (!value) {
+    throw new Error(`Set ${envKey}, E2E_DEFAULT_PASSWORD, or AUTH_PASSWORD in .env`);
   }
-  const shared = process.env.E2E_DEFAULT_PASSWORD?.trim();
-  if (shared) {
-    return shared;
-  }
-  if (fallbackUser === "admin") {
-    return process.env.AUTH_PASSWORD?.trim() ?? "vbs-dev";
-  }
-  return process.env.AUTH_PASSWORD?.trim() ?? "vbs-dev";
+  return value;
 }
 
 type PersonaDef = {
@@ -156,7 +152,7 @@ async function main() {
 
   for (const persona of PERSONAS) {
     const username = process.env[persona.usernameEnv]?.trim() || persona.defaultUsername;
-    const password = passwordFor(persona.passwordEnv, persona.defaultUsername);
+    const password = passwordFor(persona.passwordEnv);
     const firstName = persona.firstName ?? username.split("@")[0] ?? "E2E";
     const lastName = persona.lastName ?? "User";
     await upsertUser(username, password, persona.platformAdmin ?? false, firstName, lastName);

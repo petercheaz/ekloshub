@@ -2,6 +2,7 @@ import { canManageOrgMembers, type OrgRole } from "./org-permissions.js";
 import { getMembership } from "./orgs.js";
 import { isPlatformAdmin } from "./users.js";
 import { db } from "./db/pool.js";
+import { parseSeasonYear } from "./vbs-org-season.js";
 
 export const backgroundCheckStatuses = ["not_started", "pending", "cleared"] as const;
 export type BackgroundCheckStatus = (typeof backgroundCheckStatuses)[number];
@@ -27,11 +28,28 @@ async function requireComplianceViewer(organizationId: string, username: string)
   return { ok: true as const };
 }
 
-export async function listVolunteerCompliance(organizationId: string, username: string) {
+export async function listVolunteerCompliance(
+  organizationId: string,
+  username: string,
+  viewingYear?: number,
+) {
   const access = await requireComplianceViewer(organizationId, username);
   if ("error" in access) {
     return access;
   }
+  const { resolveRequestedVbsEvent } = await import("./vbs-event-context.js");
+  const viewingEvent = await resolveRequestedVbsEvent(organizationId);
+  const eventYear = viewingEvent?.year ?? parseSeasonYear(viewingYear);
+  const eventMembers = viewingEvent
+    ? new Set(
+        (
+          await db().query<{ username: string }>(
+            `SELECT username FROM vbs_event_members WHERE event_id = $1`,
+            [viewingEvent.id],
+          )
+        ).rows.map((row) => row.username),
+      )
+    : null;
   const result = await db().query<{
     username: string;
     role: OrgRole;
@@ -40,21 +58,30 @@ export async function listVolunteerCompliance(organizationId: string, username: 
     last_name: string;
     email: string;
     removed_at: Date | null;
+    vbs_season_year: number;
   }>(
     `SELECT m.username, m.role, m.background_check_status,
-            u.first_name, u.last_name, u.email, m.removed_at
+            u.first_name, u.last_name, u.email, m.removed_at, m.vbs_season_year
      FROM organization_members m
      JOIN users u ON u.username = m.username
      WHERE m.organization_id = $1 AND m.removed_at IS NULL
      ORDER BY LOWER(COALESCE(NULLIF(u.last_name, ''), m.username)), LOWER(u.first_name), m.username`,
     [organizationId],
   );
-  const volunteers = result.rows.map((row) => ({
+  const volunteers = result.rows
+    .filter((row) => {
+      if (eventMembers && eventMembers.size > 0) {
+        return eventMembers.has(row.username);
+      }
+      return !eventYear || row.vbs_season_year === eventYear;
+    })
+    .map((row) => ({
     username: row.username,
     role: row.role,
     firstName: row.first_name ?? "",
     lastName: row.last_name ?? "",
     email: row.email ?? row.username,
+    vbsSeasonYear: row.vbs_season_year,
     backgroundCheckStatus: isBackgroundCheckStatus(row.background_check_status)
       ? row.background_check_status
       : ("not_started" as const),
@@ -73,6 +100,7 @@ export async function updateVolunteerBackgroundCheck(
   actor: string,
   memberUsername: string,
   status: string,
+  viewingYear?: number,
 ) {
   const access = await requireComplianceViewer(organizationId, actor);
   if ("error" in access) {
@@ -94,5 +122,5 @@ export async function updateVolunteerBackgroundCheck(
      WHERE organization_id = $1 AND username = $2`,
     [organizationId, memberUsername, status],
   );
-  return listVolunteerCompliance(organizationId, actor);
+  return listVolunteerCompliance(organizationId, actor, viewingYear);
 }
