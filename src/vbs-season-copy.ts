@@ -553,9 +553,12 @@ async function writeLivePlanFromSnapshot(
     eventId?: string;
     /** When set, replaces snapshot budget (use 0 for a fresh project copy). */
     budgetAmount?: number;
+    /** Catalog release year (may differ from {@link fields.year} / VBS week year). */
+    curriculumYear?: number;
   },
 ) {
   const budgetAmount = fields.budgetAmount ?? snapshot.plan.budgetAmount;
+  const curriculumYear = fields.curriculumYear ?? fields.year;
   const client = await db().connect();
   try {
     await client.query("BEGIN");
@@ -565,15 +568,16 @@ async function writeLivePlanFromSnapshot(
       await clearPlanChildren(planId);
       await client.query(
         `UPDATE vbs_plans SET
-           event_id = COALESCE($17, event_id),
-           year = $2, title = $3, publisher_id = $4, program_title = $5, location = $6,
-           start_date = $7, end_date = $8, daily_start = $9, daily_end = $10, expected_kids = $11,
-           coordinator_notes = $12, family_public_notes = $13, budget_amount = $14,
-           expenses_amount = 0, worksheet_data = $15::jsonb, updated_at = $16
+           event_id = COALESCE($18, event_id),
+           year = $2, curriculum_year = $3, title = $4, publisher_id = $5, program_title = $6, location = $7,
+           start_date = $8, end_date = $9, daily_start = $10, daily_end = $11, expected_kids = $12,
+           coordinator_notes = $13, family_public_notes = $14, budget_amount = $15,
+           expenses_amount = 0, worksheet_data = $16::jsonb, updated_at = $17
          WHERE id = $1`,
         [
           planId,
           fields.year,
+          curriculumYear,
           fields.title,
           fields.publisherId,
           fields.programTitle,
@@ -595,15 +599,16 @@ async function writeLivePlanFromSnapshot(
       planId = crypto.randomUUID();
       await client.query(
         `INSERT INTO vbs_plans (
-           id, organization_id, event_id, year, title, publisher_id, program_title, location,
+           id, organization_id, event_id, year, curriculum_year, title, publisher_id, program_title, location,
            start_date, end_date, daily_start, daily_end, expected_kids, coordinator_notes,
            family_public_notes, budget_amount, expenses_amount, worksheet_data, updated_at
-         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,0,$17::jsonb,$18)`,
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,0,$18::jsonb,$19)`,
         [
           planId,
           organizationId,
           fields.eventId ?? null,
           fields.year,
+          curriculumYear,
           fields.title,
           fields.publisherId,
           fields.programTitle,
@@ -784,6 +789,7 @@ export async function copyVbsSeasonToNewEvent(
     endDate?: string;
     publisherId?: string;
     programTitle?: string;
+    curriculumYear?: number;
     makeCurrent?: boolean;
   },
 ) {
@@ -794,7 +800,7 @@ export async function copyVbsSeasonToNewEvent(
   const {
     addMemberToVbsEvent,
     getVbsEvent,
-    sessionNameFromDates,
+    defaultProjectNameFromDates,
     setActiveVbsEvent,
     syncEventCurriculum,
     uniqueEventName,
@@ -831,8 +837,7 @@ export async function copyVbsSeasonToNewEvent(
       : addDaysToIsoDate(startDate, 4));
   const preferred =
     (input.name ?? "").trim() ||
-    sessionNameFromDates(startDate, endDate) ||
-    source.plan.programTitle.trim() ||
+    defaultProjectNameFromDates(startDate, endDate) ||
     "Session";
   const name = await uniqueEventName(organizationId, toYear, preferred);
 
@@ -847,27 +852,26 @@ export async function copyVbsSeasonToNewEvent(
         toYear,
       );
 
+  const catalogYear =
+    input.curriculumYear && Number.isInteger(input.curriculumYear) && input.curriculumYear >= 2000
+      ? input.curriculumYear
+      : toYear;
+
   const eventId = crypto.randomUUID();
   await db().query(
-    `INSERT INTO vbs_events (id, organization_id, year, name, publisher_id, program_title, created_at, updated_at)
-     VALUES ($1,$2,$3,$4,$5,$6,NOW(),NOW())`,
-    [eventId, organizationId, toYear, name, curriculum.publisherId, curriculum.programTitle],
+    `INSERT INTO vbs_events (id, organization_id, year, curriculum_year, name, publisher_id, program_title, created_at, updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,NOW(),NOW())`,
+    [eventId, organizationId, toYear, catalogYear, name, curriculum.publisherId, curriculum.programTitle],
   );
   await addMemberToVbsEvent(organizationId, username, eventId);
-  const title = copiedPlanTitle(
-    toYear,
-    curriculum.programTitle,
-    source.plan.title,
-    sourceEvent.year,
-    userPickedCurriculum,
-  );
   const shiftedWorksheet = stripVolunteerPeopleFromWorksheet(
     shiftPlanWorksheetForSeasonCopy(source.plan.worksheetData, sourceStart, startDate, endDate),
   );
 
   await writeLivePlanFromSnapshot(organizationId, undefined, source, {
     year: toYear,
-    title,
+    curriculumYear: catalogYear,
+    title: name,
     publisherId: curriculum.publisherId,
     programTitle: curriculum.programTitle,
     startDate,
@@ -878,6 +882,7 @@ export async function copyVbsSeasonToNewEvent(
   });
   await syncEventCurriculum(eventId, {
     year: toYear,
+    curriculumYear: catalogYear,
     publisherId: curriculum.publisherId,
     programTitle: curriculum.programTitle,
     name,
@@ -921,6 +926,7 @@ export async function copyVbsSeasonFromYear(
     endDate?: string;
     publisherId?: string;
     programTitle?: string;
+    curriculumYear?: number;
     makeCurrent?: boolean;
   },
 ) {
@@ -954,6 +960,7 @@ export async function copyVbsSeasonFromYear(
     endDate: input.endDate,
     publisherId: input.publisherId,
     programTitle: input.programTitle,
+    curriculumYear: input.curriculumYear,
     makeCurrent: input.makeCurrent === true,
   });
 }

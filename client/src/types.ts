@@ -335,6 +335,8 @@ export type VbsPlan = {
   id: string;
   organizationId: string;
   year: number;
+  /** Catalog release year (may differ from {@link year} when reusing an older theme). */
+  curriculumYear: number;
   title: string;
   publisherId: string;
   programTitle: string;

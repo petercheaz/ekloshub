@@ -84,6 +84,16 @@ export function sessionNameFromDates(startDate?: string | Date | null, endDate?:
   return `${startLabel}–${SHORT_MONTHS[end.month - 1]} ${end.day}`;
 }
 
+/** Default project name in the bar (not curriculum title). */
+export function defaultProjectNameFromDates(startDate?: string | Date | null, endDate?: string | Date | null) {
+  const span = sessionNameFromDates(startDate, endDate);
+  const start = parseIsoParts(isoDay(startDate));
+  if (!span) {
+    return "";
+  }
+  return start ? `VBS ${span} ${start.year}` : `VBS ${span}`;
+}
+
 export async function uniqueEventName(
   organizationId: string,
   year: number,
@@ -118,7 +128,9 @@ export async function ensureEventHasUniqueName(
     return event.name.trim();
   }
   const preferred =
-    sessionNameFromDates(dates?.startDate, dates?.endDate) || event.program_title.trim() || "Session";
+    defaultProjectNameFromDates(dates?.startDate, dates?.endDate) ||
+    sessionNameFromDates(dates?.startDate, dates?.endDate) ||
+    "Session";
   const name = await uniqueEventName(organizationId, event.year, preferred, event.id);
   await db().query(`UPDATE vbs_events SET name = $2, updated_at = NOW() WHERE id = $1`, [event.id, name]);
   return name;
@@ -222,19 +234,27 @@ export async function setActiveVbsEvent(organizationId: string, eventId: string)
 
 export async function syncEventCurriculum(
   eventId: string,
-  fields: { year?: number; publisherId?: string; programTitle?: string; name?: string },
+  fields: {
+    year?: number;
+    curriculumYear?: number;
+    publisherId?: string;
+    programTitle?: string;
+    name?: string;
+  },
 ) {
   await db().query(
     `UPDATE vbs_events SET
        year = COALESCE($2, year),
-       publisher_id = COALESCE($3, publisher_id),
-       program_title = COALESCE($4, program_title),
-       name = COALESCE($5, name),
+       curriculum_year = COALESCE($3, curriculum_year),
+       publisher_id = COALESCE($4, publisher_id),
+       program_title = COALESCE($5, program_title),
+       name = COALESCE($6, name),
        updated_at = NOW()
      WHERE id = $1`,
     [
       eventId,
       fields.year ?? null,
+      fields.curriculumYear ?? null,
       fields.publisherId ?? null,
       fields.programTitle ?? null,
       fields.name ?? null,

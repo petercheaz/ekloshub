@@ -8,6 +8,7 @@ import { getMembership } from "./orgs.js";
 import { isPlatformAdmin } from "./users.js";
 import {
   addMemberToVbsEvent,
+  defaultProjectNameFromDates,
   ensureEventHasUniqueName,
   eventLabel,
   getActiveVbsEvent,
@@ -252,10 +253,13 @@ export async function createOrgVbsEvent(
     return { error: "Choose a VBS to copy from" as const };
   }
   const year = parseSeasonYear(input.year) ?? source.year;
+  const explicitName = typeof input.name === "string" ? input.name.trim() : "";
+  const duplicateName =
+    explicitName || (input.startDate || input.endDate ? "" : source.name.trim()) || undefined;
   const copied = await copyVbsSeasonToNewEvent(organizationId, username, {
     fromEventId: source.id,
     toYear: year,
-    name: input.name,
+    name: duplicateName,
     startDate: input.startDate,
     endDate: input.endDate,
     makeCurrent: input.makeCurrent === true,
@@ -296,8 +300,8 @@ export async function renameOrgVbsEvent(
       [event.id],
     );
     preferred =
+      defaultProjectNameFromDates(dates.rows[0]?.start_date, dates.rows[0]?.end_date) ||
       sessionNameFromDates(dates.rows[0]?.start_date, dates.rows[0]?.end_date) ||
-      event.program_title.trim() ||
       "Session";
   }
   const name = await uniqueEventName(organizationId, event.year, preferred, event.id);

@@ -6020,24 +6020,89 @@ table tr.expandable-row-header {
   }
 }
 
-.vbs-season-copy-make-current {
-  display: flex;
-  gap: 0.5rem;
-  align-items: flex-start;
-  max-width: 42rem;
+.vbs-season-copy-section {
   grid-column: 1 / -1;
+  margin-top: 0.35rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--panel) 92%, var(--bg) 8%);
 }
 
-.vbs-season-copy-make-current input {
-  margin-top: 0.2rem;
+.vbs-season-copy-section-title {
+  margin: 0 0 0.35rem;
+  font-size: 0.82rem;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--accent);
 }
 
-.vbs-season-copy-dates,
-.vbs-season-copy-title {
-  grid-column: 1 / -1;
+.vbs-season-copy-section-lead {
+  margin: 0 0 0.75rem;
+  font-size: 0.88rem;
+  line-height: 1.45;
+  max-width: 52rem;
+}
+
+.vbs-season-copy-curriculum-grid {
+  display: grid;
+  grid-template-columns: minmax(5.5rem, 0.65fr) minmax(0, 1fr) minmax(0, 1.25fr);
+  gap: 0.65rem 0.85rem;
+  align-items: end;
+}
+
+@media (max-width: 720px) {
+  .vbs-season-copy-curriculum-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.vbs-season-copy-dates {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem 0.85rem;
+}
+
+@media (max-width: 560px) {
+  .vbs-season-copy-dates {
+    grid-template-columns: 1fr;
+  }
 }
 
 .vbs-season-copy-dates .vbs-task-field {
+  min-width: 0;
+}
+
+.vbs-season-copy-make-current {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 0.65rem;
+  grid-column: 1 / -1;
+  margin-top: 0.15rem;
+  padding: 0.65rem 0.85rem;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line));
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  font-size: 0.92rem;
+  line-height: 1.45;
+  cursor: pointer;
+}
+
+.vbs-season-copy-make-current input[type="checkbox"] {
+  width: 1.05rem;
+  height: 1.05rem;
+  min-width: 1.05rem;
+  margin: 0.15rem 0 0;
+  padding: 0;
+  flex-shrink: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.vbs-season-copy-make-current-text {
+  flex: 1;
   min-width: 0;
 }
 

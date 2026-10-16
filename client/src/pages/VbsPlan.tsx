@@ -264,7 +264,11 @@ export default function VbsPlanPage() {
                 <div className="vbs-plan-masthead-meta-row">
                   <dt>Curriculum</dt>
                   <dd>
-                    {[publisherName, plan.programTitle, plan.year ? String(plan.year) : ""]
+                    {[
+                      publisherName,
+                      plan.programTitle,
+                      plan.curriculumYear ? String(plan.curriculumYear) : "",
+                    ]
                       .filter(Boolean)
                       .join(" · ")}
                   </dd>

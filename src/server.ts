@@ -351,6 +351,7 @@ app.post("/api/orgs/:id/season-copy", requireAuth, async (req, res) => {
   const fromEventId = typeof body.fromEventId === "string" ? body.fromEventId : undefined;
   const publisherId = typeof body.publisherId === "string" ? body.publisherId : undefined;
   const programTitle = typeof body.programTitle === "string" ? body.programTitle : undefined;
+  const curriculumYear = Number(body.curriculumYear);
   const result = await copyVbsSeasonFromYear(String(req.params.id), req.session.user!.username, {
     fromYear,
     toYear,
@@ -360,6 +361,7 @@ app.post("/api/orgs/:id/season-copy", requireAuth, async (req, res) => {
     endDate,
     publisherId,
     programTitle,
+    curriculumYear: Number.isInteger(curriculumYear) && curriculumYear >= 2000 ? curriculumYear : undefined,
     makeCurrent: body.makeCurrent === true,
   });
   if ("error" in result) {

@@ -295,7 +295,7 @@ export function OrgVbsProvider({ children }: { children: ReactNode }) {
       const payload = await api.createVbsEvent(tenantId, {
         fromEventId: viewingEvent.id,
         year: viewingEvent.year,
-        name: name?.trim() || undefined,
+        name: name?.trim() || viewingEvent.name.trim() || undefined,
       });
       applyEventsPayload(payload, tenantId, payload.createdEventId);
       setOrgEventEpoch((value) => value + 1);
@@ -408,13 +408,43 @@ export function useOrgVbs() {
   return context;
 }
 
-function projectOptionLabel(event: OrgVbsEvent) {
-  const session = event.name.trim() || event.label;
+function projectDisplayName(event: OrgVbsEvent) {
+  if (event.name.trim()) {
+    return event.name.trim();
+  }
+  if (event.startDate) {
+    const start = event.startDate.slice(0, 10);
+    const end = event.endDate?.slice(0, 10) ?? start;
+    const matchStart = /^(\d{4})-(\d{2})-(\d{2})$/.exec(start);
+    if (matchStart) {
+      const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      const y = Number(matchStart[1]);
+      const m = Number(matchStart[2]);
+      const d = Number(matchStart[3]);
+      const endMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(end);
+      let span = `${months[m - 1]} ${d}`;
+      if (endMatch && (endMatch[2] !== matchStart[2] || endMatch[3] !== matchStart[3])) {
+        const em = Number(endMatch[2]);
+        const ed = Number(endMatch[3]);
+        span =
+          em === m ? `${months[m - 1]} ${d}–${ed}` : `${span}–${months[em - 1]} ${ed}`;
+      }
+      return `VBS ${span} ${y}`;
+    }
+  }
+  if (event.programTitle.trim()) {
+    return `VBS ${event.year} · ${event.programTitle.trim()}`;
+  }
+  return `VBS ${event.year}`;
+}
+
+export function projectOptionLabel(event: OrgVbsEvent) {
+  const session = projectDisplayName(event);
   const marks = [event.isCurrent ? "current" : "", event.isDefault ? "my default" : ""].filter(Boolean);
   return marks.length ? `${session} (${marks.join(", ")})` : session;
 }
 
-function eventsGroupedByYear(events: OrgVbsEvent[]) {
+export function eventsGroupedByYear(events: OrgVbsEvent[]) {
   const years: number[] = [];
   const grouped = new Map<number, OrgVbsEvent[]>();
   for (const event of events) {

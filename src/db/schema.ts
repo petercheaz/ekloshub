@@ -518,6 +518,8 @@ const statements = [
   `ALTER TABLE vbs_registration_classes ADD COLUMN IF NOT EXISTS vbs_event_id TEXT REFERENCES vbs_events(id) ON DELETE SET NULL`,
   `ALTER TABLE organization_members ADD COLUMN IF NOT EXISTS default_vbs_event_id TEXT REFERENCES vbs_events(id) ON DELETE SET NULL`,
   `ALTER TABLE organizations ADD COLUMN IF NOT EXISTS active_vbs_event_id TEXT REFERENCES vbs_events(id) ON DELETE SET NULL`,
+  `ALTER TABLE vbs_events ADD COLUMN IF NOT EXISTS curriculum_year INT`,
+  `ALTER TABLE vbs_plans ADD COLUMN IF NOT EXISTS curriculum_year INT`,
 ];
 
 const TEAM_NAME_UNIQUE_INDEX = `CREATE UNIQUE INDEX IF NOT EXISTS org_teams_org_name_unique

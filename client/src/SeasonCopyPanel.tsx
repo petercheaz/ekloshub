@@ -1,7 +1,7 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "./api";
 import { AddActionButton } from "./CollapsibleForm";
-import { useOrgVbs } from "./org-vbs";
+import { eventsGroupedByYear, projectOptionLabel, useOrgVbs } from "./org-vbs";
 import { vbsProgramsMatching, vbsPublisherOptions, vbsYearOptions } from "./vbs-cascade";
 
 export type SeasonCopyOptions = {
@@ -81,7 +81,7 @@ export function SeasonCopyPanel({
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [sessionName, setSessionName] = useState("");
-  const [makeCurrentAfterCopy, setMakeCurrentAfterCopy] = useState(false);
+  const [makeCurrentAfterCopy, setMakeCurrentAfterCopy] = useState(true);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -237,6 +237,7 @@ export function SeasonCopyPanel({
         endDate: endDate.trim() || undefined,
         publisherId: publisherId || undefined,
         programTitle: programTitle.trim() || undefined,
+        curriculumYear: typeof curriculumYear === "number" ? curriculumYear : undefined,
         makeCurrent: makeCurrentAfterCopy,
       });
       await refreshEvents();
@@ -265,6 +266,7 @@ export function SeasonCopyPanel({
   }
 
   const canCopy = Boolean(sourceEvent) && curriculumYear !== "" && Boolean(startDate.trim());
+  const copySourceGroups = eventsGroupedByYear(events);
 
   return (
     <section className="vbs-panel vbs-season-copy">
@@ -295,11 +297,16 @@ export function SeasonCopyPanel({
             value={fromEventId}
             onChange={(e) => onSourceChange(e.target.value)}
             disabled={busy || events.length === 0}
+            aria-label="Copy setup from project"
           >
-            {events.map((event) => (
-              <option key={event.id} value={event.id}>
-                {event.year} · {event.name || event.label}
-              </option>
+            {copySourceGroups.map((group) => (
+              <optgroup key={group.year} label={String(group.year)}>
+                {group.events.map((event) => (
+                  <option key={event.id} value={event.id}>
+                    {projectOptionLabel(event)}
+                  </option>
+                ))}
+              </optgroup>
             ))}
           </select>
         </label>
@@ -312,90 +319,103 @@ export function SeasonCopyPanel({
             disabled={busy}
           />
         </label>
-        <div className="vbs-plan-field-row vbs-season-copy-dates">
-          <label className="vbs-task-field">
-            <span className="vbs-task-field-label">Week start</span>
-            <input
-              type="date"
-              value={startDate}
-              onChange={(e) => onStartChange(e.target.value)}
-              disabled={busy}
-            />
-          </label>
-          <label className="vbs-task-field">
-            <span className="vbs-task-field-label">Week end</span>
-            <input
-              type="date"
-              value={endDate}
-              min={startDate || undefined}
-              onChange={(e) => setEndDate(e.target.value)}
-              disabled={busy}
-            />
-            <span className="muted vbs-task-field-hint">Defaults to the same week as start.</span>
-          </label>
+        <div className="vbs-season-copy-section">
+          <h3 className="vbs-season-copy-section-title">New week</h3>
+          <p className="muted vbs-season-copy-section-lead">
+            Sets the project calendar year and how far prep dates shift. End date keeps the same length as the source
+            week.
+          </p>
+          <div className="vbs-plan-field-row vbs-season-copy-dates">
+            <label className="vbs-task-field">
+              <span className="vbs-task-field-label">Week start</span>
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => onStartChange(e.target.value)}
+                disabled={busy}
+              />
+            </label>
+            <label className="vbs-task-field">
+              <span className="vbs-task-field-label">Week end</span>
+              <input
+                type="date"
+                value={endDate}
+                min={startDate || undefined}
+                onChange={(e) => setEndDate(e.target.value)}
+                disabled={busy}
+              />
+            </label>
+          </div>
         </div>
-        <p className="muted vbs-task-field-hint">
-          The week dates set the VBS calendar year for the new project. Curriculum year only picks publisher and title
-          from the catalog (for example 2024 Scuba while the week is in 2027).
-        </p>
-        <label className="vbs-task-field">
-          <span className="vbs-task-field-label">Curriculum year</span>
-          <select
-            value={curriculumYear === "" ? "" : String(curriculumYear)}
-            onChange={(e) => onCurriculumYearChange(e.target.value ? Number(e.target.value) : "")}
-            disabled={busy}
-          >
-            {yearChoices.map((year) => (
-              <option key={year} value={year}>
-                {year}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="vbs-task-field">
-          <span className="vbs-task-field-label">Publisher</span>
-          <select
-            value={publisherId}
-            onChange={(e) => {
-              const next = e.target.value;
-              setPublisherId(next);
-              if (curriculumYear !== "") {
-                const titles = vbsProgramsMatching(programs, next, curriculumYear).map((program) => program.theme);
-                setProgramTitle((current) => (titles.includes(current) ? current : (titles[0] ?? "")));
-              }
-            }}
-            disabled={busy || publisherChoices.length === 0}
-          >
-            {publisherChoices.map((publisher) => (
-              <option key={publisher.id} value={publisher.id}>
-                {publisher.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="vbs-task-field vbs-season-copy-title">
-          <span className="vbs-task-field-label">VBS title</span>
-          <select
-            value={programTitle}
-            onChange={(e) => setProgramTitle(e.target.value)}
-            disabled={busy || titleChoices.length === 0}
-          >
-            {titleChoices.length === 0 ? <option value="">Select year and publisher</option> : null}
-            {titleChoices.map((title) => (
-              <option key={title} value={title}>
-                {title}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="vbs-task-field vbs-season-copy-make-current">
+        <div className="vbs-season-copy-section">
+          <h3 className="vbs-season-copy-section-title">Curriculum</h3>
+          <p className="muted vbs-season-copy-section-lead">
+            Pick from the catalog (can differ from the week above — e.g. 2024 Scuba with a 2027 week).
+          </p>
+          <div className="vbs-season-copy-curriculum-grid">
+            <label className="vbs-task-field">
+              <span className="vbs-task-field-label">Catalog year</span>
+              <select
+                value={curriculumYear === "" ? "" : String(curriculumYear)}
+                onChange={(e) => onCurriculumYearChange(e.target.value ? Number(e.target.value) : "")}
+                disabled={busy}
+              >
+                {yearChoices.map((year) => (
+                  <option key={year} value={year}>
+                    {year}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="vbs-task-field">
+              <span className="vbs-task-field-label">Publisher</span>
+              <select
+                value={publisherId}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  setPublisherId(next);
+                  if (curriculumYear !== "") {
+                    const titles = vbsProgramsMatching(programs, next, curriculumYear).map((program) => program.theme);
+                    setProgramTitle((current) => (titles.includes(current) ? current : (titles[0] ?? "")));
+                  }
+                }}
+                disabled={busy || publisherChoices.length === 0}
+              >
+                {publisherChoices.length === 0 ? (
+                  <option value="">No publishers for this year</option>
+                ) : null}
+                {publisherChoices.map((publisher) => (
+                  <option key={publisher.id} value={publisher.id}>
+                    {publisher.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="vbs-task-field">
+              <span className="vbs-task-field-label">VBS title</span>
+              <select
+                value={programTitle}
+                onChange={(e) => setProgramTitle(e.target.value)}
+                disabled={busy || titleChoices.length === 0}
+              >
+                {titleChoices.length === 0 ? <option value="">Choose publisher first</option> : null}
+                {titleChoices.map((title) => (
+                  <option key={title} value={title}>
+                    {title}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+        </div>
+        <label className="vbs-season-copy-make-current">
           <input
             type="checkbox"
             checked={makeCurrentAfterCopy}
             onChange={(e) => setMakeCurrentAfterCopy(e.target.checked)}
             disabled={busy}
           />
-          <span>
+          <span className="vbs-season-copy-make-current-text">
             Make this the church&apos;s <strong>current VBS</strong> after copy (family sign-ups and public links follow
             the current project)
           </span>

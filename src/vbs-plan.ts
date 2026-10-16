@@ -221,6 +221,7 @@ export async function getPlanRow(orgId: string, eventId?: string) {
     organization_id: string;
     event_id: string | null;
     year: number;
+    curriculum_year: number | null;
     title: string;
     publisher_id: string;
     program_title: string;
@@ -238,11 +239,11 @@ export async function getPlanRow(orgId: string, eventId?: string) {
     updated_at: Date;
   }>(
     resolvedEventId
-      ? `SELECT id, organization_id, event_id, year, title, publisher_id, program_title, location,
+      ? `SELECT id, organization_id, event_id, year, curriculum_year, title, publisher_id, program_title, location,
             start_date, end_date, daily_start, daily_end, expected_kids, coordinator_notes,
             family_public_notes, budget_amount, expenses_amount, worksheet_data, updated_at
          FROM vbs_plans WHERE event_id = $1 LIMIT 1`
-      : `SELECT p.id, p.organization_id, p.event_id, p.year, p.title, p.publisher_id, p.program_title, p.location,
+      : `SELECT p.id, p.organization_id, p.event_id, p.year, p.curriculum_year, p.title, p.publisher_id, p.program_title, p.location,
             p.start_date, p.end_date, p.daily_start, p.daily_end, p.expected_kids, p.coordinator_notes,
             p.family_public_notes, p.budget_amount, p.expenses_amount, p.worksheet_data, p.updated_at
          FROM vbs_plans p
@@ -261,6 +262,7 @@ function presentPlan(row: NonNullable<Awaited<ReturnType<typeof getPlanRow>>>) {
     organizationId: row.organization_id,
     eventId: row.event_id ?? "",
     year: row.year,
+    curriculumYear: row.curriculum_year ?? row.year,
     title: row.title,
     publisherId: row.publisher_id,
     programTitle: row.program_title,

@@ -146,6 +146,7 @@ export const api = {
       endDate?: string;
       publisherId?: string;
       programTitle?: string;
+      curriculumYear?: number;
       makeCurrent?: boolean;
     },
   ) =>
