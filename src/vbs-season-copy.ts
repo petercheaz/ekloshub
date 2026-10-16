@@ -6,7 +6,11 @@ import { getMembership } from "./orgs.js";
 import { isPlatformAdmin } from "./users.js";
 import { getActiveVbsYear } from "./vbs-org-season.js";
 import { addDaysToIsoDate, getPlanRow, listScheduleActivityLabels } from "./vbs-plan.js";
-import { shiftPlanWorksheetForSeasonCopy } from "./vbs-worksheet-season-shift.js";
+import {
+  sameWeekdayInYear,
+  shiftIsoRelativeToStart,
+  shiftPlanWorksheetForSeasonCopy,
+} from "./vbs-worksheet-season-shift.js";
 
 export type SeasonSnapshotPayload = {
   version: 1;
@@ -96,17 +100,6 @@ function dayOffset(planStart: string, dayIso: string): number | null {
   const start = Date.UTC(sy, sm - 1, sd);
   const day = Date.UTC(dy, dm - 1, dd);
   return Math.round((day - start) / 86_400_000);
-}
-
-function shiftIsoYear(iso: string, yearDelta: number) {
-  if (!iso) {
-    return "";
-  }
-  const [year, month, day] = iso.split("-").map(Number);
-  if (!year || !month || !day) {
-    return iso;
-  }
-  return `${year + yearDelta}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
 function mapCurriculumToYear(publisherId: string, programTitle: string, toYear: number) {
@@ -761,6 +754,8 @@ export async function copyVbsSeasonToNewEvent(
     name?: string;
     startDate?: string;
     endDate?: string;
+    publisherId?: string;
+    programTitle?: string;
     makeCurrent?: boolean;
   },
 ) {
@@ -793,15 +788,19 @@ export async function copyVbsSeasonToNewEvent(
     };
   }
 
-  const yearDelta = toYear - sourceEvent.year;
+  const sourceStart = source.plan.startDate;
   const startDate =
     input.startDate?.trim() ||
-    shiftIsoYear(source.plan.startDate, yearDelta) ||
-    `${toYear}-06-01`;
+    (sourceStart
+      ? toYear === sourceEvent.year
+        ? sourceStart
+        : sameWeekdayInYear(sourceStart, toYear)
+      : `${toYear}-06-01`);
   const endDate =
     input.endDate?.trim() ||
-    shiftIsoYear(source.plan.endDate, yearDelta) ||
-    addDaysToIsoDate(startDate, 4);
+    (source.plan.endDate && sourceStart
+      ? shiftIsoRelativeToStart(source.plan.endDate, sourceStart, startDate)
+      : addDaysToIsoDate(startDate, 4));
   const preferred =
     (input.name ?? "").trim() ||
     sessionNameFromDates(startDate, endDate) ||
@@ -809,20 +808,28 @@ export async function copyVbsSeasonToNewEvent(
     "Session";
   const name = await uniqueEventName(organizationId, toYear, preferred);
 
+  const chosenPublisher = input.publisherId?.trim() || "";
+  const chosenTitle = input.programTitle?.trim() || "";
+  const curriculum = chosenPublisher && chosenTitle
+    ? { publisherId: chosenPublisher, programTitle: chosenTitle }
+    : mapCurriculumToYear(
+        chosenPublisher || source.plan.publisherId,
+        chosenTitle || source.plan.programTitle,
+        toYear,
+      );
+
   const eventId = crypto.randomUUID();
   await db().query(
     `INSERT INTO vbs_events (id, organization_id, year, name, publisher_id, program_title, created_at, updated_at)
      VALUES ($1,$2,$3,$4,$5,$6,NOW(),NOW())`,
-    [eventId, organizationId, toYear, name, sourceEvent.publisher_id, sourceEvent.program_title],
+    [eventId, organizationId, toYear, name, curriculum.publisherId, curriculum.programTitle],
   );
   await addMemberToVbsEvent(organizationId, username, eventId);
-
-  const curriculum = mapCurriculumToYear(source.plan.publisherId, source.plan.programTitle, toYear);
   const titleBase = source.plan.title.trim() || `VBS ${sourceEvent.year}`;
   const title = titleBase.replace(String(sourceEvent.year), String(toYear));
   const shiftedWorksheet = shiftPlanWorksheetForSeasonCopy(
     source.plan.worksheetData,
-    yearDelta,
+    sourceStart,
     startDate,
     endDate,
   );
@@ -880,6 +887,8 @@ export async function copyVbsSeasonFromYear(
     fromEventId?: string;
     startDate?: string;
     endDate?: string;
+    publisherId?: string;
+    programTitle?: string;
     makeCurrent?: boolean;
   },
 ) {
@@ -911,6 +920,8 @@ export async function copyVbsSeasonFromYear(
     name: input.name,
     startDate: input.startDate,
     endDate: input.endDate,
+    publisherId: input.publisherId,
+    programTitle: input.programTitle,
     makeCurrent: input.makeCurrent ?? fromYear !== toYear,
   });
 }

@@ -304,3 +304,59 @@ export async function renameOrgVbsEvent(
   await db().query(`UPDATE vbs_events SET name = $2, updated_at = NOW() WHERE id = $1`, [event.id, name]);
   return listOrgVbsEvents(organizationId, username);
 }
+
+async function deleteVbsEventRegistrationData(organizationId: string, eventId: string) {
+  const classes = await db().query<{ id: string }>(
+    `SELECT id FROM vbs_registration_classes WHERE organization_id = $1 AND vbs_event_id = $2`,
+    [organizationId, eventId],
+  );
+  const classIds = classes.rows.map((row) => row.id);
+  if (classIds.length > 0) {
+    await db().query(`DELETE FROM vbs_registration_class_students WHERE class_id = ANY($1::text[])`, [classIds]);
+    await db().query(`DELETE FROM vbs_registration_class_staff WHERE class_id = ANY($1::text[])`, [classIds]);
+    await db().query(`DELETE FROM vbs_registration_classes WHERE id = ANY($1::text[])`, [classIds]);
+  }
+  await db().query(`DELETE FROM vbs_registrations WHERE organization_id = $1 AND vbs_event_id = $2`, [
+    organizationId,
+    eventId,
+  ]);
+}
+
+export async function deleteOrgVbsEvent(organizationId: string, username: string, eventIdValue: unknown) {
+  const access = await requireOrgMember(organizationId, username);
+  if ("error" in access) {
+    return access;
+  }
+  if (!access.canCreateEvent) {
+    return { error: "Only org admins can delete a VBS project" as const };
+  }
+  const eventId = typeof eventIdValue === "string" ? eventIdValue.trim() : "";
+  const event = eventId ? await getVbsEvent(organizationId, eventId) : null;
+  if (!event) {
+    return { error: "Choose a valid VBS project" as const };
+  }
+  const countRow = await db().query<{ count: number }>(
+    `SELECT COUNT(*)::int AS count FROM vbs_events WHERE organization_id = $1`,
+    [organizationId],
+  );
+  if ((countRow.rows[0]?.count ?? 0) <= 1) {
+    return { error: "Keep at least one VBS project for this church" as const };
+  }
+  const active = await getActiveVbsEvent(organizationId);
+  if (active?.id === event.id) {
+    const fallback = await db().query<{ id: string; year: number }>(
+      `SELECT id, year FROM vbs_events
+       WHERE organization_id = $1 AND id <> $2
+       ORDER BY year DESC, name ASC
+       LIMIT 1`,
+      [organizationId, event.id],
+    );
+    const next = fallback.rows[0];
+    if (next) {
+      await setActiveVbsEvent(organizationId, next.id);
+    }
+  }
+  await deleteVbsEventRegistrationData(organizationId, event.id);
+  await db().query(`DELETE FROM vbs_events WHERE id = $1 AND organization_id = $2`, [event.id, organizationId]);
+  return listOrgVbsEvents(organizationId, username);
+}

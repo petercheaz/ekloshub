@@ -25,11 +25,22 @@ export default function OrgDirectorHubPage() {
   const { orgId = "" } = useParams();
   const { user } = useAuth();
   const { canAdmin, canManageMembers, current: org } = useOrgs();
-  const { viewingYear, viewingEventId, eventsReady, orgEventEpoch, refreshEvents } = useOrgVbs();
+  const {
+    viewingYear,
+    viewingEventId,
+    viewingEvent,
+    events,
+    eventsReady,
+    orgEventEpoch,
+    refreshEvents,
+    deleteProject,
+  } = useOrgVbs();
   const [detail, setDetail] = useState<OrgDetail | null>(null);
   const [plan, setPlan] = useState<VbsPlanWorkspace | null>(null);
   const [registration, setRegistration] = useState<VbsRegistrationWorkspace | null>(null);
   const [error, setError] = useState("");
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
   const [seasonCopyKey, setSeasonCopyKey] = useState(0);
 
   useEffect(() => {
@@ -208,6 +219,48 @@ export default function OrgDirectorHubPage() {
             void api.vbsRegistration(orgId, viewingYear ?? undefined).then(setRegistration).catch(() => undefined);
           }}
         />
+      ) : null}
+
+      {canAdmin && viewingEvent && events.length > 1 ? (
+        <section className="vbs-panel vbs-director-delete-project" aria-labelledby="director-delete-project-title">
+          <h2 id="director-delete-project-title" className="vbs-plan-section-title">
+            Delete VBS project
+          </h2>
+          <p className="muted">
+            Permanently removes <strong>{viewingEvent.name || viewingEvent.label}</strong> and all of its data: plan,
+            schedule, tasks, board, registration, classes, and volunteer rosters for this session. Other projects in your
+            church are not affected. You must keep at least one project.
+          </p>
+          <button
+            type="button"
+            className="ghost danger vbs-plan-save-danger"
+            disabled={deleteBusy}
+            onClick={() => {
+              const label = viewingEvent.name || viewingEvent.label;
+              const ok = window.confirm(
+                `Delete “${label}” and all related VBS data? This cannot be undone.`,
+              );
+              if (!ok) {
+                return;
+              }
+              setDeleteBusy(true);
+              setDeleteError("");
+              void deleteProject(viewingEvent.id)
+                .then(() => {
+                  void refreshEvents();
+                  void api.vbsPlan(orgId).then(setPlan).catch(() => setPlan(null));
+                  void api.vbsRegistration(orgId).then(setRegistration).catch(() => setRegistration(null));
+                })
+                .catch((err) => {
+                  setDeleteError(err instanceof Error ? err.message : "Could not delete this project");
+                })
+                .finally(() => setDeleteBusy(false));
+            }}
+          >
+            {deleteBusy ? "Deleting…" : "Delete this project"}
+          </button>
+          {deleteError ? <p className="error">{deleteError}</p> : null}
+        </section>
       ) : null}
 
       {isDirector ? (

@@ -35,7 +35,7 @@ export const SITE_AREAS: SiteArea[] = [
     id: "director-home",
     name: "Director home",
     route: "/org/:id",
-    purpose: "Setup checklist, needs attention, and quick links to plan, teams, and registration.",
+    purpose: "Setup checklist, needs attention, quick links, and org-admin delete for the loaded VBS project (cascades plan and registration data).",
     depth: "workflow",
     specFiles: ["workflow-org.spec.ts"],
   },

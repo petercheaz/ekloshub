@@ -34,6 +34,7 @@ import { acceptInvite, createInvites, getInvite } from "./invites.js";
 import {
   activateOrgVbsEvent,
   createOrgVbsEvent,
+  deleteOrgVbsEvent,
   listOrgVbsEvents,
   renameOrgVbsEvent,
   setPersonalVbsEventDefault,
@@ -286,6 +287,26 @@ app.put("/api/orgs/:id/vbs-events/:eventId", requireAuth, async (req, res) => {
   res.json(result);
 });
 
+app.delete("/api/orgs/:id/vbs-events/:eventId", requireAuth, async (req, res) => {
+  const result = await deleteOrgVbsEvent(
+    String(req.params.id),
+    req.session.user!.username,
+    req.params.eventId,
+  );
+  if ("error" in result) {
+    const message = result.error ?? "Error";
+    res.status(
+      message.includes("Only org admins")
+        ? 403
+        : message.includes("Keep at least one")
+          ? 400
+          : 400,
+    ).json(result);
+    return;
+  }
+  res.json(result);
+});
+
 app.post("/api/orgs/:id/vbs-events", requireAuth, async (req, res) => {
   const body = req.body as {
     fromEventId?: unknown;
@@ -328,6 +349,8 @@ app.post("/api/orgs/:id/season-copy", requireAuth, async (req, res) => {
   const endDate = typeof body.endDate === "string" ? body.endDate : undefined;
   const name = typeof body.name === "string" ? body.name : undefined;
   const fromEventId = typeof body.fromEventId === "string" ? body.fromEventId : undefined;
+  const publisherId = typeof body.publisherId === "string" ? body.publisherId : undefined;
+  const programTitle = typeof body.programTitle === "string" ? body.programTitle : undefined;
   const result = await copyVbsSeasonFromYear(String(req.params.id), req.session.user!.username, {
     fromYear,
     toYear,
@@ -335,6 +358,8 @@ app.post("/api/orgs/:id/season-copy", requireAuth, async (req, res) => {
     fromEventId,
     startDate,
     endDate,
+    publisherId,
+    programTitle,
   });
   if ("error" in result) {
     res.status(400).json(result);

@@ -53,6 +53,7 @@ type OrgVbsContextValue = {
   setPersonalDefault: () => Promise<void>;
   saveAsProject: (name?: string) => Promise<void>;
   renameProject: (name: string) => Promise<void>;
+  deleteProject: (eventId: string) => Promise<void>;
   refreshEvents: () => Promise<void>;
 };
 
@@ -314,6 +315,18 @@ export function OrgVbsProvider({ children }: { children: ReactNode }) {
     [applyEventsPayload, tenantId, viewingEventId],
   );
 
+  const deleteProject = useCallback(
+    async (eventId: string) => {
+      if (!tenantId) {
+        return;
+      }
+      const payload = await api.deleteVbsEvent(tenantId, eventId);
+      applyEventsPayload(payload, tenantId);
+      setOrgEventEpoch((value) => value + 1);
+    },
+    [applyEventsPayload, tenantId],
+  );
+
   const value = useMemo(
     () => ({
       prefsReady,
@@ -346,6 +359,7 @@ export function OrgVbsProvider({ children }: { children: ReactNode }) {
       setPersonalDefault,
       saveAsProject,
       renameProject,
+      deleteProject,
       refreshEvents,
     }),
     [
@@ -378,6 +392,7 @@ export function OrgVbsProvider({ children }: { children: ReactNode }) {
       setPersonalDefault,
       saveAsProject,
       renameProject,
+      deleteProject,
       refreshEvents,
     ],
   );

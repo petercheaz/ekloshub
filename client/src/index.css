@@ -759,6 +759,16 @@ body {
   margin-top: 0.65rem;
 }
 
+.vbs-director-delete-project {
+  margin-top: 1.25rem;
+  border-color: color-mix(in srgb, var(--danger, #c0392b) 25%, var(--panel-border, #ddd));
+}
+
+.vbs-director-delete-project p {
+  max-width: 52rem;
+  margin-bottom: 0.75rem;
+}
+
 .vbs-director-foot {
   margin-top: 1.25rem;
   font-size: 0.82rem;
@@ -6008,6 +6018,15 @@ table tr.expandable-row-header {
   .vbs-task-meta-grid {
     grid-template-columns: 1fr;
   }
+}
+
+.vbs-season-copy-dates,
+.vbs-season-copy-title {
+  grid-column: 1 / -1;
+}
+
+.vbs-season-copy-dates .vbs-task-field {
+  min-width: 0;
 }
 
 .vbs-task-expenses {

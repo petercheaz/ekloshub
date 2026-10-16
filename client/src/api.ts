@@ -137,7 +137,16 @@ export const api = {
     request<import("./SeasonCopyPanel").SeasonCopyOptions>(`/api/orgs/${orgId}/season-copy`),
   copyVbsSeason: (
     orgId: string,
-    input: { fromYear: number; toYear: number; name?: string; startDate?: string; endDate?: string },
+    input: {
+      fromYear: number;
+      toYear: number;
+      name?: string;
+      fromEventId?: string;
+      startDate?: string;
+      endDate?: string;
+      publisherId?: string;
+      programTitle?: string;
+    },
   ) =>
     request<{
       ok: boolean;
@@ -364,6 +373,10 @@ export const api = {
     request<OrgVbsEventsPayload>(`/api/orgs/${orgId}/vbs-events/${encodeURIComponent(eventId)}`, {
       method: "PUT",
       body: JSON.stringify({ name }),
+    }),
+  deleteVbsEvent: (orgId: string, eventId: string) =>
+    request<OrgVbsEventsPayload>(`/api/orgs/${orgId}/vbs-events/${encodeURIComponent(eventId)}`, {
+      method: "DELETE",
     }),
   orgVbsDefault: (orgId: string) => request<OrgVbsDefaultPayload>(`/api/orgs/${orgId}/vbs-default`),
   saveOrgVbsDefault: (orgId: string, input: { year: number; publisherId: string; programTitle: string }) =>
